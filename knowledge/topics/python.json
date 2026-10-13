@@ -1,0 +1,130 @@
+{
+  "id": "python",
+  "title": "Python",
+  "color": "#3776ab",
+  "icon": "code",
+  "level": "основы",
+  "summary": "Python - простой для чтения язык. На нём пишут скрипты, серверы, обработку данных и нейросети. Код запускается сразу, без отдельной сборки.",
+  "detect": { "files": ["pyproject.toml", "requirements.txt", "setup.py"], "deps": [], "bins": ["python", "python3", "py", "pip", "pip3", "poetry", "uv", "pytest", "ruff"], "stacks": ["Python"] },
+  "related": ["testing", "code-quality", "env", "terminal"],
+  "sections": [
+    {
+      "type": "idea",
+      "title": "Зачем это нужно",
+      "text": "Python читается почти как текст на английском, поэтому с него часто начинают. Программа на Python - обычный файл .py. Его читает и выполняет интерпретатор, строку за строкой. Готовые библиотеки ставят из склада PyPI. Чтобы библиотеки разных проектов не мешали друг другу, каждому проекту делают своё окружение - venv.",
+      "analogy": "Переводчик-синхронист. Он не переводит книгу заранее целиком, а переводит фразу за фразой прямо во время разговора. Интерпретатор так же выполняет код по ходу чтения."
+    },
+    {
+      "type": "diagram",
+      "title": "Как устроено",
+      "nodes": [
+        { "id": "code", "label": "Файлы .py", "note": "ваш код", "icon": "file" },
+        { "id": "deps", "label": "pyproject.toml", "note": "список библиотек", "icon": "list" },
+        { "id": "pypi", "label": "PyPI", "note": "склад библиотек", "icon": "cloud" },
+        { "id": "venv", "label": "venv", "note": "папка .venv с библиотеками проекта", "icon": "folder" },
+        { "id": "py", "label": "Интерпретатор", "note": "выполняет код", "icon": "play" }
+      ],
+      "edges": [
+        ["deps", "pypi", "pip или uv качает"],
+        ["pypi", "venv", "ставит в"],
+        ["code", "py", "читает"],
+        ["venv", "py", "даёт библиотеки"]
+      ],
+      "caption": "Список библиотек лежит в pyproject.toml или requirements.txt. Менеджер пакетов ставит их в папку .venv. Интерпретатор берёт библиотеки оттуда и выполняет ваш код."
+    },
+    {
+      "type": "terms",
+      "title": "Слова, которые надо знать",
+      "items": [
+        { "term": "Интерпретатор", "text": "Программа python, которая читает файл .py и выполняет его. На Windows его часто вызывают командой py, на Linux и macOS - python3.", "forms": ["интерпретатора", "python", "python3"] },
+        { "term": "venv", "text": "Виртуальное окружение: отдельная папка (обычно .venv) со своей копией библиотек для одного проекта. В git не кладётся.", "forms": [".venv", "виртуальное окружение", "окружение"] },
+        { "term": "pip", "text": "Стандартный установщик библиотек. pip install requests ставит библиотеку requests.", "forms": ["pip3"] },
+        { "term": "PyPI", "text": "Python Package Index - общий склад библиотек для Python, pypi.org.", "forms": [] },
+        { "term": "requirements.txt", "text": "Простой список библиотек и версий, по одной на строку. Ставится командой pip install -r requirements.txt.", "forms": [] },
+        { "term": "pyproject.toml", "text": "Общий файл настроек проекта: имя, версия Python, зависимости, настройки инструментов вроде pytest и ruff.", "forms": [] },
+        { "term": "poetry", "text": "Менеджер проекта: ставит библиотеки, сам ведёт venv и записывает точные версии в poetry.lock.", "forms": ["poetry.lock"] },
+        { "term": "uv", "text": "Новый менеджер проекта от Astral. Делает то же, что pip, venv и poetry вместе, но в разы быстрее. Точные версии пишет в uv.lock.", "forms": ["uv.lock"] },
+        { "term": "pytest", "text": "Программа для тестов. Находит файлы test_*.py, запускает функции test_* и показывает, какие проверки assert не прошли.", "forms": [] },
+        { "term": "ruff", "text": "Проверялка и оформитель кода. ruff check ищет ошибки, ruff format приводит код к одному виду. Работает очень быстро.", "forms": [] }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Как запустить чужой проект на Python",
+      "items": [
+        "Проверьте версию: python --version. Нужная версия обычно указана в pyproject.toml",
+        "Создайте окружение в папке проекта: python -m venv .venv",
+        "Включите его. Linux и macOS: source .venv/bin/activate. Windows: .venv\\Scripts\\activate",
+        "Поставьте библиотеки: pip install -r requirements.txt, или poetry install, или uv sync - смотря что использует проект",
+        "Запустите программу или тесты: python main.py, pytest",
+        "Когда закончили, выключите окружение командой deactivate"
+      ]
+    },
+    {
+      "type": "example",
+      "title": "pyproject.toml",
+      "code": "[project]\nname = \"my-app\"\nversion = \"0.1.0\"\nrequires-python = \">=3.11\"\ndependencies = [\n  \"fastapi>=0.110\",\n  \"httpx>=0.27\",\n]\n\n[dependency-groups]\ndev = [\"pytest>=8\", \"ruff>=0.5\"]\n\n[tool.ruff]\nline-length = 100",
+      "note": "dependencies - что нужно программе для работы. Группа dev - инструменты только для разработки. [tool.ruff] - настройки ruff прямо в этом же файле. Такой файл понимают pip, uv и другие менеджеры."
+    },
+    {
+      "type": "example",
+      "title": "Тест на pytest",
+      "code": "# файл test_prices.py\nfrom prices import total\n\ndef test_total_sums_items():\n    assert total([100, 50]) == 150\n\ndef test_total_empty_is_zero():\n    assert total([]) == 0",
+      "note": "pytest сам находит файлы, имя которых начинается с test_, и запускает функции с именем test_. Проверка - обычное слово assert.",
+      "output": "==== 2 passed in 0.02s ===="
+    },
+    {
+      "type": "compare",
+      "title": "pip, poetry и uv",
+      "cols": ["", "pip + venv", "poetry", "uv"],
+      "rows": [
+        ["Что ставить отдельно", "Ничего, идут с Python", "Сам poetry", "Сам uv"],
+        ["Где список библиотек", "requirements.txt", "pyproject.toml", "pyproject.toml"],
+        ["Точные версии", "Только если записать их вручную", "poetry.lock", "uv.lock"],
+        ["Окружение", "Создаёте сами", "Создаёт сам", "Создаёт сам"],
+        ["Установить всё", "pip install -r requirements.txt", "poetry install", "uv sync"],
+        ["Скорость", "Обычная", "Обычная", "В разы быстрее"]
+      ]
+    },
+    {
+      "type": "mistakes",
+      "title": "Что ломается чаще всего",
+      "items": [
+        { "problem": "ModuleNotFoundError: No module named ...", "fix": "Библиотека не установлена или не включено окружение. Включите .venv и поставьте зависимости заново." },
+        { "problem": "Библиотеки ставятся куда-то в систему и мешают другим проектам", "fix": "Окружение не было включено. Создайте .venv и включайте его перед работой. Признак включённого окружения - (.venv) в начале строки терминала." },
+        { "problem": "На Windows команда python открывает Microsoft Store", "fix": "Python не установлен, а вместо него стоит заглушка. Поставьте Python с python.org и используйте команду py." },
+        { "problem": "Активация на Windows пишет, что выполнение скриптов отключено", "fix": "PowerShell запрещает скрипты. Выполните Set-ExecutionPolicy -Scope CurrentUser RemoteSigned или работайте в cmd." },
+        { "problem": "IndentationError", "fix": "В Python отступы - часть кода. Строки одного блока должны иметь одинаковый отступ, обычно 4 пробела. Не смешивайте пробелы и табуляцию." }
+      ]
+    },
+    {
+      "type": "cheatsheet",
+      "title": "Шпаргалка",
+      "items": [
+        { "cmd": "python -m venv .venv", "text": "Создать окружение проекта" },
+        { "cmd": "source .venv/bin/activate", "text": "Включить окружение в Linux и macOS" },
+        { "cmd": ".venv\\Scripts\\activate", "text": "Включить окружение в Windows" },
+        { "cmd": "pip install -r requirements.txt", "text": "Поставить библиотеки по списку" },
+        { "cmd": "pip freeze > requirements.txt", "text": "Записать установленные библиотеки с версиями в файл" },
+        { "cmd": "uv sync", "text": "Создать окружение и поставить всё по pyproject.toml и uv.lock" },
+        { "cmd": "uv add httpx", "text": "Добавить библиотеку в проект" },
+        { "cmd": "uv run pytest", "text": "Запустить команду внутри окружения проекта" },
+        { "cmd": "poetry install", "text": "Поставить всё по poetry.lock" },
+        { "cmd": "pytest -x", "text": "Запустить тесты и остановиться на первом красном" },
+        { "cmd": "ruff check --fix", "text": "Найти ошибки и исправить то, что можно автоматически" },
+        { "cmd": "ruff format", "text": "Оформить код по правилам" }
+      ]
+    },
+    {
+      "type": "quiz",
+      "title": "Проверьте себя",
+      "items": [
+        { "q": "Зачем нужен venv?", "options": ["Чтобы Python работал быстрее", "Чтобы у каждого проекта были свои библиотеки и версии", "Чтобы прятать код"], "answer": 1, "why": "Без окружения все проекты делят одни библиотеки, и обновление для одного ломает другой." },
+        { "q": "Как pytest понимает, что функция - это тест?", "options": ["По имени, которое начинается с test_", "По комментарию над ней", "Никак, надо перечислить вручную"], "answer": 0, "why": "pytest ищет файлы test_*.py и функции test_* сам." },
+        { "q": "Что делает uv sync?", "options": ["Отправляет код на сервер", "Создаёт окружение и ставит библиотеки по файлам проекта", "Удаляет окружение"], "answer": 1, "why": "uv сам создаёт .venv и ставит туда точные версии из uv.lock." },
+        { "q": "Нужно ли класть папку .venv в git?", "options": ["Да", "Нет"], "answer": 1, "why": "Её можно в любой момент создать заново по списку библиотек. В git хранят только pyproject.toml, requirements.txt и lock-файлы." }
+      ]
+    },
+    { "type": "project", "title": "Где это в вашем проекте" }
+  ]
+}

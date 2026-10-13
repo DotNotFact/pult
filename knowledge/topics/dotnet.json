@@ -1,0 +1,142 @@
+{
+  "id": "dotnet",
+  "title": ".NET и C#",
+  "color": "#512bd4",
+  "icon": "chip",
+  "level": "основы",
+  "summary": ".NET - платформа от Microsoft для программ на языке C#: серверов, сайтов, программ для Windows и игр. Всё делается одной командой dotnet.",
+  "detect": { "files": [".sln", ".slnx", ".csproj"], "deps": [], "bins": ["dotnet"], "stacks": [".NET"] },
+  "related": ["testing", "databases", "docker", "ci-cd"],
+  "sections": [
+    {
+      "type": "idea",
+      "title": "Зачем это нужно",
+      "text": "C# - язык, на котором пишут код. .NET - всё, что нужно, чтобы этот код собрать и запустить: компилятор, библиотеки, среда выполнения. Программа на .NET работает на Windows, Linux и macOS. Команда dotnet умеет создать проект, скачать библиотеки, собрать, запустить и проверить тестами.",
+      "analogy": "C# - это рецепт, а .NET - кухня с плитой, посудой и продуктами. Рецепт без кухни ничего не даёт, а кухня одна на все рецепты."
+    },
+    {
+      "type": "diagram",
+      "title": "Как устроено",
+      "nodes": [
+        { "id": "sln", "label": "Solution .sln", "note": "список проектов", "icon": "folder" },
+        { "id": "csproj", "label": "Проект .csproj", "note": "код и его настройки", "icon": "file" },
+        { "id": "nuget", "label": "NuGet", "note": "склад готовых библиотек", "icon": "package" },
+        { "id": "sdk", "label": ".NET SDK", "note": "компилятор и команда dotnet", "icon": "wrench" },
+        { "id": "dll", "label": "Сборка .dll", "note": "результат в bin/", "icon": "cube" },
+        { "id": "runtime", "label": "Runtime", "note": "запускает готовую программу", "icon": "play" }
+      ],
+      "edges": [
+        ["sln", "csproj", "содержит"],
+        ["nuget", "csproj", "библиотеки"],
+        ["csproj", "sdk", "dotnet build"],
+        ["sdk", "dll", "собирает"],
+        ["dll", "runtime", "dotnet run"]
+      ],
+      "caption": "Solution объединяет проекты. Каждый проект берёт библиотеки из NuGet. SDK собирает код в файл .dll, а runtime его запускает."
+    },
+    {
+      "type": "terms",
+      "title": "Слова, которые надо знать",
+      "items": [
+        { "term": "C#", "text": "Язык программирования от Microsoft. Читается «си шарп». Файлы с кодом имеют расширение .cs.", "forms": ["си шарп", "csharp", ".cs"] },
+        { "term": ".NET SDK", "text": "Набор для разработчика: компилятор, команда dotnet, шаблоны проектов. Нужен, чтобы собирать программы.", "forms": ["SDK"] },
+        { "term": "Runtime", "text": "Среда выполнения. Нужна, чтобы запускать уже собранную программу. На сервер часто ставят только её, без SDK.", "forms": ["рантайм", "среда выполнения"] },
+        { "term": "Solution", "text": "Файл .sln или новый .slnx. Список проектов, которые открывают и собирают вместе. Сам кода не содержит.", "forms": ["решение", ".sln", ".slnx", "солюшен"] },
+        { "term": "Проект .csproj", "text": "Файл в формате XML. В нём версия .NET (TargetFramework), подключённые библиотеки (PackageReference) и ссылки на другие проекты.", "forms": [".csproj", "csproj"] },
+        { "term": "NuGet", "text": "Склад библиотек для .NET (nuget.org). Команда dotnet add package скачивает библиотеку и записывает её в .csproj.", "forms": ["нугет", "пакет NuGet"] },
+        { "term": "Debug и Release", "text": "Две конфигурации сборки. Debug - для разработки: удобно ставить точки остановки, но работает медленнее. Release - для выкладки: код оптимизирован. По умолчанию собирается Debug.", "forms": ["Debug", "Release", "конфигурация"] },
+        { "term": "Тест", "text": "Маленький метод, который вызывает ваш код и сверяет результат с ожидаемым. Если не совпало - тест красный.", "forms": ["тесты", "теста", "тестов"] },
+        { "term": "Arrange-Act-Assert", "text": "Три части теста. Arrange - подготовить данные. Act - выполнить одно действие. Assert - проверить результат.", "forms": ["AAA"] },
+        { "term": "Интеграционный тест", "text": "Тест, который проверяет код вместе с настоящей базой, сетью или файлами, а не по отдельности.", "forms": ["интеграционные тесты", "интеграционных тестов"] },
+        { "term": "Testcontainers", "text": "Библиотека для тестов. Перед тестом запускает в Docker настоящую базу, после теста удаляет её. Каждый прогон начинается с чистой базы.", "forms": [] }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Первый проект с тестами",
+      "items": [
+        "Проверьте, что SDK стоит: dotnet --version",
+        "Создайте программу: dotnet new console -n MyApp",
+        "Создайте проект тестов: dotnet new xunit -n MyApp.Tests",
+        "Дайте тестам доступ к программе: dotnet add MyApp.Tests/MyApp.Tests.csproj reference MyApp/MyApp.csproj",
+        "Соберите и запустите: dotnet run --project MyApp",
+        "Запустите тесты: dotnet test"
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Файл проекта MyApp.csproj",
+      "code": "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net8.0</TargetFramework>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n  <ItemGroup>\n    <PackageReference Include=\"Serilog\" Version=\"4.0.0\" />\n  </ItemGroup>\n</Project>",
+      "note": "OutputType Exe - программа, которую можно запустить. TargetFramework - для какой версии .NET собирать. PackageReference - библиотека из NuGet с точной версией."
+    },
+    {
+      "type": "example",
+      "title": "Тест на xUnit по схеме Arrange-Act-Assert",
+      "code": "using Xunit;\n\npublic class CartTests\n{\n    [Fact]\n    public void Total_TwoItems_ReturnsSum()\n    {\n        // Arrange: готовим корзину\n        var cart = new Cart();\n        cart.Add(100);\n        cart.Add(50);\n\n        // Act: одно действие\n        var total = cart.Total();\n\n        // Assert: проверяем результат\n        Assert.Equal(150, total);\n    }\n}",
+      "note": "[Fact] отмечает метод как тест. Имя теста говорит, что проверяем, при каких условиях и что ждём. Если Total вернёт не 150, dotnet test покажет красный тест и оба числа.",
+      "output": "Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1, Duration: 12 ms - MyApp.Tests.dll (net8.0)"
+    },
+    {
+      "type": "compare",
+      "title": "Три библиотеки для тестов",
+      "cols": ["", "xUnit", "NUnit", "MSTest"],
+      "rows": [
+        ["Метка теста", "[Fact]", "[Test]", "[TestMethod]"],
+        ["Тест с разными данными", "[Theory] и [InlineData]", "[TestCase]", "[DataRow]"],
+        ["Класс с тестами", "Обычный класс", "[TestFixture], можно без неё", "[TestClass]"],
+        ["Шаблон проекта", "dotnet new xunit", "dotnet new nunit", "dotnet new mstest"]
+      ]
+    },
+    {
+      "type": "chart",
+      "title": "Сколько длится один тест",
+      "unit": "миллисекунды",
+      "items": [
+        { "label": "Модульный тест", "value": 5, "note": "только код в памяти" },
+        { "label": "Интеграционный тест с базой", "value": 300, "note": "запросы к настоящей базе" },
+        { "label": "Запуск базы в Testcontainers", "value": 5000, "note": "один раз на набор тестов" }
+      ],
+      "note": "Числа примерные, порядок величин. Поэтому модульных тестов пишут много, а интеграционных - столько, сколько нужно, чтобы проверить связи с базой и сетью."
+    },
+    {
+      "type": "mistakes",
+      "title": "Что ломается чаще всего",
+      "items": [
+        { "problem": "The current .NET SDK does not support targeting .NET 9.0", "fix": "Проект требует более новую версию, чем установлена. Поставьте нужный SDK или проверьте файл global.json, в нём может быть закреплена версия." },
+        { "problem": "Ошибка CS0246: тип или пространство имён не найдено", "fix": "Не подключена библиотека или ссылка на проект. Добавьте её: dotnet add package имя или dotnet add reference путь." },
+        { "problem": "Странные ошибки после переключения ветки", "fix": "В папках bin и obj остались старые файлы. Выполните dotnet clean или удалите эти папки и соберите заново." },
+        { "problem": "На сервере программа работает медленно", "fix": "Выложена Debug-сборка. Публикуйте с конфигурацией Release: dotnet publish -c Release." },
+        { "problem": "Интеграционные тесты падают с ошибкой подключения к Docker", "fix": "Testcontainers нужен работающий Docker. Запустите его и повторите." }
+      ]
+    },
+    {
+      "type": "cheatsheet",
+      "title": "Шпаргалка",
+      "items": [
+        { "cmd": "dotnet --info", "text": "Какие SDK и runtime установлены" },
+        { "cmd": "dotnet new list", "text": "Какие шаблоны проектов есть" },
+        { "cmd": "dotnet restore", "text": "Скачать библиотеки из NuGet. build делает это сам" },
+        { "cmd": "dotnet build", "text": "Собрать в конфигурации Debug" },
+        { "cmd": "dotnet run --project MyApp", "text": "Собрать и запустить проект" },
+        { "cmd": "dotnet watch", "text": "Запустить и перезапускать при каждой правке" },
+        { "cmd": "dotnet test", "text": "Запустить все тесты" },
+        { "cmd": "dotnet test --filter Cart", "text": "Запустить только тесты, в имени которых есть Cart" },
+        { "cmd": "dotnet add package Serilog", "text": "Подключить библиотеку из NuGet" },
+        { "cmd": "dotnet publish -c Release -o out", "text": "Собрать для выкладки в папку out" },
+        { "cmd": "dotnet format", "text": "Привести оформление кода к правилам проекта" }
+      ]
+    },
+    {
+      "type": "quiz",
+      "title": "Проверьте себя",
+      "items": [
+        { "q": "Что нужно, чтобы собрать программу на C#?", "options": ["Только runtime", ".NET SDK", "Только NuGet"], "answer": 1, "why": "SDK содержит компилятор и команду dotnet. Runtime умеет только запускать готовое." },
+        { "q": "Что лежит в файле .sln?", "options": ["Код программы", "Список проектов", "Пароли"], "answer": 1, "why": "Solution только перечисляет проекты, чтобы собирать и открывать их вместе." },
+        { "q": "В каком порядке идут части теста?", "options": ["Assert, Act, Arrange", "Arrange, Act, Assert", "Act, Assert, Arrange"], "answer": 1, "why": "Сначала готовим данные, потом делаем одно действие, потом проверяем результат." },
+        { "q": "Зачем интеграционным тестам Testcontainers?", "options": ["Чтобы тесты шли быстрее", "Чтобы проверять код с настоящей базой, которая создаётся и удаляется сама", "Чтобы не писать тесты"], "answer": 1, "why": "Тест работает с той же базой, что на сервере, но чистой и своей. После прогона она удаляется." },
+        { "q": "Какую конфигурацию выкладывают на сервер?", "options": ["Debug", "Release"], "answer": 1, "why": "Release оптимизирован и работает быстрее. Debug нужен для отладки при разработке." }
+      ]
+    },
+    { "type": "project", "title": "Где это в вашем проекте" }
+  ]
+}

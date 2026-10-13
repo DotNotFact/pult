@@ -1,0 +1,93 @@
+{
+  "_": "Стандартные команды, которые Пульт предлагает, если в папке есть такой файл. В argv подставляются: {file} - найденный файл, {bin} - обёртка (mvnw, gradlew) или программа по умолчанию, {services} - сервисы compose. projectOnly - только для проекта, не для решения (.sln).",
+  "kinds": [
+    { "id": "cargo", "files": ["Cargo.toml"], "stack": "Rust", "skipWorkspaceMembers": true,
+      "commands": [
+        { "name": "cargo check", "argv": ["cargo", "check"], "stage": "check" },
+        { "name": "cargo build", "argv": ["cargo", "build"], "stage": "build" },
+        { "name": "cargo build --release", "argv": ["cargo", "build", "--release"], "stage": "build" },
+        { "name": "cargo test", "argv": ["cargo", "test"], "stage": "check" },
+        { "name": "cargo clippy", "argv": ["cargo", "clippy"], "stage": "check" },
+        { "name": "cargo fmt --check", "argv": ["cargo", "fmt", "--check"], "stage": "check" },
+        { "name": "cargo run", "argv": ["cargo", "run"], "stage": "dev" }
+      ] },
+    { "id": "go", "files": ["go.mod"], "stack": "Go",
+      "commands": [
+        { "name": "go build", "argv": ["go", "build", "./..."], "stage": "build" },
+        { "name": "go test", "argv": ["go", "test", "./..."], "stage": "check" },
+        { "name": "go vet", "argv": ["go", "vet", "./..."], "stage": "check" },
+        { "name": "go run", "argv": ["go", "run", "."], "stage": "dev" },
+        { "name": "go mod tidy", "argv": ["go", "mod", "tidy"], "stage": "setup" }
+      ] },
+    { "id": "dotnet", "ext": [".sln", ".slnx"], "fallbackExt": [".csproj", ".fsproj", ".vbproj"], "stack": ".NET",
+      "commands": [
+        { "name": "dotnet restore", "argv": ["dotnet", "restore", "{file}"], "stage": "setup" },
+        { "name": "dotnet build", "argv": ["dotnet", "build", "{file}"], "stage": "build" },
+        { "name": "dotnet test", "argv": ["dotnet", "test", "{file}"], "stage": "check" },
+        { "name": "dotnet format --verify-no-changes", "argv": ["dotnet", "format", "{file}", "--verify-no-changes"], "stage": "check" },
+        { "name": "dotnet run", "argv": ["dotnet", "run", "--project", "{file}"], "stage": "dev", "projectOnly": true },
+        { "name": "dotnet watch", "argv": ["dotnet", "watch", "--project", "{file}"], "stage": "dev", "projectOnly": true },
+        { "name": "dotnet clean", "argv": ["dotnet", "clean", "{file}"], "stage": "ops" }
+      ] },
+    { "id": "maven", "files": ["pom.xml"], "stack": "Maven", "bin": "mvn", "wrapper": ["mvnw.cmd", "mvnw"],
+      "commands": [
+        { "name": "mvn package", "argv": ["{bin}", "package"], "stage": "build" },
+        { "name": "mvn test", "argv": ["{bin}", "test"], "stage": "check" },
+        { "name": "mvn verify", "argv": ["{bin}", "verify"], "stage": "check" },
+        { "name": "mvn clean", "argv": ["{bin}", "clean"], "stage": "ops" }
+      ] },
+    { "id": "gradle", "files": ["build.gradle", "build.gradle.kts"], "stack": "Gradle", "bin": "gradle", "wrapper": ["gradlew.bat", "gradlew"],
+      "commands": [
+        { "name": "gradle build", "argv": ["{bin}", "build"], "stage": "build" },
+        { "name": "gradle test", "argv": ["{bin}", "test"], "stage": "check" },
+        { "name": "gradle clean", "argv": ["{bin}", "clean"], "stage": "ops" }
+      ] },
+    { "id": "compose", "files": ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"], "stack": "Docker", "desc": "Сервисы: {services}",
+      "commands": [
+        { "name": "compose up", "argv": ["docker", "compose", "up"], "stage": "dev" },
+        { "name": "compose up -d", "argv": ["docker", "compose", "up", "-d"], "stage": "dev" },
+        { "name": "compose up -d --build", "argv": ["docker", "compose", "up", "-d", "--build"], "stage": "dev" },
+        { "name": "compose ps", "argv": ["docker", "compose", "ps"], "stage": "ops" },
+        { "name": "compose logs", "argv": ["docker", "compose", "logs", "--tail", "200"], "stage": "ops" },
+        { "name": "compose logs -f", "argv": ["docker", "compose", "logs", "-f", "--tail", "50"], "stage": "ops" },
+        { "name": "compose build", "argv": ["docker", "compose", "build"], "stage": "build" },
+        { "name": "compose pull", "argv": ["docker", "compose", "pull"], "stage": "setup" },
+        { "name": "compose restart", "argv": ["docker", "compose", "restart"], "stage": "ops" },
+        { "name": "compose down", "argv": ["docker", "compose", "down"], "stage": "ops" }
+      ] },
+    { "id": "pip", "files": ["requirements.txt"], "stack": "Python",
+      "commands": [ { "name": "pip install", "argv": ["python", "-m", "pip", "install", "-r", "requirements.txt"], "stage": "setup" } ] },
+    { "id": "poetry", "files": ["pyproject.toml"], "contains": "[tool.poetry]", "stack": "Python",
+      "commands": [ { "name": "poetry install", "argv": ["poetry", "install"], "stage": "setup" } ] },
+    { "id": "uv", "files": ["uv.lock"], "stack": "Python",
+      "commands": [ { "name": "uv sync", "argv": ["uv", "sync"], "stage": "setup" } ] },
+    { "id": "pytest", "files": ["pytest.ini", "conftest.py", "tox.ini"], "alsoIfContains": { "file": "pyproject.toml", "text": "pytest" }, "stack": "Python",
+      "commands": [ { "name": "pytest", "argv": ["python", "-m", "pytest"], "stage": "check" } ] },
+    { "id": "ruff", "files": ["ruff.toml", ".ruff.toml"], "alsoIfContains": { "file": "pyproject.toml", "text": "[tool.ruff" }, "stack": "Python",
+      "commands": [ { "name": "ruff check", "argv": ["ruff", "check", "."], "stage": "check" } ] },
+    { "id": "django", "files": ["manage.py"], "stack": "Django",
+      "commands": [
+        { "name": "manage.py runserver", "argv": ["python", "manage.py", "runserver"], "stage": "dev" },
+        { "name": "manage.py migrate", "argv": ["python", "manage.py", "migrate"], "stage": "ops" },
+        { "name": "manage.py test", "argv": ["python", "manage.py", "test"], "stage": "check" },
+        { "name": "manage.py makemigrations", "argv": ["python", "manage.py", "makemigrations"], "stage": "build" }
+      ] },
+    { "id": "composer", "files": ["composer.json"], "stack": "PHP",
+      "commands": [ { "name": "composer install", "argv": ["composer", "install"], "stage": "setup" } ] }
+  ],
+  "git": [
+    { "name": "git status", "argv": ["git", "status"], "stage": "ops" },
+    { "name": "git fetch", "argv": ["git", "fetch", "--all", "--prune"], "stage": "ops" },
+    { "name": "git pull --ff-only", "argv": ["git", "pull", "--ff-only"], "stage": "ops" },
+    { "name": "git log", "argv": ["git", "log", "--oneline", "--graph", "--decorate", "-40"], "stage": "ops" },
+    { "name": "git diff --stat", "argv": ["git", "diff", "--stat"], "stage": "ops" }
+  ],
+  "scriptFiles": {
+    "_": "Как запускать файлы-скрипты из папок heuristics.scriptDirs. {file} - полный путь, {bash} - Git Bash.",
+    ".ps1": ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "{file}"],
+    ".sh": ["{bash}", "{file}"],
+    ".bat": ["{file}"],
+    ".cmd": ["{file}"],
+    ".py": ["python", "{file}"]
+  }
+}

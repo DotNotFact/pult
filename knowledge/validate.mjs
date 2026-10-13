@@ -1,0 +1,136 @@
+// Проверка базы знаний: схема, ссылки между файлами, запрещённые символы и слова.
+// node knowledge/validate.mjs            - всё
+// node knowledge/validate.mjs tools/x.json topics/y.json - только эти файлы (ссылки всё равно сверяются со всеми)
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const K = path.dirname(fileURLToPath(import.meta.url));
+const TOPICS = ['terminal', 'git', 'node', 'package-managers', 'typescript', 'frontend', 'testing', 'code-quality', 'env', 'task-runners', 'shell-scripts',
+  'docker', 'docker-compose', 'wsl', 'ci-cd', 'dotnet', 'rust', 'python', 'go', 'java', 'databases', 'deploy'];
+const SECTIONS = ['idea', 'diagram', 'terms', 'steps', 'anatomy', 'example', 'compare', 'chart', 'mistakes', 'cheatsheet', 'quiz', 'project'];
+const DASHES = new RegExp('[' + String.fromCharCode(0x2014, 0x2013) + ']');
+const BAD_WORDS = /(давайте разбер|важно отметить|стоит отметить|(?<![а-яё])мощн|современн|(?<![а-яё])является|в мире|не секрет|по сути|ключевую роль|играет роль|позволяет вам|уникальн|инновац)/i;
+const errors = [];
+const err = (file, where, msg) => errors.push(`${file}: ${where}: ${msg}`);
+
+async function readJson(rel) {
+  try { return JSON.parse(await fs.readFile(path.join(K, rel), 'utf8')); } catch (e) { err(rel, '-', 'не JSON: ' + e.message); return null; }
+}
+function walkStrings(v, cb, where = '') {
+  if (typeof v === 'string') cb(v, where);
+  else if (Array.isArray(v)) v.forEach((x, i) => walkStrings(x, cb, `${where}[${i}]`));
+  else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walkStrings(x, cb, where ? `${where}.${k}` : k);
+}
+function textRules(file, data) {
+  walkStrings(data, (s, where) => {
+    if (DASHES.test(s)) err(file, where, 'длинное или среднее тире - замените на «-»');
+    if (where.endsWith('match') || where.endsWith('re')) return;
+    const m = BAD_WORDS.exec(s); if (m) err(file, where, `вода: «${m[0]}»`);
+  });
+}
+
+const effects = await readJson('effects.json');
+const FX = new Set(Object.keys(effects || {}));
+const icons = await readJson('icons.json');
+const ICONS = new Set(Object.keys(icons || {}));
+for (const f of ['effects.json', 'stages.json', 'stacks.json', 'docs.json', 'ui.json', 'glossary.json', 'icons.json', 'heuristics.json', 'manifests.json']) {
+  const d = f === 'effects.json' ? effects : f === 'icons.json' ? icons : await readJson(f);
+  if (d && f !== 'icons.json') textRules(f, d);
+}
+
+const only = process.argv.slice(2);
+const want = (rel) => !only.length || only.some((o) => rel.replace(/\\/g, '/').endsWith(o.replace(/\\/g, '/')));
+
+// ---- tools
+const binOwner = new Map();
+const toolIds = new Set();
+for (const f of (await fs.readdir(path.join(K, 'tools')).catch(() => [])).filter((n) => n.endsWith('.json'))) {
+  const rel = 'tools/' + f;
+  const d = await readJson(rel);
+  if (!d) continue;
+  if (!Array.isArray(d.tools)) { err(rel, '-', 'нет массива tools'); continue; }
+  const check = want(rel);
+  if (check) textRules(rel, d);
+  d.tools.forEach((t, i) => {
+    const w = `tools[${i}] ${t.id || '?'}`;
+    if (toolIds.has(t.id)) err(rel, w, 'повтор id');
+    toolIds.add(t.id);
+    for (const b of t.bins || []) {
+      const key = b.toLowerCase();
+      if (binOwner.has(key)) err(rel, w, `bin «${b}» уже есть у ${binOwner.get(key)}`);
+      binOwner.set(key, `${rel}:${t.id}`);
+    }
+    if (!check) return;
+    for (const k of ['id', 'name', 'topic', 'about']) if (typeof t[k] !== 'string' || !t[k]) err(rel, w, `нет поля ${k}`);
+    if (!Array.isArray(t.bins) || !t.bins.length) err(rel, w, 'нет bins');
+    if (t.topic && !TOPICS.includes(t.topic)) err(rel, w, `неизвестный topic «${t.topic}»`);
+    if (!t.default?.say) err(rel, w, 'нет default.say');
+    const desc = (x, ww) => {
+      for (const fx of x.fx || []) if (!FX.has(fx)) err(rel, ww, `неизвестный эффект «${fx}»`);
+      for (const fx of x.fxRemove || []) if (!FX.has(fx)) err(rel, ww, `неизвестный эффект «${fx}»`);
+      if (x.say && /\.$/.test(x.say)) err(rel, ww, 'say без точки в конце');
+    };
+    desc(t.default || {}, w + '.default');
+    (t.sub || []).forEach((s, j) => {
+      try { new RegExp(s.match, 'i'); } catch (e) { err(rel, `${w}.sub[${j}]`, 'плохой match: ' + e.message); }
+      if (!s.say) err(rel, `${w}.sub[${j}]`, 'нет say');
+      desc(s, `${w}.sub[${j}]`);
+    });
+    (t.flags || []).forEach((fl, j) => {
+      if (!/^-/.test(fl.flag || '')) err(rel, `${w}.flags[${j}]`, 'flag должен начинаться с -');
+      if (!fl.text) err(rel, `${w}.flags[${j}]`, 'нет text');
+      desc(fl, `${w}.flags[${j}]`);
+    });
+    if (t.how && (!Array.isArray(t.how) || t.how.length > 6)) err(rel, w, 'how - массив до 6 шагов');
+  });
+}
+
+// ---- topics
+const termForms = new Map();
+for (const f of (await fs.readdir(path.join(K, 'topics')).catch(() => [])).filter((n) => n.endsWith('.json'))) {
+  const rel = 'topics/' + f;
+  const t = await readJson(rel);
+  if (!t || !want(rel)) continue;
+  textRules(rel, t);
+  if (t.id !== f.replace(/\.json$/, '')) err(rel, '-', 'id должен совпадать с именем файла');
+  if (!TOPICS.includes(t.id)) err(rel, '-', `id не из списка уроков`);
+  for (const k of ['title', 'summary', 'color', 'icon']) if (!t[k]) err(rel, '-', `нет поля ${k}`);
+  if (t.icon && !ICONS.has(t.icon)) err(rel, '-', `нет значка «${t.icon}» в icons.json`);
+  if (!/^#[0-9a-f]{6}$/i.test(t.color || '')) err(rel, '-', 'color - #rrggbb');
+  if (!t.detect || typeof t.detect !== 'object') err(rel, '-', 'нет detect');
+  for (const r of t.related || []) if (!TOPICS.includes(r)) err(rel, 'related', `неизвестный урок «${r}»`);
+  if (!Array.isArray(t.sections) || t.sections.length < 4) err(rel, '-', 'нужно хотя бы 4 секции');
+  (t.sections || []).forEach((s, i) => {
+    const w = `sections[${i}] ${s.type}`;
+    if (!SECTIONS.includes(s.type)) return err(rel, w, 'неизвестный type');
+    const arr = (k) => { if (!Array.isArray(s[k]) || !s[k].length) err(rel, w, `нужен непустой ${k}`); return s[k] || []; };
+    if (s.type === 'idea' && !s.text) err(rel, w, 'нет text');
+    if (s.type === 'diagram') {
+      const ids = new Set(arr('nodes').map((n) => n.id));
+      for (const n of s.nodes || []) { if (!n.id || !n.label) err(rel, w, 'узлу нужны id и label'); if (n.icon && !ICONS.has(n.icon)) err(rel, w, `нет значка «${n.icon}»`); }
+      for (const e of arr('edges')) if (!ids.has(e[0]) || !ids.has(e[1])) err(rel, w, `стрелка к неизвестному узлу: ${e.join(' -> ')}`);
+    }
+    if (s.type === 'terms') for (const x of arr('items')) { if (!x.term || !x.text) err(rel, w, 'термину нужны term и text'); for (const fm of [x.term, ...(x.forms || [])]) termForms.set(fm.toLowerCase(), rel); }
+    if (s.type === 'steps') arr('items');
+    if (s.type === 'anatomy') for (const p of arr('parts')) if (!p.text || !p.note) err(rel, w, 'части нужны text и note');
+    if (s.type === 'example' && !s.code) err(rel, w, 'нет code');
+    if (s.type === 'compare') { const n = arr('cols').length; for (const r of arr('rows')) if (r.length !== n) err(rel, w, 'в строке другое число ячеек'); }
+    if (s.type === 'chart') for (const x of arr('items')) if (typeof x.value !== 'number' || !x.label) err(rel, w, 'столбцу нужны label и число value');
+    if (s.type === 'mistakes') for (const x of arr('items')) if (!x.problem || !x.fix) err(rel, w, 'нужны problem и fix');
+    if (s.type === 'cheatsheet') for (const x of arr('items')) if (!x.cmd || !x.text) err(rel, w, 'нужны cmd и text');
+    if (s.type === 'quiz') for (const x of arr('items')) if (!x.q || !Array.isArray(x.options) || typeof x.answer !== 'number' || x.answer >= x.options.length || !x.why) err(rel, w, 'вопросу нужны q, options, answer (номер), why');
+  });
+}
+
+// ---- ссылки tools -> topics на диске
+const existingTopics = new Set((await fs.readdir(path.join(K, 'topics')).catch(() => [])).map((n) => n.replace(/\.json$/, '')));
+if (!only.length) {
+  for (const f of (await fs.readdir(path.join(K, 'tools')).catch(() => [])).filter((n) => n.endsWith('.json'))) {
+    const d = await readJson('tools/' + f);
+    for (const t of d?.tools || []) if (t.topic && !existingTopics.has(t.topic)) err('tools/' + f, t.id, `урока «${t.topic}» пока нет в topics/ (предупреждение)`);
+  }
+}
+
+if (errors.length) { console.log(errors.join('\n')); console.log(`\nошибок: ${errors.length}`); process.exit(1); }
+console.log(`ok · программ: ${toolIds.size}, команд-префиксов: ${binOwner.size}, уроков: ${existingTopics.size}, терминов: ${termForms.size}`);

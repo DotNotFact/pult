@@ -1,0 +1,132 @@
+{
+  "id": "task-runners",
+  "title": "Запускатели задач",
+  "color": "#29beb0",
+  "icon": "list",
+  "level": "основы",
+  "summary": "Make, just, Task, Turborepo и Nx дают длинным командам короткие имена и запускают их в нужном порядке.",
+  "detect": {
+    "files": ["Makefile", "makefile", "GNUmakefile", "justfile", "Justfile", ".justfile", "Taskfile.yml", "Taskfile.yaml", "turbo.json", "nx.json", "lerna.json"],
+    "deps": ["turbo", "nx", "lerna", "npm-run-all", "npm-run-all2", "concurrently"],
+    "bins": ["make", "just", "task", "turbo", "nx", "concurrently", "run-p", "run-s"]
+  },
+  "related": ["shell-scripts", "node", "ci-cd"],
+  "sections": [
+    {
+      "type": "idea",
+      "title": "Зачем нужен запускатель задач",
+      "text": "У проекта десятки команд: собрать, проверить, поднять базу, почистить. Длинные команды трудно помнить и легко набрать с ошибкой. Запускатель задач даёт каждой короткое имя: make test, just dev, turbo build. Он же знает порядок: сначала собрать, потом тестировать. А продвинутые умеют пропускать то, что уже сделано и с тех пор не менялось.",
+      "analogy": "Как кнопки быстрого набора на телефоне. Нажали «1» - звонок маме. Номер помнить не нужно, и ошибиться в цифре нельзя."
+    },
+    {
+      "type": "diagram",
+      "title": "Что происходит после make test",
+      "nodes": [
+        { "id": "you", "label": "Вы", "note": "make test", "icon": "user" },
+        { "id": "file", "label": "Файл задач", "note": "Makefile, justfile, turbo.json", "icon": "file" },
+        { "id": "runner", "label": "Запускатель", "note": "make, just, turbo", "icon": "list" },
+        { "id": "deps", "label": "Сначала нужное", "note": "build перед test", "icon": "branch" },
+        { "id": "cache", "label": "Кэш", "note": "не менялось - пропустить", "icon": "clock" },
+        { "id": "cmds", "label": "Команды", "note": "обычные команды оболочки", "icon": "terminal" }
+      ],
+      "edges": [
+        ["you", "runner", "имя задачи"],
+        ["file", "runner", "описание задач"],
+        ["runner", "deps", "строит порядок"],
+        ["deps", "cache", "проверяет"],
+        ["cache", "cmds", "запускает нужное"]
+      ],
+      "caption": "Внутри задачи - те же команды, что вы набрали бы сами. Запускатель только помнит их, соблюдает порядок и пропускает лишнее."
+    },
+    {
+      "type": "terms",
+      "title": "Слова про задачи",
+      "items": [
+        { "term": "Задача", "text": "Именованный набор команд: build, test, dev. В Makefile её называют целью (target).", "forms": ["задача", "задачи", "задачу", "задач", "задачей", "target", "цель", "рецепт"] },
+        { "term": "Зависимость задачи", "text": "Задача, которая выполняется перед другой. test зависит от build: сначала сборка, потом тесты.", "forms": ["зависимость задачи", "зависимости задачи", "dependsOn"] },
+        { "term": "Makefile", "text": "Файл задач для программы make. Есть почти в любом Linux и macOS.", "forms": ["make", "мейкфайл"] },
+        { "term": "justfile", "text": "Файл задач для программы just. Синтаксис проще, чем у make, работает и на Windows.", "forms": ["just"] },
+        { "term": "Taskfile", "text": "Файл задач Taskfile.yml для программы task. Задачи описаны в формате YAML.", "forms": ["Taskfile.yml", "go-task"] },
+        { "term": "Монорепо", "text": "Один репозиторий с несколькими проектами внутри: web, api, общие пакеты. Turborepo и Nx созданы для таких.", "forms": ["монорепо", "монорепозиторий", "monorepo"] },
+        { "term": "Кэш задач", "text": "Запомненный результат задачи. Если входные файлы не менялись, задача не выполняется, а результат берётся из кэша.", "forms": ["кэш задач", "кэша задач", "remote cache"] }
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Простой Makefile",
+      "code": ".PHONY: dev build test\n\ndev:\n\tnpm run dev\n\nbuild:\n\tnpm run build\n\ntest: build\n\tnpm test",
+      "note": "Строка test: build значит: перед test выполнить build. Отступ перед командой - символ табуляции, не пробелы. .PHONY говорит, что это имена задач, а не файлов."
+    },
+    {
+      "type": "anatomy",
+      "title": "Разбор команды Turborepo",
+      "parts": [
+        { "text": "turbo", "note": "запускатель для монорепо" },
+        { "text": "run", "note": "выполнить задачу" },
+        { "text": "build", "note": "имя задачи из turbo.json" },
+        { "text": "--filter=web", "note": "только для пакета web; задачи, от которых он зависит, выполнятся тоже" }
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "Какие бывают запускатели",
+      "cols": ["Программа", "Файл", "Запуск", "Когда удобна"],
+      "rows": [
+        ["npm scripts", "package.json", "npm run test", "уже есть в любом проекте на Node"],
+        ["Make", "Makefile", "make test", "Linux и macOS; на Windows ставится отдельно"],
+        ["just", "justfile", "just test", "простой синтаксис, любая система"],
+        ["Task", "Taskfile.yml", "task test", "задачи в YAML, одна программа без зависимостей"],
+        ["Turborepo", "turbo.json", "turbo run test", "монорепо на JavaScript, кэш результатов"],
+        ["Nx", "nx.json", "nx run-many -t test", "большие монорепо, граф проектов, кэш"]
+      ]
+    },
+    {
+      "type": "chart",
+      "title": "Сборка монорепо с кэшем",
+      "unit": "секунд",
+      "items": [
+        { "label": "Первая сборка", "value": 90, "note": "собирается всё" },
+        { "label": "Изменён один пакет", "value": 25, "note": "собирается он и те, кто от него зависит" },
+        { "label": "Ничего не менялось", "value": 1, "note": "всё взято из кэша" }
+      ],
+      "note": "Примерные значения для монорепо из нескольких пакетов. Кэш выигрывает тем больше, чем больше пакетов не тронуто правкой."
+    },
+    {
+      "type": "mistakes",
+      "title": "Частые ошибки",
+      "items": [
+        { "problem": "Makefile:3: *** missing separator. Stop.", "fix": "Перед командой стоят пробелы вместо табуляции. Замените их одним символом Tab. В редакторе включите показ невидимых символов." },
+        { "problem": "make: command not found на Windows.", "fix": "make в Windows не входит. Поставьте его через winget или choco, используйте Git Bash или WSL. Другой путь - just или npm scripts." },
+        { "problem": "make: 'build' is up to date, хотя вы ничего не собирали.", "fix": "В папке есть файл или папка build, и make считает задачу выполненной. Добавьте build в строку .PHONY." },
+        { "problem": "Turborepo не пересобрал пакет после правки .env.", "fix": "turbo не знает, что задача зависит от этой переменной. Перечислите её в env или globalEnv в turbo.json." },
+        { "problem": "Задачи запускаются не в том порядке.", "fix": "Порядок нужно записать явно: зависимость в Makefile (test: build) или dependsOn в turbo.json." }
+      ]
+    },
+    {
+      "type": "cheatsheet",
+      "title": "Шпаргалка",
+      "items": [
+        { "cmd": "make", "text": "Выполнить первую задачу в Makefile" },
+        { "cmd": "make test", "text": "Выполнить задачу test" },
+        { "cmd": "make -n test", "text": "Показать команды задачи, ничего не выполняя" },
+        { "cmd": "just --list", "text": "Список задач в justfile" },
+        { "cmd": "task --list", "text": "Список задач в Taskfile с описанием" },
+        { "cmd": "turbo run build", "text": "Собрать все пакеты монорепо" },
+        { "cmd": "turbo run build --filter=web", "text": "Собрать только пакет web и то, что ему нужно" },
+        { "cmd": "nx graph", "text": "Открыть схему, кто от кого зависит" },
+        { "cmd": "npx concurrently \"npm run api\" \"npm run web\"", "text": "Запустить две команды одновременно в одном окне" }
+      ]
+    },
+    {
+      "type": "quiz",
+      "title": "Проверьте себя",
+      "items": [
+        { "q": "В Makefile написано test: build. Что случится при make test?", "options": ["Только тесты", "Сначала build, потом test", "Только build", "Ошибка"], "answer": 1, "why": "После двоеточия перечислены задачи, которые нужно выполнить раньше." },
+        { "q": "Чем Turborepo экономит время?", "options": ["Покупает быстрый сервер", "Пропускает задачи, у которых не менялись входные файлы", "Удаляет тесты", "Сжимает код"], "answer": 1, "why": "turbo запоминает результат задачи. Если входы те же, он не выполняет её заново, а берёт результат из кэша." },
+        { "q": "Как посмотреть, что сделает задача, ничего не запуская?", "options": ["make -n имя", "make --force", "make clean", "make --run"], "answer": 0, "why": "Ключ -n печатает команды задачи вместо выполнения. Удобно перед незнакомой задачей." },
+        { "q": "make ругается «missing separator». В чём дело?", "options": ["Нет интернета", "Пробелы вместо табуляции перед командой", "Неверное имя задачи", "Нет Node"], "answer": 1, "why": "make требует, чтобы строки с командами начинались с символа табуляции." }
+      ]
+    },
+    { "type": "project", "title": "Где это в вашем проекте" }
+  ]
+}

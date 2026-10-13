@@ -1,0 +1,347 @@
+{
+  "tools": [
+    {
+      "id": "terraform",
+      "name": "Terraform",
+      "topic": "deploy",
+      "bins": [ "terraform", "tofu" ],
+      "about": "Программа, которая создаёт серверы, базы и сети у облачного провайдера по описанию в файлах .tf. tofu - открытая копия с теми же командами (OpenTofu).",
+      "how": [ "Читает все файлы .tf в папке: что должно существовать в облаке", "Читает файл состояния: что уже создано в прошлый раз", "Сравнивает их с тем, что есть у провайдера на самом деле", "Составляет план: что создать, что поменять, что удалить" ],
+      "default": { "say": "Работает с инфраструктурой по описанию Terraform", "fx": [ "network" ] },
+      "sub": [
+        { "match": "^(?:-chdir=\\S+\\s+)?init\\b", "part": "подготовка", "say": "Скачивает провайдеры и модули и подключает хранилище состояния", "fx": [ "install", "network", "write" ] },
+        { "match": "^(?:-chdir=\\S+\\s+)?plan\\b(?=.*\\s(?:-destroy)(?:[\\s=:]|$))", "part": "план удаления", "say": "Показывает, что будет удалено командой destroy, ничего не меняя", "fx": [ "read", "network" ] },
+        { "match": "^(?:-chdir=\\S+\\s+)?plan\\b", "part": "план", "say": "Показывает, что поменяется в инфраструктуре, ничего не меняя", "fx": [ "read", "network" ] },
+        { "match": "^(?:-chdir=\\S+\\s+)?apply\\b", "part": "применение", "say": "Применяет изменения к настоящей инфраструктуре: создаёт, меняет и удаляет ресурсы в облаке", "fx": [ "network", "danger" ], "danger": true, "how": [ "Составляет план, как terraform plan, или берёт готовый из файла", "Показывает план и ждёт, пока вы напишете yes (с -auto-approve не ждёт)", "Через API провайдера создаёт, меняет и удаляет ресурсы в нужном порядке", "Записывает итог в файл состояния, чтобы в следующий раз знать, что уже создано" ] },
+        { "match": "^(?:-chdir=\\S+\\s+)?destroy\\b", "part": "уничтожение", "say": "Удаляет всю инфраструктуру, описанную в этой папке: серверы, базы и данные в них", "fx": [ "network", "delete", "danger" ], "danger": true, "how": [ "Составляет план удаления всех ресурсов из файла состояния", "Показывает его и ждёт yes (с -auto-approve не ждёт)", "Удаляет ресурсы у провайдера в обратном порядке зависимостей", "Данные в удалённых базах и дисках не вернуть" ] },
+        { "match": "^(?:-chdir=\\S+\\s+)?fmt\\b(?=.*\\s(?:-check)(?:[\\s=:]|$))", "part": "проверка формата", "say": "Проверяет форматирование файлов .tf, ничего не меняя", "fx": [ "read" ] },
+        { "match": "^(?:-chdir=\\S+\\s+)?fmt\\b", "part": "форматирование", "say": "Переформатирует файлы .tf", "fx": [ "write" ] },
+        { "match": "^(?:-chdir=\\S+\\s+)?validate\\b", "part": "проверка", "say": "Проверяет, что описание инфраструктуры написано без ошибок", "fx": [ "read" ] },
+        { "match": "^(?:-chdir=\\S+\\s+)?(?:output|show|providers|graph|version)\\b", "part": "просмотр", "say": "Показывает состояние, выходные значения или версии", "fx": [ "read" ] },
+        { "match": "^(?:-chdir=\\S+\\s+)?state\\s+(?:list|show|pull)\\b", "part": "состояние", "say": "Показывает, какие ресурсы записаны в состоянии", "fx": [ "read" ] },
+        { "match": "^(?:-chdir=\\S+\\s+)?state\\s+(?:rm|mv|push|replace-provider)\\b", "part": "правка состояния", "say": "Правит файл состояния вручную - Terraform может потерять связь с ресурсами", "fx": [ "danger" ], "danger": true },
+        { "match": "^(?:-chdir=\\S+\\s+)?import\\b", "part": "импорт", "say": "Берёт под управление ресурс, созданный вручную", "fx": [ "network", "write" ] },
+        { "match": "^(?:-chdir=\\S+\\s+)?workspace\\s+(?:select|new)\\b", "part": "рабочая область", "say": "Переключает или создаёт рабочую область - отдельное состояние, например для dev и prod", "fx": [ "write" ] },
+        { "match": "^(?:-chdir=\\S+\\s+)?workspace\\b", "part": "рабочие области", "say": "Показывает рабочие области", "fx": [ "read" ] }
+      ],
+      "flags": [
+        { "flag": "-auto-approve", "text": "Не спрашивать подтверждение перед изменениями", "say": "и не спрашивает подтверждение" },
+        { "flag": "-var", "text": "Задать значение переменной: -var \"region=eu-west-1\"" },
+        { "flag": "-var-file", "text": "Взять значения переменных из файла .tfvars" },
+        { "flag": "-target", "text": "Работать только с одним ресурсом" },
+        { "flag": "-out", "text": "В plan - сохранить план в файл, чтобы потом применить ровно его" },
+        { "flag": "-destroy", "text": "В plan - составить план удаления" },
+        { "flag": "-upgrade", "text": "В init - обновить провайдеры до новых разрешённых версий" },
+        { "flag": "-check", "text": "В fmt - только проверить, ничего не меняя" },
+        { "flag": "-recursive", "text": "Заодно обработать вложенные папки" },
+        { "flag": "-input=false", "text": "Не задавать вопросов - так запускают в CI" },
+        { "flag": "-chdir", "text": "Выполнить команду в другой папке" }
+      ],
+      "help": "-help"
+    },
+    {
+      "id": "kubectl",
+      "name": "kubectl",
+      "topic": "deploy",
+      "bins": [ "kubectl" ],
+      "about": "Программа управления кластером Kubernetes - группой серверов, на которых работают контейнеры.",
+      "how": [ "Берёт адрес кластера и данные входа из файла ~/.kube/config (текущий контекст)", "Отправляет запрос в API кластера", "Кластер сам приводит запущенные контейнеры к тому, что описано в запросе" ],
+      "default": { "say": "Обращается к кластеру Kubernetes", "fx": [ "network" ] },
+      "sub": [
+        { "match": "^(?:apply|create|replace|patch|edit|set|label|annotate)\\b(?=.*\\s(?:--dry-run)(?:[\\s=:]|$))", "part": "проверка изменений", "say": "Показывает, что поменялось бы в кластере, ничего не меняя", "fx": [ "network", "read" ] },
+        { "match": "^apply\\b", "part": "применение", "say": "Применяет описание из файлов к кластеру: создаёт и меняет ресурсы", "fx": [ "network", "danger" ], "danger": true, "how": [ "Читает файлы YAML с описанием ресурсов (-f)", "Сравнивает их с тем, что сейчас есть в кластере", "Отправляет в кластер только разницу", "Кластер перезапускает контейнеры, если поменялся образ или настройки" ] },
+        { "match": "^delete\\b", "part": "удаление", "say": "Удаляет ресурсы из кластера", "fx": [ "network", "delete", "danger" ], "danger": true },
+        { "match": "^(?:create|replace|patch|edit|scale|set|label|annotate|cordon|drain|taint)\\b", "part": "изменение", "say": "Меняет ресурсы в кластере", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^rollout\\s+(?:status|history)\\b", "part": "ход выкладки", "say": "Показывает, как идёт выкладка новой версии", "fx": [ "network", "read" ] },
+        { "match": "^rollout\\b", "part": "выкладка", "say": "Перезапускает, откатывает или приостанавливает выкладку", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^logs\\b(?=.*\\s(?:-f|--follow)(?:[\\s=:]|$))", "part": "журнал вживую", "say": "Показывает журнал контейнера и дописывает новые строки", "fx": [ "network", "read" ], "long": true },
+        { "match": "^logs\\b", "part": "журнал", "say": "Показывает журнал контейнера", "fx": [ "network", "read" ] },
+        { "match": "^exec\\b", "part": "команда в контейнере", "say": "Выполняет команду внутри контейнера в кластере", "fx": [ "network" ] },
+        { "match": "^port-forward\\b", "part": "проброс порта", "say": "Открывает порт сервиса кластера на этой машине, пока команда работает", "fx": [ "network" ], "long": true, "url": true },
+        { "match": "^(?:get|describe|top|explain|api-resources|cluster-info|version|events|diff|auth\\s+can-i)\\b(?=.*\\s(?:-w|--watch)(?:[\\s=:]|$))", "part": "наблюдение", "say": "Показывает ресурсы кластера и обновляет вывод при каждом изменении", "fx": [ "network", "read" ], "long": true },
+        { "match": "^(?:get|describe|top|explain|api-resources|cluster-info|version|events|diff|auth\\s+can-i)\\b", "part": "просмотр", "say": "Показывает ресурсы и состояние кластера", "fx": [ "network", "read" ] },
+        { "match": "^config\\s+(?:use-context|set-context|set|delete-context)\\b", "part": "смена кластера", "say": "Переключает или меняет кластер в ~/.kube/config: следующие команды пойдут туда", "fx": [ "write" ] },
+        { "match": "^config\\b", "part": "настройки", "say": "Показывает кластеры и контексты из ~/.kube/config", "fx": [ "read" ] }
+      ],
+      "flags": [
+        { "flag": "--namespace", "alias": [ "-n" ], "text": "В каком пространстве имён работать" },
+        { "flag": "--all-namespaces", "alias": [ "-A" ], "text": "Во всех пространствах имён" },
+        { "flag": "--filename", "alias": [ "-f" ], "text": "Файл или папка с описанием ресурсов (в logs -f значит «следить»)" },
+        { "flag": "--output", "alias": [ "-o" ], "text": "Формат вывода: wide, yaml, json" },
+        { "flag": "--context", "text": "С каким кластером работать на этот раз" },
+        { "flag": "--selector", "alias": [ "-l" ], "text": "Отобрать ресурсы по меткам: -l app=web" },
+        { "flag": "--watch", "alias": [ "-w" ], "text": "Следить за изменениями и обновлять вывод", "long": true },
+        { "flag": "--dry-run", "text": "Показать, что было бы сделано, ничего не меняя: --dry-run=client или server" },
+        { "flag": "-it", "text": "В exec - подключить клавиатуру и терминал", "long": true }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "helm",
+      "name": "Helm",
+      "topic": "deploy",
+      "bins": [ "helm" ],
+      "about": "Менеджер пакетов для Kubernetes: ставит в кластер готовые наборы ресурсов (чарты) с настройками.",
+      "default": { "say": "Работает с релизами Helm в Kubernetes", "fx": [ "network" ] },
+      "sub": [
+        { "match": "^(?:install|upgrade|rollback|uninstall|delete)\\b(?=.*\\s(?:--dry-run)(?:[\\s=:]|$))", "part": "проверка", "say": "Показывает, что поменялось бы в кластере, ничего не меняя", "fx": [ "network", "read" ] },
+        { "match": "^(?:install|upgrade)\\b", "part": "установка релиза", "say": "Ставит или обновляет релиз в кластере Kubernetes", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^rollback\\b", "part": "откат", "say": "Откатывает релиз к прошлой версии", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^(?:uninstall|delete|del)\\b", "part": "удаление релиза", "say": "Удаляет релиз и все его ресурсы из кластера", "fx": [ "network", "delete", "danger" ], "danger": true },
+        { "match": "^(?:list|ls|status|history|get|show)\\b", "part": "просмотр", "say": "Показывает релизы, их состояние и историю", "fx": [ "network", "read" ] },
+        { "match": "^(?:template|lint)\\b", "part": "проверка чарта", "say": "Собирает или проверяет ресурсы из чарта, не трогая кластер", "fx": [ "read" ] },
+        { "match": "^repo\\s+(?:add|update)\\b", "part": "репозитории", "say": "Добавляет или обновляет репозиторий чартов", "fx": [ "network", "write" ] },
+        { "match": "^(?:dependency|dep)\\s+(?:update|build)\\b", "part": "зависимости", "say": "Скачивает чарты, от которых зависит этот", "fx": [ "install", "network" ] },
+        { "match": "^package\\b", "part": "упаковка", "say": "Упаковывает чарт в архив .tgz", "fx": [ "write" ] },
+        { "match": "^push\\b", "part": "публикация", "say": "Отправляет чарт в реестр", "fx": [ "network", "danger" ], "danger": true }
+      ],
+      "flags": [
+        { "flag": "--namespace", "alias": [ "-n" ], "text": "В каком пространстве имён работать" },
+        { "flag": "--values", "alias": [ "-f" ], "text": "Файл с настройками релиза" },
+        { "flag": "--set", "text": "Задать настройку прямо в команде: --set image.tag=1.2" },
+        { "flag": "--install", "alias": [ "-i" ], "text": "В upgrade - поставить релиз, если его ещё нет" },
+        { "flag": "--dry-run", "text": "Показать, что было бы сделано, ничего не меняя" },
+        { "flag": "--atomic", "text": "Если обновление не удалось - откатить его само" },
+        { "flag": "--wait", "text": "Ждать, пока все ресурсы станут готовы" },
+        { "flag": "--create-namespace", "text": "Создать пространство имён, если его нет" },
+        { "flag": "--version", "text": "Какую версию чарта ставить" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "ansible-playbook",
+      "name": "Ansible",
+      "topic": "deploy",
+      "bins": [ "ansible-playbook" ],
+      "about": "Программа, которая по SSH настраивает удалённые серверы по сценарию (плейбуку) в YAML.",
+      "how": [ "Читает плейбук: какие шаги выполнить и на каких серверах", "Берёт список серверов из файла инвентаря (-i)", "Подключается к каждому серверу по SSH", "Выполняет шаги по порядку и пропускает то, что уже в нужном состоянии", "Печатает итог: ok - без изменений, changed - изменено, failed - ошибка" ],
+      "default": { "say": "Настраивает удалённые серверы по плейбуку", "fx": [ "network", "danger" ], "danger": true },
+      "sub": [
+        { "match": "(?:^|.*\\s)(?:--syntax-check|--list-hosts|--list-tasks)(?:\\s|$)", "part": "проверка", "say": "Проверяет плейбук или показывает, что и где он выполнит, ничего не меняя", "fx": [ "read" ] },
+        { "match": "(?:^|.*\\s)(?:--check|-C)(?:\\s|$)", "part": "пробный прогон", "say": "Проходит плейбук и показывает, что изменилось бы, ничего не меняя", "fx": [ "network", "read" ] }
+      ],
+      "flags": [
+        { "flag": "--inventory", "alias": [ "-i" ], "text": "Файл со списком серверов" },
+        { "flag": "--check", "alias": [ "-C" ], "text": "Пробный прогон: показать изменения, ничего не меняя" },
+        { "flag": "--diff", "alias": [ "-D" ], "text": "Показать, что поменяется в файлах" },
+        { "flag": "--limit", "alias": [ "-l" ], "text": "Только на этих серверах или группах" },
+        { "flag": "--extra-vars", "alias": [ "-e" ], "text": "Передать переменные: -e \"version=1.2\"" },
+        { "flag": "--tags", "alias": [ "-t" ], "text": "Выполнить только шаги с этими метками" },
+        { "flag": "--become", "alias": [ "-b" ], "text": "Выполнять шаги от имени администратора на сервере (sudo)" },
+        { "flag": "--ask-become-pass", "alias": [ "-K" ], "text": "Спросить пароль sudo" },
+        { "flag": "--syntax-check", "text": "Только проверить синтаксис плейбука" },
+        { "flag": "-v", "alias": [ "-vv", "-vvv" ], "text": "Печатать подробнее" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "ssh",
+      "name": "SSH",
+      "topic": "deploy",
+      "bins": [ "ssh" ],
+      "about": "Программа для зашифрованного входа на удалённую машину и выполнения команд на ней.",
+      "how": [ "Подключается к машине по адресу, обычно на порт 22", "Сверяет ключ сервера с файлом ~/.ssh/known_hosts, а при первом входе спрашивает, доверять ли ему", "Входит по ключу из ~/.ssh или просит пароль", "Без команды открывает командную строку той машины, с командой - выполняет её там и выходит" ],
+      "default": { "say": "Подключается к удалённой машине: без команды открывает её командную строку, с командой - выполняет её там", "fx": [ "network" ] },
+      "sub": [
+        { "match": "(?:^|.*\\s)-[a-z]*N[a-z]*(?:\\s|$)", "part": "туннель", "say": "Держит зашифрованный туннель к удалённой машине без командной строки", "fx": [ "network" ], "long": true },
+        { "match": "(?:^|.*\\s)(?:-[LR]\\s+\\S*\\d+:\\S+|-D\\s+\\S*\\d+)(?:\\s|$)", "part": "проброс порта", "say": "Подключается к удалённой машине и пробрасывает порт, пока соединение открыто", "fx": [ "network" ], "long": true }
+      ],
+      "flags": [
+        { "flag": "-i", "text": "Каким файлом ключа входить" },
+        { "flag": "-p", "text": "Порт, если не 22" },
+        { "flag": "-L", "text": "Пробросить порт: -L 5433:localhost:5432 - localhost:5433 здесь ведёт в порт 5432 там" },
+        { "flag": "-N", "text": "Не открывать командную строку - только туннель" },
+        { "flag": "-J", "text": "Подключиться через промежуточный сервер" },
+        { "flag": "-A", "text": "Передать доступ к своим ключам на удалённую машину" },
+        { "flag": "-o", "text": "Задать настройку: -o StrictHostKeyChecking=no - не проверять ключ сервера (небезопасно)" },
+        { "flag": "-v", "text": "Печатать подробности подключения для поиска ошибок" },
+        { "flag": "-t", "text": "Выделить терминал - нужно для интерактивных команд" }
+      ],
+      "help": null
+    },
+    {
+      "id": "scp",
+      "name": "scp",
+      "topic": "deploy",
+      "bins": [ "scp" ],
+      "about": "Программа, которая копирует файлы между машинами по SSH.",
+      "default": { "say": "Копирует файлы на удалённую машину или с неё по SSH, перезаписывая файлы с теми же именами", "fx": [ "network", "write" ] },
+      "flags": [
+        { "flag": "-r", "text": "Копировать папки целиком" },
+        { "flag": "-P", "text": "Порт, если не 22 (заглавная P)" },
+        { "flag": "-i", "text": "Каким файлом ключа входить" },
+        { "flag": "-C", "text": "Сжимать при передаче" },
+        { "flag": "-p", "text": "Сохранить время изменения и права файлов" }
+      ],
+      "help": null
+    },
+    {
+      "id": "rsync",
+      "name": "rsync",
+      "topic": "deploy",
+      "bins": [ "rsync" ],
+      "about": "Программа, которая синхронизирует папки, в том числе с удалённой машиной: передаёт только изменившееся.",
+      "default": { "say": "Синхронизирует файлы между папками или с удалённой машиной, передавая только изменившееся", "fx": [ "network", "write" ] },
+      "sub": [
+        { "match": "(?:^|.*\\s)(?:-[a-zA-Z]*n[a-zA-Z]*|--dry-run)(?:\\s|$)", "part": "пробный прогон", "say": "Показывает, что скопировал бы rsync, ничего не меняя", "fx": [ "read" ] },
+        { "match": "(?:^|.*\\s)--delete\\S*(?:\\s|$)", "part": "зеркало", "say": "Делает папку назначения точной копией: файлы, которых нет в источнике, удаляются", "fx": [ "network", "write", "delete", "danger" ], "danger": true }
+      ],
+      "flags": [
+        { "flag": "--archive", "alias": [ "-a" ], "text": "Копировать папки целиком, сохраняя права, время и ссылки" },
+        { "flag": "--verbose", "alias": [ "-v" ], "text": "Печатать имена файлов" },
+        { "flag": "--compress", "alias": [ "-z" ], "text": "Сжимать при передаче" },
+        { "flag": "--dry-run", "alias": [ "-n" ], "text": "Показать, что было бы сделано, ничего не меняя" },
+        { "flag": "--delete", "text": "Удалить в назначении файлы, которых нет в источнике" },
+        { "flag": "--exclude", "text": "Не копировать файлы по шаблону" },
+        { "flag": "--progress", "alias": [ "-P" ], "text": "Показывать ход передачи" },
+        { "flag": "-e", "text": "Как подключаться: -e \"ssh -p 2222\"" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "sftp",
+      "name": "sftp",
+      "topic": "deploy",
+      "bins": [ "sftp" ],
+      "about": "Программа для обмена файлами с удалённой машиной по SSH в интерактивном режиме.",
+      "default": { "say": "Подключается к удалённой машине и ждёт команд для обмена файлами", "fx": [ "network" ], "long": true },
+      "sub": [
+        { "match": "(?:^|.*\\s)-b\\s", "part": "пакетный режим", "say": "Подключается к удалённой машине и выполняет команды обмена файлами из файла", "fx": [ "network", "write" ] }
+      ],
+      "flags": [
+        { "flag": "-P", "text": "Порт, если не 22" },
+        { "flag": "-i", "text": "Каким файлом ключа входить" },
+        { "flag": "-b", "text": "Взять команды из файла и выполнить без диалога", "long": false }
+      ],
+      "help": null
+    },
+    {
+      "id": "fly",
+      "name": "Fly.io CLI",
+      "topic": "deploy",
+      "bins": [ "fly", "flyctl" ],
+      "about": "Программа хостинга Fly.io: выкладывает приложения в контейнерах на их серверы.",
+      "default": { "say": "Обращается к Fly.io", "fx": [ "network" ] },
+      "sub": [
+        { "match": "^deploy\\b", "part": "выкладка", "say": "Собирает образ и выкладывает приложение на Fly.io - его увидят пользователи", "fx": [ "network", "danger" ], "danger": true, "how": [ "Читает fly.toml: имя приложения, порты, проверки", "Собирает Docker-образ у себя или на сервере Fly.io", "Запускает новые машины с новым образом", "Переключает на них трафик и гасит старые" ] },
+        { "match": "^launch\\b", "part": "новое приложение", "say": "Создаёт приложение на Fly.io и файл fly.toml", "fx": [ "network", "write", "danger" ], "danger": true },
+        { "match": "^logs\\b", "part": "журнал", "say": "Показывает журнал приложения и дописывает новые строки", "fx": [ "network", "read" ], "long": true },
+        { "match": "^(?:status|apps\\s+list|machine\\s+list|info)\\b", "part": "просмотр", "say": "Показывает приложения и их машины", "fx": [ "network", "read" ] },
+        { "match": "^ssh\\s+console\\b", "part": "консоль", "say": "Открывает командную строку на машине приложения", "fx": [ "network" ], "long": true },
+        { "match": "^secrets\\s+(?:set|unset|import)\\b", "part": "секреты", "say": "Меняет секреты приложения - машины перезапустятся", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^scale\\b", "part": "масштаб", "say": "Меняет число или размер машин приложения", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^(?:apps\\s+destroy|destroy)\\b", "part": "удаление", "say": "Удаляет приложение со всеми машинами", "fx": [ "network", "delete", "danger" ], "danger": true },
+        { "match": "^auth\\s+login\\b", "part": "вход", "say": "Входит в аккаунт Fly.io через браузер", "fx": [ "network" ] }
+      ],
+      "flags": [
+        { "flag": "--app", "alias": [ "-a" ], "text": "С каким приложением работать" },
+        { "flag": "--config", "alias": [ "-c" ], "text": "Путь к другому fly.toml" },
+        { "flag": "--remote-only", "text": "Собрать образ на сервере Fly.io, а не здесь" },
+        { "flag": "--ha", "text": "Запускать по две машины для надёжности" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "railway",
+      "name": "Railway CLI",
+      "topic": "deploy",
+      "bins": [ "railway" ],
+      "about": "Программа хостинга Railway: выкладывает проект и даёт доступ к его настройкам.",
+      "default": { "say": "Обращается к Railway", "fx": [ "network" ] },
+      "sub": [
+        { "match": "^(?:up|deploy)\\b", "part": "выкладка", "say": "Отправляет папку проекта на Railway и выкладывает её - её увидят пользователи", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^run\\b", "part": "запуск с переменными", "say": "Запускает команду здесь с переменными окружения из Railway", "fx": [ "network" ] },
+        { "match": "^logs\\b", "part": "журнал", "say": "Показывает журнал последней выкладки", "fx": [ "network", "read" ] },
+        { "match": "^(?:status|whoami|list|variables)\\b", "part": "просмотр", "say": "Показывает проект, окружение и переменные", "fx": [ "network", "read" ] },
+        { "match": "^(?:link|init|login)\\b", "part": "подключение", "say": "Входит в аккаунт или связывает папку с проектом Railway", "fx": [ "network", "write" ] },
+        { "match": "^down\\b", "part": "снятие выкладки", "say": "Удаляет последнюю выкладку", "fx": [ "network", "delete", "danger" ], "danger": true }
+      ],
+      "flags": [
+        { "flag": "--service", "alias": [ "-s" ], "text": "С каким сервисом работать" },
+        { "flag": "--environment", "alias": [ "-e" ], "text": "В каком окружении: production, staging" },
+        { "flag": "--detach", "alias": [ "-d" ], "text": "Не показывать журнал после отправки" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "gcloud",
+      "name": "Google Cloud CLI",
+      "topic": "deploy",
+      "bins": [ "gcloud" ],
+      "about": "Программа управления Google Cloud: серверы, контейнеры, базы, выкладка.",
+      "default": { "say": "Обращается к Google Cloud", "fx": [ "network" ] },
+      "sub": [
+        { "match": "(?:^|.*\\s)deploy\\b", "part": "выкладка", "say": "Выкладывает приложение в Google Cloud - его увидят пользователи", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "(?:^|.*\\s)(?:delete|destroy)\\b", "part": "удаление", "say": "Удаляет ресурс в Google Cloud", "fx": [ "network", "delete", "danger" ], "danger": true },
+        { "match": "(?:^|.*\\s)(?:create|update|set-iam-policy|add-iam-policy-binding)\\b", "part": "изменение", "say": "Создаёт или меняет ресурс в Google Cloud - это может стоить денег", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^builds\\s+submit\\b", "part": "сборка в облаке", "say": "Отправляет папку в Cloud Build и собирает там образ", "fx": [ "network" ] },
+        { "match": "^auth\\s+(?:login|application-default\\s+login)\\b", "part": "вход", "say": "Входит в аккаунт Google Cloud через браузер", "fx": [ "network" ] },
+        { "match": "^config\\s+set\\b", "part": "настройка", "say": "Меняет настройку по умолчанию, например проект или регион", "fx": [ "write" ] },
+        { "match": "(?:^|.*\\s)(?:list|describe|get-\\S+|info|config\\s+list)\\b", "part": "просмотр", "say": "Показывает ресурсы и настройки Google Cloud", "fx": [ "network", "read" ] }
+      ],
+      "flags": [
+        { "flag": "--project", "text": "В каком проекте Google Cloud работать" },
+        { "flag": "--region", "text": "В каком регионе" },
+        { "flag": "--quiet", "alias": [ "-q" ], "text": "Не задавать вопросов и соглашаться на всё" },
+        { "flag": "--format", "text": "Формат вывода: json, yaml, table" },
+        { "flag": "--source", "text": "Из какой папки выкладывать" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "az",
+      "name": "Azure CLI",
+      "topic": "deploy",
+      "bins": [ "az" ],
+      "about": "Программа управления Microsoft Azure: серверы, веб-приложения, базы, выкладка.",
+      "default": { "say": "Обращается к Azure", "fx": [ "network" ] },
+      "sub": [
+        { "match": "^login\\b", "part": "вход", "say": "Входит в аккаунт Azure через браузер", "fx": [ "network" ] },
+        { "match": "^account\\s+set\\b", "part": "подписка", "say": "Выбирает подписку Azure для следующих команд", "fx": [ "write" ] },
+        { "match": "(?:^|.*\\s)(?:deploy|up)\\b", "part": "выкладка", "say": "Выкладывает приложение в Azure - его увидят пользователи", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "(?:^|.*\\s)delete\\b", "part": "удаление", "say": "Удаляет ресурс в Azure (группа ресурсов удаляется со всем содержимым)", "fx": [ "network", "delete", "danger" ], "danger": true },
+        { "match": "(?:^|.*\\s)(?:create|update|set|restart|stop|start)\\b", "part": "изменение", "say": "Создаёт или меняет ресурс в Azure - это может стоить денег", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "(?:^|.*\\s)(?:list|show)\\b", "part": "просмотр", "say": "Показывает ресурсы и настройки Azure", "fx": [ "network", "read" ] }
+      ],
+      "flags": [
+        { "flag": "--resource-group", "alias": [ "-g" ], "text": "В какой группе ресурсов работать" },
+        { "flag": "--name", "alias": [ "-n" ], "text": "Имя ресурса" },
+        { "flag": "--subscription", "text": "В какой подписке" },
+        { "flag": "--output", "alias": [ "-o" ], "text": "Формат вывода: json, table, tsv" },
+        { "flag": "--yes", "alias": [ "-y" ], "text": "Не спрашивать подтверждение" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "aws",
+      "name": "AWS CLI",
+      "topic": "deploy",
+      "bins": [ "aws" ],
+      "about": "Программа управления Amazon Web Services: серверы, хранилище S3, базы, выкладка.",
+      "default": { "say": "Обращается к AWS", "fx": [ "network" ] },
+      "sub": [
+        { "match": "^s3\\s+(?:sync|cp)\\b(?=.*\\s(?:--delete)(?:[\\s=:]|$))", "part": "зеркало S3", "say": "Синхронизирует файлы с хранилищем S3 и удаляет в назначении то, чего нет в источнике", "fx": [ "network", "write", "delete", "danger" ], "danger": true },
+        { "match": "^s3\\s+(?:sync|cp|mv)\\b(?=.*\\s(?:--dryrun)(?:[\\s=:]|$))", "part": "пробный прогон", "say": "Показывает, что скопировалось бы, ничего не меняя", "fx": [ "network", "read" ] },
+        { "match": "^s3\\s+(?:sync|cp|mv)\\b", "part": "файлы S3", "say": "Копирует файлы в хранилище S3 или из него", "fx": [ "network", "write" ] },
+        { "match": "^s3\\s+(?:rm|rb)\\b", "part": "удаление в S3", "say": "Удаляет файлы или корзину в хранилище S3", "fx": [ "network", "delete", "danger" ], "danger": true },
+        { "match": "^s3\\s+ls\\b", "part": "файлы S3", "say": "Показывает файлы в хранилище S3", "fx": [ "network", "read" ] },
+        { "match": "^configure\\b", "part": "настройка", "say": "Сохраняет ключи доступа и регион на этой машине", "fx": [ "write" ] },
+        { "match": "^sts\\s+get-caller-identity\\b", "part": "кто я", "say": "Показывает, под каким аккаунтом работает команда", "fx": [ "network", "read" ] },
+        { "match": "^ecr\\s+get-login-password\\b", "part": "вход в реестр", "say": "Получает пароль для входа Docker в реестр образов ECR", "fx": [ "network" ] },
+        { "match": "(?:^|.*\\s)(?:deploy|update-function-code|update-service|create-deployment)\\b", "part": "выкладка", "say": "Выкладывает новую версию в AWS - её увидят пользователи", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "(?:^|.*\\s)(?:delete-\\S+|terminate-instances|remove-\\S+)\\b", "part": "удаление", "say": "Удаляет ресурс в AWS", "fx": [ "network", "delete", "danger" ], "danger": true },
+        { "match": "(?:^|.*\\s)(?:describe-\\S+|list-\\S+|get-\\S+)\\b", "part": "просмотр", "say": "Показывает ресурсы и настройки AWS", "fx": [ "network", "read" ] },
+        { "match": "(?:^|.*\\s)(?:create-\\S+|put-\\S+|update-\\S+|run-instances|start-\\S+|stop-\\S+)\\b", "part": "изменение", "say": "Создаёт или меняет ресурс в AWS - это может стоить денег", "fx": [ "network", "danger" ], "danger": true }
+      ],
+      "flags": [
+        { "flag": "--profile", "text": "С каким профилем ключей работать" },
+        { "flag": "--region", "text": "В каком регионе" },
+        { "flag": "--output", "text": "Формат вывода: json, table, text" },
+        { "flag": "--delete", "text": "В s3 sync - удалить в назначении то, чего нет в источнике" },
+        { "flag": "--dryrun", "text": "В s3 - показать, что было бы сделано" },
+        { "flag": "--query", "text": "Отобрать часть ответа выражением JMESPath" }
+      ],
+      "help": "help"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "_": "Как по зависимостям и файлам понять технологии проекта. Ключ - имя зависимости или файла, значение - метка на экране.",
+  "deps": {
+    "next": "Next.js", "react": "React", "vue": "Vue", "svelte": "Svelte", "@angular/core": "Angular", "astro": "Astro", "nuxt": "Nuxt",
+    "vite": "Vite", "typescript": "TypeScript", "@playwright/test": "Playwright", "playwright": "Playwright", "vitest": "Vitest", "jest": "Jest", "cypress": "Cypress",
+    "@tauri-apps/cli": "Tauri", "electron": "Electron", "three": "three.js", "express": "Express", "fastify": "Fastify", "@nestjs/core": "NestJS",
+    "prisma": "Prisma", "drizzle-orm": "Drizzle", "tailwindcss": "Tailwind", "eslint": "ESLint", "prettier": "Prettier", "@biomejs/biome": "Biome",
+    "xunit": "xUnit", "nunit": "NUnit", "mstest.testframework": "MSTest", "microsoft.entityframeworkcore": "EF Core", "testcontainers": "Testcontainers",
+    "masstransit": "MassTransit", "serilog": "Serilog",
+    "tokio": "Tokio", "tauri": "Tauri", "serde": "Serde", "axum": "Axum",
+    "django": "Django", "flask": "Flask", "fastapi": "FastAPI", "pytest": "pytest", "numpy": "NumPy", "pandas": "pandas"
+  },
+  "files": {
+    "package.json": "Node.js", "tsconfig.json": "TypeScript", "Dockerfile": "Docker", "docker-compose.yml": "Docker", "compose.yaml": "Docker", "compose.yml": "Docker",
+    "Cargo.toml": "Rust", "go.mod": "Go", "pyproject.toml": "Python", "requirements.txt": "Python", "pom.xml": "Maven", "build.gradle": "Gradle", "build.gradle.kts": "Gradle",
+    "composer.json": "PHP", "Makefile": "Make", "justfile": "just", "Taskfile.yml": "Taskfile", ".gitlab-ci.yml": "GitLab CI", "turbo.json": "Turborepo", "nx.json": "Nx",
+    ".sln": ".NET", ".slnx": ".NET", ".csproj": ".NET", ".fsproj": ".NET"
+  },
+  "packageManagers": {
+    "_": "Lock-файл в корне - каким менеджером пакетов запускать npm-скрипты. Первый найденный побеждает.",
+    "order": [["pnpm-lock.yaml", "pnpm"], ["pnpm-workspace.yaml", "pnpm"], ["yarn.lock", "yarn"], ["bun.lockb", "bun"], ["bun.lock", "bun"], ["package-lock.json", "npm"]],
+    "default": "npm"
+  }
+}

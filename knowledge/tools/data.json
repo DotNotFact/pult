@@ -1,0 +1,301 @@
+{
+  "tools": [
+    {
+      "id": "prisma",
+      "name": "Prisma",
+      "topic": "databases",
+      "bins": ["prisma"],
+      "about": "Работа с базой данных из TypeScript: схема базы в файле schema.prisma, миграции и готовый клиент для запросов.",
+      "how": [
+        "Читает schema.prisma: какие таблицы и поля должны быть в базе",
+        "Подключается к базе по адресу из настроек, обычно переменной DATABASE_URL",
+        "Миграции хранит файлами SQL в папке prisma/migrations, чтобы базу у всех можно было привести к одному виду",
+        "prisma generate создаёт по схеме клиент - код, через который программа ходит в базу"
+      ],
+      "default": { "say": "Выполняет команду Prisma", "fx": [] },
+      "sub": [
+        { "match": "^generate(?:\\s|$)", "part": "клиент", "say": "Создаёт клиент Prisma по схеме базы - код для запросов из программы", "fx": ["write"] },
+        {
+          "match": "^migrate\\s+dev(?:\\s|$)",
+          "part": "новая миграция",
+          "say": "Создаёт миграцию по изменениям схемы и применяет её к локальной базе",
+          "fx": ["db", "write"],
+          "how": [
+            "Сравнивает schema.prisma с уже записанными миграциями",
+            "Пишет новую миграцию - файл SQL в папку prisma/migrations",
+            "Применяет её к базе из DATABASE_URL",
+            "Если база разошлась с миграциями, предлагает стереть её и накатить заново"
+          ]
+        },
+        { "match": "^migrate\\s+deploy(?:\\s|$)", "part": "применение миграций", "say": "Применяет миграции к базе из DATABASE_URL - проверьте, что это не боевая", "fx": ["db", "danger"], "danger": true },
+        { "match": "^migrate\\s+reset(?:\\s|$)", "part": "сброс базы", "say": "СТИРАЕТ базу и накатывает все миграции заново", "fx": ["db", "delete", "danger"], "danger": true },
+        { "match": "^migrate\\s+status(?:\\s|$)", "part": "состояние миграций", "say": "Показывает, какие миграции уже применены к базе, а какие нет", "fx": ["read"] },
+        { "match": "^migrate\\s+resolve(?:\\s|$)", "part": "отметка миграции", "say": "Отмечает миграцию как применённую или откаченную, не трогая данные", "fx": ["db"] },
+        { "match": "^migrate\\s+diff(?:\\s|$)", "part": "разница схем", "say": "Печатает SQL-разницу между двумя схемами", "fx": ["read"] },
+        { "match": "^db\\s+push\\b.*\\s--force-reset(?:\\s|$)", "part": "сброс и схема", "say": "СТИРАЕТ базу и создаёт её заново по schema.prisma", "fx": ["db", "delete", "danger"], "danger": true },
+        { "match": "^db\\s+push(?:\\s|$)", "part": "схема без миграций", "say": "Подгоняет базу под schema.prisma без файлов миграций", "fx": ["db"] },
+        { "match": "^db\\s+pull(?:\\s|$)", "part": "схема из базы", "say": "Читает базу и переписывает schema.prisma под неё", "fx": ["write"] },
+        { "match": "^db\\s+seed(?:\\s|$)", "part": "начальные данные", "say": "Заполняет базу начальными данными скриптом seed", "fx": ["db"] },
+        { "match": "^db\\s+execute(?:\\s|$)", "part": "свой SQL", "say": "Выполняет SQL-файл на базе", "fx": ["db"] },
+        { "match": "^studio(?:\\s|$)", "part": "просмотр базы", "say": "Открывает Prisma Studio - просмотр и правку данных базы в браузере", "fx": ["db"], "long": true, "url": true },
+        { "match": "^init(?:\\s|$)", "part": "подключение", "say": "Создаёт папку prisma со схемой и файл .env с адресом базы", "fx": ["write"] },
+        { "match": "^format(?:\\s|$)", "part": "оформление схемы", "say": "Выравнивает оформление schema.prisma", "fx": ["write"] },
+        { "match": "^validate(?:\\s|$)", "part": "проверка схемы", "say": "Проверяет, что в schema.prisma нет ошибок", "fx": ["read"] },
+        { "match": "^(?:version|-v|--version)(?:\\s|$)", "part": "версия", "say": "Показывает версии Prisma и её движков", "fx": ["read"] }
+      ],
+      "flags": [
+        { "flag": "--schema", "text": "Где лежит schema.prisma, если не в папке prisma" },
+        { "flag": "--name", "alias": ["-n"], "text": "Название новой миграции" },
+        { "flag": "--create-only", "text": "У migrate dev: только создать файл миграции, не применяя его", "say": "но только создаёт файл, не применяя его", "fxRemove": ["db"] },
+        { "flag": "--skip-generate", "text": "Не обновлять клиент после миграции (в Prisma 7 ключ убран)" },
+        { "flag": "--skip-seed", "text": "Не заполнять базу начальными данными после сброса" },
+        { "flag": "--force", "alias": ["-f"], "text": "У migrate reset: не спрашивать подтверждения" },
+        { "flag": "--accept-data-loss", "text": "У db push: применить, даже если часть данных пропадёт", "say": "даже ценой потери данных", "fx": ["delete", "danger"], "danger": true },
+        { "flag": "--force-reset", "text": "У db push: стереть базу и создать заново" },
+        { "flag": "--port", "alias": ["-p"], "text": "У studio: на каком порту открыть (по умолчанию 5555)" },
+        { "flag": "--browser", "text": "У studio: в каком браузере открыть; none - не открывать" },
+        { "flag": "--watch", "text": "У generate: пересоздавать клиент при правке схемы", "say": "и повторяет при каждой правке схемы", "long": true },
+        { "flag": "--check", "text": "У format: только проверить оформление, ничего не меняя", "say": "и только проверяет, ничего не меняя", "fx": ["read"], "fxRemove": ["write"] }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "drizzle-kit",
+      "name": "Drizzle Kit",
+      "topic": "databases",
+      "bins": ["drizzle-kit"],
+      "about": "Командная строка Drizzle ORM: делает миграции по схеме, описанной в коде TypeScript, и применяет их к базе.",
+      "how": [
+        "Читает drizzle.config: где схема, где миграции и как подключиться к базе",
+        "generate сравнивает схему в коде с прошлым снимком и пишет файл SQL",
+        "migrate применяет к базе ещё не применённые файлы",
+        "push сразу подгоняет базу под код, без файлов миграций"
+      ],
+      "default": { "say": "Выполняет команду Drizzle Kit", "fx": [] },
+      "sub": [
+        { "match": "^generate(?:\\s|$)", "part": "новая миграция", "say": "Создаёт файл SQL-миграции по изменениям схемы в коде", "fx": ["write"] },
+        { "match": "^migrate(?:\\s|$)", "part": "применение миграций", "say": "Применяет миграции к базе из настроек", "fx": ["db"] },
+        { "match": "^push(?:\\s|$)", "part": "схема без миграций", "say": "Подгоняет базу под схему в коде без файлов миграций", "fx": ["db"] },
+        { "match": "^(?:pull|introspect)(?:\\s|$)", "part": "схема из базы", "say": "Читает базу и пишет по ней схему на TypeScript", "fx": ["write"] },
+        { "match": "^studio(?:\\s|$)", "part": "просмотр базы", "say": "Открывает Drizzle Studio - просмотр и правку данных базы в браузере", "fx": ["db"], "long": true, "url": true },
+        { "match": "^check(?:\\s|$)", "part": "проверка миграций", "say": "Проверяет, что файлы миграций не противоречат друг другу", "fx": ["read"] },
+        { "match": "^up(?:\\s|$)", "part": "обновление снимков", "say": "Переписывает снимки схемы под новую версию Drizzle Kit", "fx": ["write"] },
+        { "match": "^export(?:\\s|$)", "part": "SQL схемы", "say": "Печатает SQL, который создал бы базу по схеме", "fx": ["read"] }
+      ],
+      "flags": [
+        { "flag": "--config", "text": "Какой файл настроек использовать вместо drizzle.config" },
+        { "flag": "--dialect", "text": "Какая база: postgresql, mysql, sqlite" },
+        { "flag": "--schema", "text": "Где лежит схема" },
+        { "flag": "--out", "text": "Куда класть файлы миграций" },
+        { "flag": "--name", "text": "У generate: название миграции" },
+        { "flag": "--custom", "text": "У generate: создать пустую миграцию для своего SQL" },
+        { "flag": "--strict", "text": "У push: спрашивать подтверждение перед каждым изменением" },
+        { "flag": "--verbose", "text": "У push: печатать SQL, который будет выполнен" },
+        { "flag": "--force", "text": "У push: соглашаться даже на изменения, которые удалят данные", "say": "соглашаясь даже на потерю данных", "fx": ["delete", "danger"], "danger": true },
+        { "flag": "--port", "text": "У studio: на каком порту открыть" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "knex",
+      "name": "Knex",
+      "topic": "databases",
+      "bins": ["knex"],
+      "about": "Построитель SQL-запросов для Node.js. Его командная строка создаёт и применяет миграции и наполняет базу.",
+      "default": { "say": "Выполняет команду Knex", "fx": [] },
+      "sub": [
+        { "match": "^migrate:latest(?:\\s|$)", "part": "применение миграций", "say": "Применяет к базе все ещё не применённые миграции", "fx": ["db"] },
+        { "match": "^migrate:rollback\\b.*\\s--all(?:\\s|$)", "part": "откат всех", "say": "Откатывает ВСЕ миграции: таблицы и данные пропадут", "fx": ["db", "delete", "danger"], "danger": true },
+        { "match": "^migrate:rollback(?:\\s|$)", "part": "откат", "say": "Откатывает последнюю пачку миграций", "fx": ["db", "delete"] },
+        { "match": "^migrate:(?:up|down)(?:\\s|$)", "part": "одна миграция", "say": "Применяет или откатывает одну миграцию", "fx": ["db"] },
+        { "match": "^migrate:make(?:\\s|$)", "part": "новая миграция", "say": "Создаёт пустой файл миграции", "fx": ["write"] },
+        { "match": "^migrate:(?:status|list|currentVersion)(?:\\s|$)", "part": "состояние", "say": "Показывает, какие миграции применены", "fx": ["read"] },
+        { "match": "^migrate:unlock(?:\\s|$)", "part": "снять блокировку", "say": "Снимает блокировку миграций, оставшуюся после сбоя", "fx": ["db"] },
+        { "match": "^seed:make(?:\\s|$)", "part": "новый сид", "say": "Создаёт файл с начальными данными", "fx": ["write"] },
+        { "match": "^seed:run(?:\\s|$)", "part": "начальные данные", "say": "Заполняет базу начальными данными", "fx": ["db"] },
+        { "match": "^init(?:\\s|$)", "part": "настройка", "say": "Создаёт файл настроек knexfile", "fx": ["write"] }
+      ],
+      "flags": [
+        { "flag": "--env", "text": "Какой раздел knexfile взять: development, production" },
+        { "flag": "--knexfile", "text": "Где лежит файл настроек" },
+        { "flag": "--migrations-directory", "text": "Где лежат миграции" },
+        { "flag": "--all", "text": "У rollback: откатить все миграции" },
+        { "flag": "-x", "text": "Расширение новых файлов: js или ts" },
+        { "flag": "--esm", "text": "Загружать настройки как ES-модуль" },
+        { "flag": "--debug", "text": "Печатать выполняемые запросы" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "sequelize",
+      "name": "Sequelize CLI",
+      "topic": "databases",
+      "bins": ["sequelize", "sequelize-cli"],
+      "about": "Командная строка Sequelize ORM: миграции, начальные данные и заготовки моделей.",
+      "default": { "say": "Выполняет команду Sequelize", "fx": [] },
+      "sub": [
+        { "match": "^db:migrate:undo:all(?:\\s|$)", "part": "откат всех", "say": "Откатывает ВСЕ миграции: таблицы и данные пропадут", "fx": ["db", "delete", "danger"], "danger": true },
+        { "match": "^db:migrate:undo(?:\\s|$)", "part": "откат", "say": "Откатывает последнюю миграцию", "fx": ["db", "delete"] },
+        { "match": "^db:migrate:status(?:\\s|$)", "part": "состояние", "say": "Показывает, какие миграции применены", "fx": ["read"] },
+        { "match": "^db:migrate(?:\\s|$)", "part": "применение миграций", "say": "Применяет к базе все ещё не применённые миграции", "fx": ["db"] },
+        { "match": "^db:seed:undo(?::all)?(?:\\s|$)", "part": "откат данных", "say": "Удаляет из базы начальные данные", "fx": ["db", "delete"] },
+        { "match": "^db:seed(?::all)?(?:\\s|$)", "part": "начальные данные", "say": "Заполняет базу начальными данными", "fx": ["db"] },
+        { "match": "^db:create(?:\\s|$)", "part": "новая база", "say": "Создаёт базу данных из настроек", "fx": ["db"] },
+        { "match": "^db:drop(?:\\s|$)", "part": "удаление базы", "say": "УДАЛЯЕТ базу данных целиком", "fx": ["db", "delete", "danger"], "danger": true },
+        { "match": "^(?:migration:generate|migration:create)(?:\\s|$)", "part": "новая миграция", "say": "Создаёт пустой файл миграции", "fx": ["write"] },
+        { "match": "^(?:model:generate|model:create)(?:\\s|$)", "part": "новая модель", "say": "Создаёт файл модели и миграцию для её таблицы", "fx": ["write"] },
+        { "match": "^(?:seed:generate|seed:create)(?:\\s|$)", "part": "новый сид", "say": "Создаёт файл с начальными данными", "fx": ["write"] },
+        { "match": "^init(?:\\s|$)", "part": "настройка", "say": "Создаёт папки config, models, migrations и seeders", "fx": ["write"] }
+      ],
+      "flags": [
+        { "flag": "--env", "text": "Какой раздел настроек взять: development, test, production" },
+        { "flag": "--config", "text": "Где лежит файл настроек" },
+        { "flag": "--url", "text": "Адрес базы прямо в команде вместо настроек" },
+        { "flag": "--migrations-path", "text": "Где лежат миграции" },
+        { "flag": "--seeders-path", "text": "Где лежат начальные данные" },
+        { "flag": "--name", "text": "Имя новой миграции, модели или сида" },
+        { "flag": "--to", "text": "До какой миграции применять или откатывать" },
+        { "flag": "--debug", "text": "Печатать подробности" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "typeorm",
+      "name": "TypeORM",
+      "topic": "databases",
+      "bins": ["typeorm", "typeorm-ts-node-commonjs", "typeorm-ts-node-esm"],
+      "about": "Командная строка TypeORM: создаёт и применяет миграции по классам-сущностям в коде.",
+      "default": { "say": "Выполняет команду TypeORM", "fx": [] },
+      "sub": [
+        { "match": "^migration:run(?:\\s|$)", "part": "применение миграций", "say": "Применяет к базе все ещё не применённые миграции", "fx": ["db"] },
+        { "match": "^migration:revert(?:\\s|$)", "part": "откат", "say": "Откатывает последнюю миграцию", "fx": ["db", "delete"] },
+        { "match": "^migration:generate(?:\\s|$)", "part": "новая миграция", "say": "Сравнивает сущности в коде с базой и пишет миграцию с разницей", "fx": ["write"] },
+        { "match": "^migration:create(?:\\s|$)", "part": "пустая миграция", "say": "Создаёт пустой файл миграции", "fx": ["write"] },
+        { "match": "^migration:show(?:\\s|$)", "part": "состояние", "say": "Показывает, какие миграции применены", "fx": ["read"] },
+        { "match": "^schema:sync(?:\\s|$)", "part": "схема без миграций", "say": "Подгоняет базу под сущности в коде без миграций - может удалить столбцы с данными", "fx": ["db", "danger"], "danger": true },
+        { "match": "^schema:drop(?:\\s|$)", "part": "удаление схемы", "say": "УДАЛЯЕТ все таблицы базы вместе с данными", "fx": ["db", "delete", "danger"], "danger": true },
+        { "match": "^schema:log(?:\\s|$)", "part": "что поменяется", "say": "Печатает SQL, который выполнил бы schema:sync", "fx": ["read"] },
+        { "match": "^query(?:\\s|$)", "part": "свой SQL", "say": "Выполняет SQL-запрос на базе", "fx": ["db"] },
+        { "match": "^(?:entity|subscriber):create(?:\\s|$)", "part": "заготовка", "say": "Создаёт заготовку файла сущности или подписчика", "fx": ["write"] },
+        { "match": "^init(?:\\s|$)", "part": "новый проект", "say": "Создаёт заготовку проекта на TypeORM", "fx": ["write", "install", "network"] },
+        { "match": "^cache:clear(?:\\s|$)", "part": "очистка кэша", "say": "Очищает кэш запросов TypeORM", "fx": ["db"] }
+      ],
+      "flags": [
+        { "flag": "--dataSource", "alias": ["-d"], "text": "Файл с настройками подключения к базе (DataSource)" },
+        { "flag": "--transaction", "alias": ["-t"], "text": "Как оборачивать миграции в транзакции: all, each или none" },
+        { "flag": "--fake", "alias": ["-f"], "text": "Отметить миграции применёнными, не выполняя их" },
+        { "flag": "--dryrun", "alias": ["--dr"], "text": "У migration:generate: напечатать миграцию, не записывая файл" },
+        { "flag": "--check", "alias": ["--ch"], "text": "У migration:generate: падать, если база расходится с сущностями" },
+        { "flag": "--pretty", "alias": ["-p"], "text": "Оформлять SQL в миграциях читаемо" },
+        { "flag": "--outputJs", "alias": ["-o"], "text": "Писать миграцию на JavaScript, а не TypeScript" },
+        { "flag": "--timestamp", "text": "Своё время в имени миграции" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "graphql-codegen",
+      "name": "GraphQL Code Generator",
+      "topic": "typescript",
+      "bins": ["graphql-codegen", "gql-gen", "graphql-code-generator"],
+      "about": "Создаёт типы TypeScript и готовый код запросов по схеме GraphQL.",
+      "how": [
+        "Читает codegen.ts: где схема GraphQL и куда класть результат",
+        "Загружает схему из файла или с сервера",
+        "Собирает запросы из вашего кода",
+        "Пишет файлы с типами и функциями для этих запросов"
+      ],
+      "default": { "say": "Создаёт типы и код по схеме GraphQL", "fx": ["write"] },
+      "sub": [
+        { "match": "^init(?:\\s|$)", "part": "настройка", "say": "Задаёт вопросы и создаёт файл настроек codegen", "fx": ["write", "install", "network"] }
+      ],
+      "flags": [
+        { "flag": "--config", "alias": ["-c"], "text": "Какой файл настроек использовать" },
+        { "flag": "--watch", "alias": ["-w"], "text": "Пересоздавать код при каждой правке схемы или запросов", "say": "и повторяет при каждой правке", "long": true },
+        { "flag": "--check", "text": "Только проверить, что созданные файлы свежие, ничего не записывая", "say": "и только проверяет, что файлы свежие", "fx": ["read"], "fxRemove": ["write"] },
+        { "flag": "--require", "alias": ["-r"], "text": "Загрузить модуль до запуска, например dotenv/config" },
+        { "flag": "--overwrite", "alias": ["-o"], "text": "Перезаписывать существующие файлы" },
+        { "flag": "--project", "alias": ["-p"], "text": "Какой проект из настроек взять" },
+        { "flag": "--silent", "alias": ["-s"], "text": "Ничего не печатать" },
+        { "flag": "--errors-only", "alias": ["-e"], "text": "Печатать только ошибки" },
+        { "flag": "--verbose", "alias": ["-v"], "text": "Печатать подробности" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "openapi-typescript",
+      "name": "openapi-typescript",
+      "topic": "typescript",
+      "bins": ["openapi-typescript"],
+      "about": "Превращает описание API в формате OpenAPI (Swagger) в типы TypeScript.",
+      "default": { "say": "Создаёт типы TypeScript по описанию API в формате OpenAPI", "fx": ["write"] },
+      "flags": [
+        { "flag": "--output", "alias": ["-o"], "text": "В какой файл записать типы (без ключа - печатает в терминал)" },
+        { "flag": "--check", "text": "Только проверить, что файл с типами свежий", "say": "и только проверяет, что файл свежий", "fx": ["read"], "fxRemove": ["write"] },
+        { "flag": "--enum", "text": "Делать перечисления enum вместо объединения строк" },
+        { "flag": "--export-type", "alias": ["-t"], "text": "Писать type вместо interface" },
+        { "flag": "--immutable", "text": "Делать все поля только для чтения" },
+        { "flag": "--alphabetize", "text": "Сортировать поля по алфавиту" },
+        { "flag": "--path-params-as-types", "text": "Разрешить подставлять настоящие адреса вместо шаблонов путей" },
+        { "flag": "--default-non-nullable", "text": "Считать поля со значением по умолчанию обязательными" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "orval",
+      "name": "Orval",
+      "topic": "typescript",
+      "bins": ["orval"],
+      "about": "Создаёт по описанию API в формате OpenAPI типы и готовые функции запросов: для fetch, axios, React Query и других.",
+      "default": { "say": "Создаёт типы и функции запросов по описанию API", "fx": ["write"] },
+      "flags": [
+        { "flag": "--config", "alias": ["-c"], "text": "Какой файл настроек использовать вместо orval.config" },
+        { "flag": "--project", "alias": ["-p"], "text": "Какой проект из настроек взять" },
+        { "flag": "--watch", "alias": ["-w"], "text": "Пересоздавать код при каждой правке описания API", "say": "и повторяет при каждой правке", "long": true },
+        { "flag": "--input", "alias": ["-i"], "text": "Файл или адрес описания API" },
+        { "flag": "--output", "alias": ["-o"], "text": "Куда записать результат" },
+        { "flag": "--clean", "text": "Перед созданием очистить папку результата", "say": "и сначала очищает папку результата", "fx": ["delete"] },
+        { "flag": "--prettier", "text": "Оформить результат через Prettier" },
+        { "flag": "--biome", "text": "Оформить результат через Biome" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "openapi-generator",
+      "name": "OpenAPI Generator",
+      "topic": "typescript",
+      "bins": ["openapi-generator-cli", "openapi-generator"],
+      "about": "Создаёт клиентский или серверный код на многих языках по описанию API в формате OpenAPI. Внутри работает на Java.",
+      "default": { "say": "Выполняет команду OpenAPI Generator", "fx": [] },
+      "sub": [
+        { "match": "^generate(?:\\s|$)", "part": "создание кода", "say": "Создаёт код клиента или сервера по описанию API", "fx": ["write"] },
+        { "match": "^validate(?:\\s|$)", "part": "проверка", "say": "Проверяет, что описание API без ошибок", "fx": ["read"] },
+        { "match": "^list(?:\\s|$)", "part": "список генераторов", "say": "Печатает, для каких языков и библиотек умеет создавать код", "fx": ["read"] },
+        { "match": "^version-manager(?:\\s|$)", "part": "версии", "say": "Выбирает и скачивает версию генератора", "fx": ["install", "network"] }
+      ],
+      "flags": [
+        { "flag": "--input-spec", "alias": ["-i"], "text": "Файл или адрес описания API" },
+        { "flag": "--generator-name", "alias": ["-g"], "text": "Что создавать, например typescript-fetch или csharp" },
+        { "flag": "--output", "alias": ["-o"], "text": "Куда записать результат" },
+        { "flag": "--config", "alias": ["-c"], "text": "Файл с настройками генератора" },
+        { "flag": "--skip-validate-spec", "text": "Не проверять описание API перед созданием кода" }
+      ],
+      "help": "help"
+    },
+    {
+      "id": "swagger-typescript-api",
+      "name": "swagger-typescript-api",
+      "topic": "typescript",
+      "bins": ["swagger-typescript-api"],
+      "about": "Создаёт типы и клиент на TypeScript по описанию API в формате OpenAPI или Swagger.",
+      "default": { "say": "Создаёт типы и клиент TypeScript по описанию API", "fx": ["write"] },
+      "flags": [
+        { "flag": "--path", "alias": ["-p"], "text": "Файл или адрес описания API" },
+        { "flag": "--output", "alias": ["-o"], "text": "В какую папку записать результат" },
+        { "flag": "--name", "alias": ["-n"], "text": "Имя файла с результатом" },
+        { "flag": "--axios", "text": "Делать клиент на axios, а не на fetch" },
+        { "flag": "--modular", "text": "Разложить клиент по нескольким файлам" }
+      ],
+      "help": "--help"
+    }
+  ]
+}

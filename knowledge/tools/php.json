@@ -1,0 +1,111 @@
+{
+  "tools": [
+    {
+      "id": "composer",
+      "name": "Composer",
+      "topic": "package-managers",
+      "bins": [ "composer", "composer.phar" ],
+      "about": "Менеджер пакетов PHP: ставит зависимости по composer.json в папку vendor.",
+      "how": [ "Читает composer.json - список зависимостей проекта", "Если есть composer.lock - берёт точные версии из него, иначе подбирает подходящие", "Скачивает пакеты с Packagist в папку vendor", "Создаёт vendor/autoload.php, через который код находит классы" ],
+      "default": { "say": "Управляет PHP-зависимостями", "fx": [] },
+      "sub": [
+        { "match": "^(?:install|i)\\b", "part": "установка", "say": "Устанавливает зависимости из composer.lock в папку vendor", "fx": [ "install", "network" ] },
+        { "match": "^(?:update|u|upgrade)\\b", "part": "обновление", "say": "Обновляет зависимости до новых разрешённых версий и переписывает composer.lock", "fx": [ "install", "write", "network" ] },
+        { "match": "^(?:require|r)\\b", "part": "новая зависимость", "say": "Добавляет пакет в composer.json и ставит его", "fx": [ "install", "write", "network" ] },
+        { "match": "^(?:remove|rm)\\b", "part": "убрать зависимость", "say": "Убирает пакет из composer.json и папки vendor", "fx": [ "install", "write" ] },
+        { "match": "^dump-autoload\\b", "part": "автозагрузка", "say": "Пересоздаёт vendor/autoload.php, чтобы код увидел новые классы", "fx": [ "write" ] },
+        { "match": "^(?:run-script|run)\\b", "part": "скрипт", "say": "Выполняет скрипт из раздела scripts в composer.json", "fx": [] },
+        { "match": "^create-project\\b", "part": "новый проект", "say": "Скачивает заготовку проекта в новую папку и ставит её зависимости", "fx": [ "install", "write", "network" ] },
+        { "match": "^(?:outdated|show|validate|why|depends|licenses)\\b", "part": "просмотр", "say": "Показывает пакеты, устаревшие версии или проверяет composer.json", "fx": [ "read" ] },
+        { "match": "^audit\\b", "part": "уязвимости", "say": "Проверяет зависимости на известные уязвимости", "fx": [ "read", "network" ] }
+      ],
+      "flags": [
+        { "flag": "--no-dev", "text": "Не ставить зависимости разработки - так ставят на сервер" },
+        { "flag": "--optimize-autoloader", "alias": [ "-o" ], "text": "Собрать быструю автозагрузку классов для боевой работы" },
+        { "flag": "--no-interaction", "alias": [ "-n" ], "text": "Не задавать вопросов" },
+        { "flag": "--prefer-dist", "text": "Скачивать готовые архивы, а не клонировать репозитории" },
+        { "flag": "--dev", "text": "В require - добавить пакет в зависимости разработки" },
+        { "flag": "--no-scripts", "text": "Не выполнять скрипты из composer.json" },
+        { "flag": "--ignore-platform-reqs", "text": "Не проверять версию PHP и расширения" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "php",
+      "name": "PHP",
+      "topic": "terminal",
+      "bins": [ "php" ],
+      "runsFile": true,
+      "about": "Интерпретатор PHP: выполняет PHP-файлы и консольные команды фреймворков вроде Laravel и Symfony.",
+      "default": { "say": "Запускает программу на PHP", "fx": [] },
+      "sub": [
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+serve\\b", "part": "сервер Laravel", "say": "Запускает сервер разработки Laravel", "fx": [], "long": true, "url": true },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+migrate:(?:fresh|reset)\\b", "part": "пересоздание базы", "say": "Удаляет все таблицы и накатывает миграции заново - данные пропадут", "fx": [ "db", "delete", "danger" ], "danger": true },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+migrate:rollback\\b", "part": "откат миграций", "say": "Откатывает последние миграции Laravel", "fx": [ "db", "danger" ], "danger": true },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+migrate(?::status)?\\b(?=.*\\s(?:--pretend)(?:[\\s=:]|$))", "part": "SQL миграций", "say": "Показывает SQL миграций, не трогая базу", "fx": [ "read" ] },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+migrate:status\\b", "part": "миграции", "say": "Показывает, какие миграции применены", "fx": [ "read" ] },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+migrate\\b", "part": "миграции", "say": "Применяет миграции Laravel к базе данных", "fx": [ "db" ] },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+db:seed\\b", "part": "начальные данные", "say": "Заполняет базу начальными данными", "fx": [ "db" ] },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+test\\b", "part": "тесты", "say": "Запускает тесты Laravel", "fx": [ "read" ] },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+tinker\\b", "part": "консоль", "say": "Открывает консоль PHP с загруженным приложением Laravel", "fx": [], "long": true },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+make:\\S+", "part": "заготовка", "say": "Создаёт заготовку класса: модели, контроллера, миграции", "fx": [ "write" ] },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+queue:work\\b", "part": "очередь", "say": "Запускает обработчик очереди задач", "fx": [], "long": true },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+(?:\\w+:clear|optimize:clear)\\b", "part": "очистка кэша", "say": "Очищает кэш Laravel", "fx": [ "delete" ] },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+(?:key:generate|optimize|config:cache|route:cache)\\b", "part": "настройка", "say": "Создаёт ключ приложения или кэш настроек", "fx": [ "write" ] },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+route:list\\b", "part": "адреса", "say": "Показывает все адреса приложения", "fx": [ "read" ] },
+        { "match": "^(?:\\S*[\\\\/])?artisan\\s+", "part": "команда Laravel", "say": "Выполняет команду Laravel через artisan", "fx": [] },
+        { "match": "^(?:\\S*[\\\\/])?bin/console\\s+doctrine:migrations:migrate\\b", "part": "миграции", "say": "Применяет миграции Doctrine к базе данных", "fx": [ "db" ] },
+        { "match": "^(?:\\S*[\\\\/])?bin/console\\s+cache:clear\\b", "part": "очистка кэша", "say": "Очищает кэш Symfony", "fx": [ "delete" ] },
+        { "match": "^(?:\\S*[\\\\/])?bin/console\\s+make:\\S+", "part": "заготовка", "say": "Создаёт заготовку класса Symfony", "fx": [ "write" ] },
+        { "match": "^(?:\\S*[\\\\/])?bin/console\\s+", "part": "команда Symfony", "say": "Выполняет команду Symfony через bin/console", "fx": [] },
+        { "match": "^-S\\s", "part": "встроенный сервер", "say": "Запускает встроенный сервер PHP для папки", "fx": [], "long": true, "url": true },
+        { "match": "^-l\\b", "part": "проверка синтаксиса", "say": "Проверяет синтаксис PHP-файла, не выполняя его", "fx": [ "read" ] },
+        { "match": "^-r\\s", "part": "код из команды", "say": "Выполняет короткий код PHP прямо из команды", "fx": [] },
+        { "match": "^(?:-v|--version|-m|-i)\\b", "part": "сведения", "say": "Показывает версию PHP или установленные расширения", "fx": [ "read" ] }
+      ],
+      "flags": [
+        { "flag": "-S", "text": "Запустить встроенный сервер на адресе: -S localhost:8000" },
+        { "flag": "-t", "text": "Корневая папка для встроенного сервера" },
+        { "flag": "-l", "text": "Проверить синтаксис, не выполняя" },
+        { "flag": "-r", "text": "Выполнить код, написанный прямо в команде" },
+        { "flag": "-d", "text": "Поменять настройку php.ini на один запуск: -d memory_limit=1G" },
+        { "flag": "--force", "text": "В artisan - выполнить без вопроса даже на боевом окружении" },
+        { "flag": "--seed", "text": "В migrate - заодно заполнить базу начальными данными", "fx": [ "db" ] }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "phpunit",
+      "name": "PHPUnit",
+      "topic": "testing",
+      "bins": [ "phpunit", "vendor/bin/phpunit", "./vendor/bin/phpunit", "vendor\\bin\\phpunit" ],
+      "about": "Программа, которая запускает тесты на PHP.",
+      "how": [ "Читает phpunit.xml: где лежат тесты и как их запускать", "Находит классы тестов и в них методы, имя которых начинается с test", "Запускает каждый метод и сравнивает результат с ожидаемым", "Печатает точку на каждый прошедший тест и F на упавший, в конце - итог" ],
+      "default": { "say": "Запускает тесты PHP", "fx": [ "read" ] },
+      "flags": [
+        { "flag": "--filter", "text": "Запустить только тесты с подходящим именем" },
+        { "flag": "--testsuite", "text": "Запустить только набор тестов из phpunit.xml" },
+        { "flag": "--configuration", "alias": [ "-c" ], "text": "Путь к другому phpunit.xml" },
+        { "flag": "--coverage-html", "text": "Сохранить отчёт о покрытии кода в папку", "say": "и сохраняет отчёт о покрытии", "fx": [ "write" ] },
+        { "flag": "--stop-on-failure", "text": "Остановиться на первом упавшем тесте" },
+        { "flag": "--testdox", "text": "Печатать тесты понятными фразами" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "pest",
+      "name": "Pest",
+      "topic": "testing",
+      "bins": [ "pest", "vendor/bin/pest", "./vendor/bin/pest", "vendor\\bin\\pest" ],
+      "about": "Программа для тестов на PHP с коротким синтаксисом, работает поверх PHPUnit.",
+      "default": { "say": "Запускает тесты PHP", "fx": [ "read" ] },
+      "flags": [
+        { "flag": "--parallel", "alias": [ "-p" ], "text": "Запустить тесты в нескольких процессах" },
+        { "flag": "--coverage", "text": "Посчитать покрытие кода", "say": "и считает покрытие кода" },
+        { "flag": "--filter", "text": "Запустить только тесты с подходящим именем" },
+        { "flag": "--bail", "text": "Остановиться на первом упавшем тесте" }
+      ],
+      "help": "--help"
+    }
+  ]
+}

@@ -1,0 +1,463 @@
+{
+  "tools": [
+    {
+      "id": "tsc",
+      "name": "TypeScript",
+      "topic": "typescript",
+      "bins": ["tsc"],
+      "about": "Компилятор TypeScript: проверяет типы и переводит TypeScript в JavaScript. Если в tsconfig.json стоит noEmit, только проверяет.",
+      "how": [
+        "Читает tsconfig.json: какие файлы проверять и по каким правилам",
+        "Проверяет типы во всех этих файлах и печатает ошибки с номером строки",
+        "Если запись не запрещена (noEmit), кладёт файлы .js рядом с исходниками или в папку outDir",
+        "Завершается с ошибкой, если нашёл хоть одну ошибку типов"
+      ],
+      "default": { "say": "Проверяет типы и переводит TypeScript в JavaScript", "fx": ["write"] },
+      "sub": [
+        { "match": "^(?:-v|--version)\\s*$", "part": "версия", "say": "Показывает версию TypeScript", "fx": ["read"] },
+        { "match": "(?:^|\\s)--init(?:\\s|$)", "part": "новые настройки", "say": "Создаёт файл настроек tsconfig.json", "fx": ["write"] },
+        { "match": "(?:^|\\s)--showConfig(?:\\s|$)", "part": "итоговые настройки", "say": "Печатает итоговые настройки TypeScript, ничего не проверяя", "fx": ["read"] },
+        { "match": "^(?=.*(?:^|\\s)(?:-b|--build)(?:\\s|$))(?=.*(?:^|\\s)--clean(?:\\s|$))", "part": "очистка сборки", "say": "Удаляет файлы, которые раньше собрал tsc -b", "fx": ["delete"] },
+        { "match": "(?:^|\\s)--noEmit(?:\\s|$)", "part": "только проверка", "say": "Проверяет типы TypeScript, файлы не пишет", "fx": ["read"] },
+        { "match": "(?:^|\\s)(?:-b|--build)(?:\\s|$)", "part": "сборка проектов", "say": "Собирает проект TypeScript вместе со связанными проектами (references), пропуская то, что не менялось", "fx": ["write"] }
+      ],
+      "flags": [
+        { "flag": "--project", "alias": ["-p"], "text": "Какой tsconfig.json использовать" },
+        { "flag": "--watch", "alias": ["-w"], "text": "Повторять проверку при каждой правке", "say": "и повторяет при каждой правке", "long": true },
+        { "flag": "--noEmit", "text": "Только проверить типы, файлы .js не писать" },
+        { "flag": "--build", "alias": ["-b"], "text": "Собрать проект вместе со связанными проектами из references" },
+        { "flag": "--declaration", "alias": ["-d"], "text": "Ещё писать файлы .d.ts с типами" },
+        { "flag": "--emitDeclarationOnly", "text": "Писать только файлы .d.ts, без .js" },
+        { "flag": "--outDir", "text": "В какую папку класть результат" },
+        { "flag": "--incremental", "alias": ["-i"], "text": "Запоминать результат прошлой проверки, чтобы следующая шла быстрее" },
+        { "flag": "--strict", "text": "Включить все строгие проверки типов" },
+        { "flag": "--skipLibCheck", "text": "Не проверять типы внутри пакетов из node_modules: быстрее" },
+        { "flag": "--force", "alias": ["-f"], "text": "У --build: пересобрать всё, даже то, что не менялось" },
+        { "flag": "--pretty", "text": "Печатать ошибки с цветом и куском кода" },
+        { "flag": "--extendedDiagnostics", "text": "Напечатать, сколько времени и памяти ушло на каждый этап" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "vue-tsc",
+      "name": "vue-tsc",
+      "topic": "typescript",
+      "bins": ["vue-tsc"],
+      "about": "Тот же tsc, но понимает файлы .vue: проверяет типы в компонентах Vue.",
+      "default": { "say": "Проверяет типы TypeScript в компонентах Vue", "fx": ["read"] },
+      "flags": [
+        { "flag": "--noEmit", "text": "Только проверить типы, ничего не писать" },
+        { "flag": "--build", "alias": ["-b"], "text": "Проверить проект вместе со связанными проектами из references" },
+        { "flag": "--project", "alias": ["-p"], "text": "Какой tsconfig.json использовать" },
+        { "flag": "--watch", "alias": ["-w"], "text": "Повторять проверку при каждой правке", "say": "и повторяет при каждой правке", "long": true },
+        { "flag": "--declaration", "text": "Писать файлы .d.ts с типами", "say": "и пишет файлы .d.ts с типами", "fx": ["write"], "fxRemove": ["read"] },
+        { "flag": "--emitDeclarationOnly", "text": "Писать только файлы .d.ts" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "svelte-check",
+      "name": "svelte-check",
+      "topic": "typescript",
+      "bins": ["svelte-check"],
+      "about": "Проверяет компоненты Svelte: типы, ошибки и предупреждения доступности.",
+      "default": { "say": "Проверяет типы и ошибки в компонентах Svelte", "fx": ["read"] },
+      "flags": [
+        { "flag": "--watch", "text": "Повторять проверку при каждой правке", "say": "и повторяет при каждой правке", "long": true },
+        { "flag": "--tsconfig", "text": "Какой tsconfig.json использовать" },
+        { "flag": "--workspace", "text": "Какую папку проверять" },
+        { "flag": "--threshold", "text": "Что показывать: error - только ошибки, warning - и предупреждения" },
+        { "flag": "--fail-on-warnings", "text": "Падать и на предупреждениях" },
+        { "flag": "--output", "text": "Формат вывода: human, human-verbose, machine" },
+        { "flag": "--ignore", "text": "Какие папки не проверять" },
+        { "flag": "--compiler-warnings", "text": "Включить или выключить отдельные предупреждения компилятора" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "eslint",
+      "name": "ESLint",
+      "topic": "code-quality",
+      "bins": ["eslint"],
+      "about": "Линтер для JavaScript и TypeScript: ищет ошибки и подозрительные места в коде по набору правил.",
+      "how": [
+        "Читает настройки из eslint.config.js (или старого .eslintrc)",
+        "Разбирает каждый файл в дерево кода",
+        "Прогоняет по дереву правила: неиспользуемые переменные, опасные конструкции, стиль",
+        "Печатает находки с номером строки и падает, если есть ошибки",
+        "С ключом --fix сам переписывает то, что правило умеет чинить"
+      ],
+      "default": { "say": "Проверяет код линтером ESLint", "fx": ["read"] },
+      "sub": [
+        { "match": "(?:^|\\s)--init(?:\\s|$)", "part": "настройка", "say": "Создаёт файл настроек ESLint, задавая вопросы", "fx": ["install", "write", "network"] },
+        { "match": "(?:^|\\s)--print-config(?:\\s|$)", "part": "итоговые настройки", "say": "Печатает итоговые настройки ESLint для файла", "fx": ["read"] },
+        { "match": "(?:^|\\s)--inspect-config(?:\\s|$)", "part": "просмотр настроек", "say": "Открывает в браузере просмотр настроек ESLint", "fx": ["read"], "long": true, "url": true }
+      ],
+      "flags": [
+        { "flag": "--fix", "text": "Исправить то, что правила умеют чинить сами", "say": "и сам исправляет, что может", "fx": ["write"], "fxRemove": ["read"] },
+        { "flag": "--fix-dry-run", "text": "Показать исправления, не записывая их в файлы" },
+        { "flag": "--max-warnings", "text": "Падать, если предупреждений больше указанного числа; 0 - ни одного" },
+        { "flag": "--cache", "text": "Запоминать результат и не проверять заново файлы, которые не менялись" },
+        { "flag": "--config", "alias": ["-c"], "text": "Какой файл настроек использовать" },
+        { "flag": "--ext", "text": "Какие расширения проверять (старый формат настроек)" },
+        { "flag": "--format", "alias": ["-f"], "text": "Формат отчёта: stylish, json, compact" },
+        { "flag": "--quiet", "text": "Показывать только ошибки, без предупреждений" },
+        { "flag": "--ignore-pattern", "text": "Какие файлы не проверять" },
+        { "flag": "--output-file", "alias": ["-o"], "text": "Записать отчёт в файл" },
+        { "flag": "--report-unused-disable-directives", "text": "Сообщать о лишних комментариях eslint-disable" },
+        { "flag": "--no-error-on-unmatched-pattern", "text": "Не падать, если по шаблону не нашлось ни одного файла" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "prettier",
+      "name": "Prettier",
+      "topic": "code-quality",
+      "bins": ["prettier"],
+      "about": "Форматировщик кода: расставляет отступы, кавычки и переносы строк по единым правилам.",
+      "how": [
+        "Читает настройки из .prettierrc и список исключений из .prettierignore",
+        "Разбирает каждый файл и печатает его заново по своим правилам",
+        "Без ключей выводит результат в терминал, с --write сохраняет в файлы, с --check только сообщает, где не так"
+      ],
+      "default": { "say": "Прогоняет файлы через форматировщик Prettier", "fx": ["read"] },
+      "flags": [
+        { "flag": "--write", "alias": ["-w"], "text": "Сохранить исправленное оформление в файлы", "say": "и сохраняет исправленное оформление в файлы", "fx": ["write"], "fxRemove": ["read"] },
+        { "flag": "--check", "alias": ["-c"], "text": "Только проверить, что файлы уже оформлены по правилам", "say": "и проверяет, что оформление уже в порядке, ничего не меняя" },
+        { "flag": "--list-different", "alias": ["-l"], "text": "Напечатать файлы, где оформление не по правилам", "say": "и печатает файлы, где оформление не по правилам" },
+        { "flag": "--ignore-path", "text": "Какой файл исключений использовать вместо .prettierignore" },
+        { "flag": "--config", "text": "Какой файл настроек использовать" },
+        { "flag": "--cache", "text": "Не проверять заново файлы, которые не менялись" },
+        { "flag": "--log-level", "text": "Сколько печатать: silent, error, warn, log" },
+        { "flag": "--ignore-unknown", "alias": ["-u"], "text": "Пропускать файлы, которые Prettier не умеет оформлять" },
+        { "flag": "--no-error-on-unmatched-pattern", "text": "Не падать, если по шаблону не нашлось ни одного файла" },
+        { "flag": "--plugin", "text": "Подключить плагин, например для Tailwind или PHP" },
+        { "flag": "--end-of-line", "text": "Какие переносы строк ставить: lf, crlf или auto" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "biome",
+      "name": "Biome",
+      "topic": "code-quality",
+      "bins": ["biome"],
+      "about": "Линтер и форматировщик в одной быстрой программе: заменяет ESLint и Prettier.",
+      "how": [
+        "Читает настройки из biome.json",
+        "Проверяет код правилами линтера и сверяет оформление",
+        "Без --write только показывает, что поменял бы; с --write сохраняет исправления"
+      ],
+      "default": { "say": "Выполняет команду Biome", "fx": [] },
+      "sub": [
+        { "match": "^ci(?:\\s|$)", "part": "проверка для CI", "say": "Проверяет код и оформление и ничего не меняет - режим для CI", "fx": ["read"] },
+        { "match": "^check(?:\\s|$)", "part": "проверка", "say": "Проверяет код линтером, оформление и порядок import", "fx": ["read"] },
+        { "match": "^lint(?:\\s|$)", "part": "линтер", "say": "Проверяет код линтером Biome", "fx": ["read"] },
+        { "match": "^format(?:\\s|$)", "part": "оформление", "say": "Проверяет оформление кода и показывает, что поменял бы", "fx": ["read"] },
+        { "match": "^init(?:\\s|$)", "part": "настройка", "say": "Создаёт файл настроек biome.json", "fx": ["write"] },
+        { "match": "^migrate(?:\\s|$)", "part": "перенос настроек", "say": "Переносит настройки из ESLint или Prettier либо со старой версии Biome", "fx": ["write"] },
+        { "match": "^explain(?:\\s|$)", "part": "справка по правилу", "say": "Объясняет правило линтера", "fx": ["read"] },
+        { "match": "^(?:start|stop)(?:\\s|$)", "part": "фоновая служба", "say": "Запускает или останавливает фоновую службу Biome", "fx": [] }
+      ],
+      "flags": [
+        { "flag": "--write", "alias": ["--fix"], "text": "Сохранить исправления в файлы", "say": "и сохраняет исправления в файлы", "fx": ["write"], "fxRemove": ["read"] },
+        { "flag": "--unsafe", "text": "Применять и рискованные исправления, которые могут поменять поведение кода", "say": "включая рискованные" },
+        { "flag": "--staged", "text": "Проверить только файлы, добавленные в коммит (git add)" },
+        { "flag": "--changed", "text": "Проверить только файлы, изменённые относительно основной ветки" },
+        { "flag": "--since", "text": "С какой веткой сравнивать для --changed" },
+        { "flag": "--diagnostic-level", "text": "С какого уровня показывать находки: info, warn, error" },
+        { "flag": "--error-on-warnings", "text": "Падать и на предупреждениях" },
+        { "flag": "--max-diagnostics", "text": "Сколько находок показать" },
+        { "flag": "--reporter", "text": "Формат отчёта: json, github, junit и другие" },
+        { "flag": "--config-path", "text": "Где лежит biome.json" },
+        { "flag": "--files-ignore-unknown", "text": "Пропускать файлы, которые Biome не умеет проверять" },
+        { "flag": "--no-errors-on-unmatched", "text": "Не падать, если подходящих файлов не нашлось" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "oxlint",
+      "name": "Oxlint",
+      "topic": "code-quality",
+      "bins": ["oxlint"],
+      "about": "Очень быстрый линтер для JavaScript и TypeScript, написанный на Rust. Понимает многие правила ESLint.",
+      "default": { "say": "Проверяет код линтером Oxlint", "fx": ["read"] },
+      "flags": [
+        { "flag": "--fix", "text": "Исправить то, что можно исправить безопасно", "say": "и сам исправляет, что может", "fx": ["write"], "fxRemove": ["read"] },
+        { "flag": "--fix-suggestions", "text": "Применять и предложенные исправления, которые могут поменять поведение" },
+        { "flag": "--fix-dangerously", "text": "Применять и опасные исправления" },
+        { "flag": "--config", "alias": ["-c"], "text": "Какой файл настроек использовать вместо .oxlintrc.json" },
+        { "flag": "--deny", "alias": ["-D"], "text": "Считать правило или группу правил ошибкой" },
+        { "flag": "--warn", "alias": ["-W"], "text": "Считать правило или группу правил предупреждением" },
+        { "flag": "--allow", "alias": ["-A"], "text": "Выключить правило или группу правил" },
+        { "flag": "--deny-warnings", "text": "Падать и на предупреждениях" },
+        { "flag": "--max-warnings", "text": "Падать, если предупреждений больше указанного числа" },
+        { "flag": "--quiet", "text": "Показывать только ошибки" },
+        { "flag": "--format", "alias": ["-f"], "text": "Формат отчёта: default, json, github и другие" },
+        { "flag": "--tsconfig", "text": "Какой tsconfig.json использовать" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "stylelint",
+      "name": "Stylelint",
+      "topic": "code-quality",
+      "bins": ["stylelint"],
+      "about": "Линтер для стилей: CSS, SCSS, Less. Ищет ошибки и нарушения правил оформления.",
+      "default": { "say": "Проверяет файлы стилей линтером Stylelint", "fx": ["read"] },
+      "flags": [
+        { "flag": "--fix", "text": "Исправить то, что правила умеют чинить сами", "say": "и сам исправляет, что может", "fx": ["write"], "fxRemove": ["read"] },
+        { "flag": "--config", "alias": ["-c"], "text": "Какой файл настроек использовать" },
+        { "flag": "--cache", "text": "Не проверять заново файлы, которые не менялись" },
+        { "flag": "--formatter", "alias": ["-f"], "text": "Формат отчёта: string, json, compact" },
+        { "flag": "--quiet", "alias": ["-q"], "text": "Показывать только ошибки" },
+        { "flag": "--max-warnings", "alias": ["--mw"], "text": "Падать, если предупреждений больше указанного числа" },
+        { "flag": "--ignore-path", "alias": ["-i"], "text": "Какой файл исключений использовать" },
+        { "flag": "--allow-empty-input", "alias": ["--aei"], "text": "Не падать, если файлов для проверки не нашлось" },
+        { "flag": "--custom-syntax", "text": "Как разбирать файлы, например postcss-scss" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "markdownlint",
+      "name": "markdownlint",
+      "topic": "code-quality",
+      "bins": ["markdownlint", "markdownlint-cli2"],
+      "about": "Линтер для файлов Markdown: заголовки, списки, пустые строки, длина строк.",
+      "default": { "say": "Проверяет файлы Markdown на ошибки оформления", "fx": ["read"] },
+      "flags": [
+        { "flag": "--fix", "alias": ["-f"], "text": "Исправить то, что можно исправить само", "say": "и сам исправляет, что может", "fx": ["write"], "fxRemove": ["read"] },
+        { "flag": "--config", "alias": ["-c"], "text": "Какой файл настроек использовать" },
+        { "flag": "--ignore", "alias": ["-i"], "text": "Какие файлы или папки не проверять" },
+        { "flag": "--dot", "text": "Проверять и скрытые файлы, чьё имя начинается с точки" },
+        { "flag": "--output", "alias": ["-o"], "text": "Записать отчёт в файл" },
+        { "flag": "--disable", "text": "Выключить указанные правила" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "knip",
+      "name": "Knip",
+      "topic": "code-quality",
+      "bins": ["knip"],
+      "about": "Ищет мёртвый код в проекте: файлы, которые никто не импортирует, лишние экспорты и зависимости.",
+      "how": [
+        "Находит входные точки проекта по настройкам и знакомым программам: next, vite, vitest и другим",
+        "Идёт от них по всем import и строит карту того, что используется",
+        "Всё, до чего не дошёл, считает лишним и печатает списком"
+      ],
+      "default": { "say": "Ищет неиспользуемые файлы, экспорты и зависимости", "fx": ["read"] },
+      "flags": [
+        { "flag": "--fix", "text": "Убрать лишние экспорты и зависимости", "say": "и сам убирает лишние экспорты и зависимости", "fx": ["write"], "fxRemove": ["read"] },
+        { "flag": "--allow-remove-files", "text": "С --fix разрешить удалять неиспользуемые файлы", "say": "и удаляет неиспользуемые файлы", "fx": ["delete"] },
+        { "flag": "--production", "text": "Смотреть только рабочий код, без тестов и настроек" },
+        { "flag": "--strict", "text": "Строже: каждый пакет монорепозитория обязан сам объявить свои зависимости" },
+        { "flag": "--include", "text": "Показывать только выбранные виды находок, например files,dependencies" },
+        { "flag": "--exclude", "text": "Не показывать выбранные виды находок" },
+        { "flag": "--dependencies", "text": "Искать только лишние и недостающие зависимости" },
+        { "flag": "--exports", "text": "Искать только лишние экспорты" },
+        { "flag": "--files", "text": "Искать только неиспользуемые файлы" },
+        { "flag": "--workspace", "alias": ["-W"], "text": "Проверить один пакет монорепозитория" },
+        { "flag": "--reporter", "text": "Формат отчёта: symbols, compact, json, markdown" },
+        { "flag": "--no-exit-code", "text": "Не падать, даже если что-то нашлось" },
+        { "flag": "--max-issues", "text": "Сколько находок допустить без падения" },
+        { "flag": "--cache", "text": "Запоминать результат, чтобы следующая проверка шла быстрее" },
+        { "flag": "--watch", "text": "Повторять проверку при каждой правке", "say": "и повторяет при каждой правке", "long": true }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "depcheck",
+      "name": "depcheck",
+      "topic": "code-quality",
+      "bins": ["depcheck"],
+      "about": "Сверяет package.json с кодом: какие зависимости не используются и каких не хватает.",
+      "default": { "say": "Ищет зависимости, которые нигде не используются, и пакеты, которых нет в package.json", "fx": ["read"] },
+      "flags": [
+        { "flag": "--ignores", "text": "Какие пакеты не считать лишними, через запятую" },
+        { "flag": "--ignore-patterns", "text": "Какие файлы и папки не просматривать" },
+        { "flag": "--skip-missing", "text": "Не искать пакеты, которых не хватает в package.json" },
+        { "flag": "--json", "text": "Напечатать результат в формате JSON" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "license-checker",
+      "name": "license-checker",
+      "topic": "code-quality",
+      "bins": ["license-checker", "license-checker-rseidelsohn"],
+      "about": "Перечисляет лицензии всех установленных пакетов и может запретить неподходящие.",
+      "default": { "say": "Печатает лицензии всех установленных пакетов", "fx": ["read"] },
+      "flags": [
+        { "flag": "--production", "text": "Только рабочие зависимости, без devDependencies" },
+        { "flag": "--development", "text": "Только зависимости для разработки" },
+        { "flag": "--summary", "text": "Коротко: сколько пакетов под какой лицензией" },
+        { "flag": "--onlyAllow", "text": "Падать, если встретилась лицензия не из списка, например \"MIT;Apache-2.0\"" },
+        { "flag": "--failOn", "text": "Падать, если встретилась лицензия из списка, например \"GPL\"" },
+        { "flag": "--excludePackages", "text": "Какие пакеты пропустить" },
+        { "flag": "--json", "text": "Напечатать результат в формате JSON" },
+        { "flag": "--csv", "text": "Напечатать результат таблицей CSV" },
+        { "flag": "--out", "text": "Записать результат в файл", "fx": ["write"] },
+        { "flag": "--start", "text": "Из какой папки начинать" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "cspell",
+      "name": "CSpell",
+      "topic": "code-quality",
+      "bins": ["cspell"],
+      "about": "Проверяет орфографию в коде, комментариях и текстах. Понимает имена в стиле camelCase.",
+      "default": { "say": "Проверяет орфографию в коде и текстах", "fx": ["read"] },
+      "sub": [
+        { "match": "^lint(?:\\s|$)", "part": "проверка", "say": "Проверяет орфографию в коде и текстах", "fx": ["read"] },
+        { "match": "^trace(?:\\s|$)", "part": "поиск слова", "say": "Показывает, в каких словарях есть слово", "fx": ["read"] },
+        { "match": "^check(?:\\s|$)", "part": "просмотр файла", "say": "Печатает файл и отмечает слова с ошибками", "fx": ["read"] },
+        { "match": "^suggest(?:\\s|$)", "part": "варианты", "say": "Предлагает, как правильно написать слово", "fx": ["read"] },
+        { "match": "^init(?:\\s|$)", "part": "настройка", "say": "Создаёт файл настроек CSpell", "fx": ["write"] }
+      ],
+      "flags": [
+        { "flag": "--config", "alias": ["-c"], "text": "Какой файл настроек использовать" },
+        { "flag": "--no-progress", "text": "Не печатать каждый проверенный файл" },
+        { "flag": "--no-summary", "text": "Не печатать итог в конце" },
+        { "flag": "--words-only", "text": "Печатать только слова с ошибками" },
+        { "flag": "--unique", "alias": ["-u"], "text": "Печатать каждое слово с ошибкой один раз" },
+        { "flag": "--cache", "text": "Не проверять заново файлы, которые не менялись" },
+        { "flag": "--gitignore", "text": "Пропускать файлы из .gitignore" },
+        { "flag": "--show-suggestions", "text": "Предлагать правильное написание" },
+        { "flag": "--locale", "text": "Какие языки проверять, например en,ru" },
+        { "flag": "--exclude", "alias": ["-e"], "text": "Какие файлы не проверять" },
+        { "flag": "--no-must-find-files", "text": "Не падать, если файлов не нашлось" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "husky",
+      "name": "Husky",
+      "topic": "code-quality",
+      "bins": ["husky"],
+      "about": "Подключает git-хуки из папки .husky: проверки, которые git сам запускает перед коммитом или пушем.",
+      "how": [
+        "Создаёт служебную папку .husky/_",
+        "Говорит git брать хуки оттуда (настройка core.hooksPath)",
+        "Дальше git сам запускает .husky/pre-commit перед каждым коммитом и отменяет коммит, если проверка упала"
+      ],
+      "default": { "say": "Подключает git-хуки из папки .husky", "fx": ["write"] },
+      "sub": [
+        { "match": "^init(?:\\s|$)", "part": "первая настройка", "say": "Создаёт папку .husky с хуком pre-commit и дописывает скрипт prepare в package.json", "fx": ["write"] },
+        { "match": "^install(?:\\s|$)", "part": "подключение", "say": "Подключает git-хуки из папки .husky (старая команда)", "fx": ["write"] },
+        { "match": "^add(?:\\s|$)", "part": "новый хук", "say": "Создаёт файл хука с командой (старая команда)", "fx": ["write"] },
+        { "match": "^uninstall(?:\\s|$)", "part": "отключение", "say": "Отключает git-хуки Husky (старая команда)", "fx": ["write"] }
+      ],
+      "help": null
+    },
+    {
+      "id": "lefthook",
+      "name": "Lefthook",
+      "topic": "code-quality",
+      "bins": ["lefthook"],
+      "about": "Подключает git-хуки из файла lefthook.yml и умеет запускать проверки параллельно.",
+      "default": { "say": "Выполняет команду Lefthook", "fx": [] },
+      "sub": [
+        { "match": "^install(?:\\s|$)", "part": "подключение", "say": "Подключает git-хуки из lefthook.yml", "fx": ["write"] },
+        { "match": "^uninstall(?:\\s|$)", "part": "отключение", "say": "Убирает git-хуки, поставленные Lefthook", "fx": ["write"] },
+        { "match": "^run(?:\\s|$)", "part": "запуск хука", "say": "Запускает команды хука вручную, не дожидаясь git", "fx": [] },
+        { "match": "^add(?:\\s|$)", "part": "новый хук", "say": "Создаёт хук и папку для его скриптов", "fx": ["write"] },
+        { "match": "^(?:validate|dump|version)(?:\\s|$)", "part": "проверка настроек", "say": "Проверяет или печатает настройки Lefthook", "fx": ["read"] },
+        { "match": "^self-update(?:\\s|$)", "part": "обновление", "say": "Обновляет сам Lefthook", "fx": ["install", "network"] }
+      ],
+      "flags": [
+        { "flag": "--force", "alias": ["-f"], "text": "У install: перезаписать хуки, даже если они уже есть" },
+        { "flag": "--all-files", "text": "У run: проверять все файлы, а не только изменённые" },
+        { "flag": "--files", "text": "У run: какие файлы проверять" },
+        { "flag": "--verbose", "alias": ["-v"], "text": "Печатать подробности" },
+        { "flag": "--no-tty", "text": "Печатать без цвета и анимации: для CI" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "simple-git-hooks",
+      "name": "simple-git-hooks",
+      "topic": "code-quality",
+      "bins": ["simple-git-hooks"],
+      "about": "Подключает git-хуки, описанные в package.json в поле simple-git-hooks.",
+      "default": { "say": "Подключает git-хуки из настроек в package.json", "fx": ["write"] },
+      "help": null
+    },
+    {
+      "id": "changeset",
+      "name": "Changesets",
+      "topic": "code-quality",
+      "bins": ["changeset"],
+      "about": "Ведёт журнал изменений и версии пакетов: каждый, кто меняет код, оставляет короткую запись, а при выпуске записи собираются в CHANGELOG.",
+      "how": [
+        "changeset add задаёт вопросы и кладёт файл-запись в папку .changeset",
+        "changeset version поднимает версии пакетов по записям и переносит их в CHANGELOG.md",
+        "changeset publish публикует пакеты с новыми версиями в npm и ставит git-теги"
+      ],
+      "default": { "say": "Создаёт запись об изменении для журнала версий", "fx": ["write"] },
+      "sub": [
+        { "match": "^add(?:\\s|$)", "part": "запись", "say": "Создаёт запись об изменении для журнала версий", "fx": ["write"] },
+        { "match": "^version(?:\\s|$)", "part": "новые версии", "say": "Поднимает версии пакетов и дописывает CHANGELOG.md", "fx": ["write"] },
+        { "match": "^publish(?:\\s|$)", "part": "публикация", "say": "Публикует пакеты с новыми версиями в npm", "fx": ["network", "danger"], "danger": true },
+        { "match": "^status(?:\\s|$)", "part": "что выйдет", "say": "Показывает, какие пакеты и как поднимутся при следующем выпуске", "fx": ["read"] },
+        { "match": "^pre\\s+(?:enter|exit)(?:\\s|$)", "part": "предварительные версии", "say": "Включает или выключает режим предварительных версий (beta, rc)", "fx": ["write"] },
+        { "match": "^tag(?:\\s|$)", "part": "теги", "say": "Ставит git-теги на текущие версии пакетов", "fx": ["write"] },
+        { "match": "^init(?:\\s|$)", "part": "настройка", "say": "Создаёт папку .changeset с настройками", "fx": ["write"] }
+      ],
+      "flags": [
+        { "flag": "--empty", "text": "У add: создать пустую запись, если выпуск не нужен" },
+        { "flag": "--open", "text": "У add: открыть запись в редакторе" },
+        { "flag": "--since", "text": "У status: с какой веткой сравнивать" },
+        { "flag": "--snapshot", "text": "У version: временные версии вида 0.0.0-имя для проверки" },
+        { "flag": "--tag", "text": "У publish: опубликовать под меткой, например next" },
+        { "flag": "--no-git-tag", "text": "У publish: не ставить git-теги" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "semantic-release",
+      "name": "semantic-release",
+      "topic": "ci-cd",
+      "bins": ["semantic-release"],
+      "about": "Выпускает новую версию сама: по сообщениям коммитов решает, какой номер поднять, пишет журнал, ставит тег и публикует.",
+      "how": [
+        "Читает коммиты с прошлого выпуска: fix - мелкая версия, feat - средняя, BREAKING CHANGE - крупная",
+        "Считает новый номер версии",
+        "Пишет заметки к выпуску и ставит git-тег",
+        "Публикует пакет в npm и выпуск на GitHub или GitLab, если это включено"
+      ],
+      "default": { "say": "Выпускает новую версию: считает номер по коммитам, ставит тег и публикует", "fx": ["write", "network", "danger"], "danger": true },
+      "flags": [
+        { "flag": "--dry-run", "alias": ["-d"], "text": "Показать, какая версия вышла бы, ничего не выпуская", "say": "понарошку: только показывает, что сделал бы", "fx": ["read"], "fxRemove": ["write", "danger"], "danger": false },
+        { "flag": "--no-ci", "text": "Разрешить запуск не из CI, с этого компьютера" },
+        { "flag": "--branches", "alias": ["-b"], "text": "Из каких веток выпускать" },
+        { "flag": "--repository-url", "alias": ["-r"], "text": "Адрес репозитория" },
+        { "flag": "--tag-format", "alias": ["-t"], "text": "Вид тега, например v${version}" },
+        { "flag": "--plugins", "alias": ["-p"], "text": "Какие плагины подключить" },
+        { "flag": "--extends", "alias": ["-e"], "text": "Взять готовый набор настроек" },
+        { "flag": "--debug", "text": "Печатать подробности" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "release-it",
+      "name": "release-it",
+      "topic": "ci-cd",
+      "bins": ["release-it"],
+      "about": "Выпускает новую версию по шагам: поднимает номер, делает коммит и тег, публикует в npm и на GitHub или GitLab.",
+      "default": { "say": "Выпускает новую версию: поднимает номер, ставит тег и публикует", "fx": ["write", "network", "danger"], "danger": true },
+      "flags": [
+        { "flag": "--dry-run", "alias": ["-d"], "text": "Показать шаги выпуска, ничего не меняя", "say": "понарошку: только показывает, что сделал бы", "fx": ["read"], "fxRemove": ["write", "danger"], "danger": false },
+        { "flag": "--ci", "text": "Не задавать вопросов: для CI" },
+        { "flag": "--increment", "text": "Какую часть номера поднять: major, minor, patch" },
+        { "flag": "--preRelease", "text": "Выпустить предварительную версию, например beta" },
+        { "flag": "--no-npm.publish", "text": "Не публиковать в npm" },
+        { "flag": "--release-version", "text": "Только напечатать следующий номер версии", "say": "и только печатает следующий номер версии", "fx": ["read"], "fxRemove": ["write", "danger"], "danger": false },
+        { "flag": "--changelog", "text": "Только напечатать изменения с прошлого выпуска", "say": "и только печатает изменения с прошлого выпуска", "fx": ["read"], "fxRemove": ["write", "danger"], "danger": false },
+        { "flag": "--verbose", "alias": ["-V"], "text": "Печатать подробности" },
+        { "flag": "--config", "alias": ["-c"], "text": "Какой файл настроек использовать" }
+      ],
+      "help": "--help"
+    }
+  ]
+}

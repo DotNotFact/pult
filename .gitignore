@@ -1,0 +1,11 @@
+# сборка
+/target/
+/dist/
+/bin/
+/app/gen/
+# данные приложения живут в %LOCALAPPDATA%, но старая папка могла остаться
+/data/
+# служебное
+*.tmp
+.DS_Store
+Thumbs.db

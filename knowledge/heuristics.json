@@ -1,0 +1,48 @@
+{
+  "_": "Правила распознавания. Это не пояснения, а признаки: по ним движок понимает, что делает незнакомый файл или команда.",
+  "wrappers": {
+    "_": "Обёртки, которые снимаются с команды перед поиском программы. re - регулярное выражение от начала команды.",
+    "re": [
+      "^(?:\\w+=(?:\"[^\"]*\"|'[^']*'|\\S*)\\s+)+",
+      "^cross-env(?:-shell)?\\s+(?:\\w+=(?:\"[^\"]*\"|'[^']*'|\\S*)\\s+)*",
+      "^dotenv(?:-cli)?(?:\\s+-e\\s+\\S+)*\\s+--\\s+",
+      "^(?:npx|bunx|pnpx)(?:\\s+(?:--yes|-y|--no-install|-p\\s+\\S+))*\\s+",
+      "^(?:pnpm|npm|yarn)\\s+(?:exec|dlx)(?:\\s+--)?\\s+"
+    ]
+  },
+  "skipSegments": {
+    "_": "Служебные части цепочки команд, которые не стоит объяснять",
+    "re": "^(?:cd|set|export|chcp|setlocal|endlocal|@?echo\\s+off)(?:\\s|$)"
+  },
+  "fileFx": {
+    "_": "Признаки в коде файла-скрипта. Ищутся в первых 16 КБ. Это подсказка, не гарантия.",
+    "delete": "\\b(?:rmSync|rmdirSync|unlinkSync|rimraf|Remove-Item|shutil\\.rmtree|os\\.remove)\\b|\\brm\\s+-r?f\\b|\\b(?:del|rd)\\s+/[sq]",
+    "write": "\\b(?:writeFile|writeFileSync|appendFile|createWriteStream|copyFile|cpSync|mkdirSync|Set-Content|Out-File|Add-Content|New-Item|Copy-Item|Move-Item)\\b",
+    "network": "\\bfetch\\(|https?://(?:[a-z0-9-]+\\.)+[a-z]{2,}|\\baxios\\b|Invoke-WebRequest|Invoke-RestMethod|\\bcurl\\s|\\bwget\\s|\\bgit\\s+(?:push|fetch|pull|clone)\\b|\\bssh\\s|\\bscp\\s|\\brsync\\s|requests\\.(?:get|post)",
+    "docker": "\\bdocker\\b",
+    "long": "\\.listen\\(|setInterval\\(|while\\s*\\(\\s*true\\s*\\)|while\\s*\\$true|while\\s+true|for\\s*\\(\\s*;\\s*;\\s*\\)|chokidar|fs\\.watch\\(|Wait-Event",
+    "admin": "-Verb\\s+RunAs|#Requires\\s+-RunAsAdministrator|\\bsudo\\s"
+  },
+  "fileFlags": {
+    "_": "Как найти ключи, которые понимает файл-скрипт. Группа 1 - сам ключ.",
+    ".py": ["add_argument\\(\\s*['\"](--?[\\w-]+)['\"]"],
+    ".sh": ["^\\s*(--[\\w-]+)(?:\\|[^)]*)?\\)"],
+    ".js": ["['\"`](--[a-z][\\w-]*)=?['\"`]"],
+    "linesWith": "argv|args|flag|has\\(|includes\\(|option|param"
+  },
+  "danger": {
+    "_": "Имя скрипта, похожее на действие, которое не отменить. Проверяется, если программа сама не сказала, опасна ли команда.",
+    "re": "(?:^|[:\\-_ ./])(?:deploy|publish|prod|production|delete|drop|wipe|purge|force)(?:$|[:\\-_ ./])|^(?:release|push|tag)(?:$|[:\\-_ ./])"
+  },
+  "scriptDirs": ["scripts", "script", "tools", "bin", "ops", "deploy", "ci", "hack", "dev", "automation", ".githooks"],
+  "skipDirs": ["node_modules", ".git", "target", "dist", "build", "obj", ".next", ".nuxt", ".svelte-kit", ".venv", "venv", "env", "__pycache__", "coverage", ".gradle", "out", ".idea", ".vs", ".turbo", ".cache", "vendor", "bower_components", ".pnpm-store", "tmp", "temp"],
+  "groupDirs": ["apps", "packages", "crates", "services", "libs", "tools", "modules", "src", "projects", "examples"],
+  "docExtensions": [".md", ".markdown", ".txt", ".rst", ".adoc", ".org", ""],
+  "ciHosts": ["gitlab.com", "github.com"],
+  "consoleErrors": {
+    "_": "Как консоль подсвечивает строки вывода",
+    "error": "\\berror\\b|\\berr!|\\bfailed\\b|\\bfailure\\b|\\bfail\\b|exception|fatal|panic|traceback|✗|✖|не удалось|ошибка",
+    "notError": "\\b0 (?:errors?|failed|failures)\\b|no errors|without errors|errors?: 0\\b|0 problems|ошибок нет|без ошибок",
+    "warning": "\\bwarn(?:ing)?s?\\b|предупрежд"
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "id": "shell-scripts",
+  "title": "Скрипты оболочки",
+  "color": "#4eaa25",
+  "icon": "file",
+  "level": "основы",
+  "summary": "Скрипт - файл с командами терминала по порядку. Один запуск вместо десятка команд руками.",
+  "detect": { "always": true, "files": [], "deps": [], "bins": ["bash", "sh", "zsh", "powershell", "pwsh", "cmd"] },
+  "related": ["terminal", "task-runners", "env"],
+  "sections": [
+    {
+      "type": "idea",
+      "title": "Зачем нужны скрипты",
+      "text": "Одни и те же действия повторяются: поставить пакеты, собрать, скопировать файлы, перезапустить сервис. Набирать их каждый раз долго, и легко пропустить шаг. Скрипт - текстовый файл, в котором эти команды записаны по порядку. Оболочка читает его сверху вниз и выполняет строку за строкой. Файлы .sh выполняет bash (Linux, macOS, Git Bash, WSL), .ps1 - PowerShell (Windows), .cmd и .bat - старая командная строка Windows.",
+      "analogy": "Как рецепт. Шаги записаны один раз, и по ним приготовит кто угодно, каждый раз одинаково."
+    },
+    {
+      "type": "diagram",
+      "title": "Как выполняется скрипт",
+      "nodes": [
+        { "id": "file", "label": "build.sh", "note": "файл с командами", "icon": "file" },
+        { "id": "shell", "label": "Оболочка", "note": "bash или pwsh", "icon": "terminal" },
+        { "id": "line", "label": "Строка за строкой", "note": "сверху вниз", "icon": "list" },
+        { "id": "cmd", "label": "Команды", "note": "git, npm, docker", "icon": "play" },
+        { "id": "code", "label": "Код выхода", "note": "0 - успех", "icon": "check" },
+        { "id": "stop", "label": "Остановка", "note": "если команда упала", "icon": "warning" }
+      ],
+      "edges": [
+        ["file", "shell", "запуск"],
+        ["shell", "line", "читает"],
+        ["line", "cmd", "выполняет"],
+        ["cmd", "code", "возвращает"],
+        ["code", "stop", "не 0"]
+      ],
+      "caption": "Останавливаться при ошибке скрипт будет, только если это включено: set -e в bash, $ErrorActionPreference = \"Stop\" в PowerShell. Иначе он пойдёт дальше."
+    },
+    {
+      "type": "terms",
+      "title": "Слова про скрипты",
+      "items": [
+        { "term": "Скрипт", "text": "Файл с командами, который выполняет оболочка: .sh, .ps1, .cmd.", "forms": ["скрипт", "скрипта", "скрипту", "скриптом", "скрипте", "скрипты", "скриптов", "сценарий"] },
+        { "term": "Shebang", "text": "Первая строка вида #!/usr/bin/env bash. Говорит системе, какой программой выполнять файл.", "forms": ["шебанг"] },
+        { "term": "Право на запуск", "text": "В Linux и macOS файл можно запустить как программу только с этим правом. Даётся командой chmod +x.", "forms": ["chmod", "права на запуск", "исполняемый файл"] },
+        { "term": "Аргументы скрипта", "text": "Слова после имени скрипта. В bash внутри видны как $1, $2, в PowerShell - как $args или через param().", "forms": ["$1", "$args", "аргументы скрипта"] },
+        { "term": "Код выхода", "text": "Число, которое программа возвращает при завершении. 0 - успех, всё остальное - ошибка.", "forms": ["код выхода", "кода выхода", "коды выхода", "exit code", "код возврата"] },
+        { "term": "ExecutionPolicy", "text": "Настройка Windows, которая решает, можно ли запускать файлы .ps1. Из-за неё скрипт иногда не стартует.", "forms": ["политика выполнения"] },
+        { "term": "Конец строки", "text": "Невидимый символ в конце строки. В Windows это CRLF, в Linux - LF. bash ломается на файлах с CRLF.", "forms": ["CRLF", "LF", "перевод строки"] }
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Скрипт на bash",
+      "code": "#!/usr/bin/env bash\nset -euo pipefail\n\nAPP_NAME=\"my-app\"\necho \"Собираю $APP_NAME\"\n\nnpm ci\nnpm run build\necho \"Готово: папка dist\"",
+      "output": "Собираю my-app\n...\nГотово: папка dist",
+      "note": "set -e останавливает скрипт на первой упавшей команде. -u считает ошибкой незаданную переменную. -o pipefail ловит ошибку внутри цепочки через |. Переменная задаётся без пробелов вокруг =, читается через $."
+    },
+    {
+      "type": "example",
+      "title": "Тот же скрипт на PowerShell",
+      "code": "$ErrorActionPreference = \"Stop\"\n$AppName = \"my-app\"\nWrite-Host \"Собираю $AppName\"\n\nnpm ci\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\nnpm run build\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\nWrite-Host \"Готово: папка dist\"",
+      "note": "$ErrorActionPreference = \"Stop\" останавливает скрипт на ошибках команд PowerShell. Внешние программы вроде npm сообщают об ошибке через $LASTEXITCODE, поэтому его проверяют после каждой."
+    },
+    {
+      "type": "anatomy",
+      "title": "Разбор запуска скрипта",
+      "parts": [
+        { "text": "bash", "note": "оболочка, которая выполнит файл" },
+        { "text": "scripts/build.sh", "note": "путь к скрипту от текущей папки" },
+        { "text": "--prod", "note": "аргумент: внутри скрипта он виден как $1" }
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "bash, PowerShell и cmd рядом",
+      "cols": ["", "bash (.sh)", "PowerShell (.ps1)", "cmd (.bat, .cmd)"],
+      "rows": [
+        ["Запуск", "bash run.sh или ./run.sh", "pwsh -File run.ps1 или .\\run.ps1", "run.cmd"],
+        ["Переменная", "NAME=\"x\"", "$Name = \"x\"", "set NAME=x"],
+        ["Первый аргумент", "$1", "$args[0]", "%1"],
+        ["Код последней команды", "$?", "$LASTEXITCODE", "%ERRORLEVEL%"],
+        ["Стоп при ошибке", "set -e", "$ErrorActionPreference = \"Stop\"", "if errorlevel 1 exit /b 1"]
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Как запустить чужой скрипт и не пожалеть",
+      "items": [
+        "Откройте файл и прочитайте его целиком. Скрипт делает всё, что в нём написано, с вашими правами.",
+        "Ищите опасное: rm -rf, Remove-Item -Recurse, git push, deploy, curl ... | bash.",
+        "Поймите, из какой папки его запускать. Многие скрипты ждут корень проекта.",
+        "Запустите и читайте вывод.",
+        "Проверьте код выхода: echo $? в bash или $LASTEXITCODE в PowerShell. 0 - успех."
+      ]
+    },
+    {
+      "type": "mistakes",
+      "title": "Частые ошибки",
+      "items": [
+        { "problem": "Permission denied при ./run.sh.", "fix": "У файла нет права на запуск. Выполните chmod +x run.sh или запускайте через bash run.sh." },
+        { "problem": "PowerShell: running scripts is disabled on this system.", "fix": "Так срабатывает ExecutionPolicy. Для одного запуска проверенного скрипта: pwsh -ExecutionPolicy Bypass -File run.ps1." },
+        { "problem": "bash пишет $'\\r': command not found.", "fix": "Файл сохранён с концами строк Windows (CRLF). Сохраните его с LF. Чтобы git не портил .sh, добавьте в .gitattributes строку *.sh text eol=lf." },
+        { "problem": "Скрипт работает только из своей папки.", "fix": "Пути в нём считаются от текущей папки. Считайте их от места скрипта: cd \"$(dirname \"$0\")\" в bash, $PSScriptRoot в PowerShell." },
+        { "problem": "Одна команда упала, а скрипт пошёл дальше и наделал бед.", "fix": "Включите остановку при ошибке: set -e в bash, $ErrorActionPreference = \"Stop\" и проверку $LASTEXITCODE в PowerShell." },
+        { "problem": "Путь с пробелом развалился на два.", "fix": "Берите переменные в кавычки: \"$1\", \"$FILE\"." }
+      ]
+    },
+    {
+      "type": "cheatsheet",
+      "title": "Шпаргалка",
+      "items": [
+        { "cmd": "bash script.sh", "text": "Выполнить скрипт bash" },
+        { "cmd": "./script.sh", "text": "Выполнить файл с правом на запуск" },
+        { "cmd": "chmod +x script.sh", "text": "Дать файлу право на запуск" },
+        { "cmd": "bash -x script.sh", "text": "Выполнить и печатать каждую команду перед запуском" },
+        { "cmd": "echo $?", "text": "Код выхода последней команды (bash)" },
+        { "cmd": "pwsh -File script.ps1", "text": "Выполнить скрипт PowerShell" },
+        { "cmd": ".\\script.ps1", "text": "Выполнить скрипт из текущей папки (PowerShell)" },
+        { "cmd": "$LASTEXITCODE", "text": "Код выхода последней программы (PowerShell)" },
+        { "cmd": "shellcheck script.sh", "text": "Найти ошибки в скрипте bash, ничего не запуская" }
+      ]
+    },
+    {
+      "type": "quiz",
+      "title": "Проверьте себя",
+      "items": [
+        { "q": "Программа завершилась с кодом 0. Что это значит?", "options": ["Ошибка", "Успех", "Программа не запускалась", "Нужно перезапустить"], "answer": 1, "why": "По договорённости 0 - успех. Любое другое число - ошибка, и CI считает такой шаг красным." },
+        { "q": "Зачем в начале скрипта bash пишут set -e?", "options": ["Чтобы ускорить скрипт", "Чтобы скрипт остановился на первой упавшей команде", "Чтобы скрыть вывод", "Чтобы включить цвета"], "answer": 1, "why": "Без set -e bash выполнит следующие строки даже после ошибки, и последствия могут быть хуже самой ошибки." },
+        { "q": "Как в bash прочитать первый аргумент скрипта?", "options": ["$args[0]", "%1", "$1", "arg(1)"], "answer": 2, "why": "$1 - bash, $args[0] - PowerShell, %1 - cmd." },
+        { "q": "bash ругается на $'\\r'. В чём причина?", "options": ["Нет интернета", "Файл сохранён с концами строк Windows", "Ошибка в имени файла", "Не установлен Node"], "answer": 1, "why": "Windows добавляет в конец строки невидимый символ \\r. bash считает его частью команды." }
+      ]
+    },
+    { "type": "project", "title": "Где это в вашем проекте" }
+  ]
+}

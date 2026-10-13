@@ -1,0 +1,23 @@
+[package]
+name = "pult-app"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "Pult"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+pult-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+shell-words.workspace = true
+notify.workspace = true
+tauri = { version = "2", features = ["custom-protocol"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-notification = "2"

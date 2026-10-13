@@ -1,0 +1,619 @@
+{
+  "tools": [
+    {
+      "id": "rimraf",
+      "name": "rimraf",
+      "topic": "shell-scripts",
+      "bins": ["rimraf"],
+      "about": "Удаляет файлы и папки со всем содержимым одинаково на Windows, macOS и Linux - замена rm -rf в скриптах package.json.",
+      "default": { "say": "Удаляет файлы и папки со всем содержимым, мимо корзины", "fx": ["delete"] },
+      "flags": [
+        { "flag": "--glob", "alias": ["-g"], "text": "Понимать шаблоны вида dist/**/*.map" },
+        { "flag": "--preserve-root", "text": "Отказываться удалять корень диска (так по умолчанию)" },
+        { "flag": "--no-preserve-root", "text": "Разрешить удалить даже корень диска. Почти никогда не нужно", "danger": true, "fx": ["danger"] },
+        { "flag": "--verbose", "alias": ["-v"], "text": "Печатать каждый удалённый путь" },
+        { "flag": "--interactive", "alias": ["-i"], "text": "Спрашивать перед каждым удалением" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "del",
+      "name": "del",
+      "topic": "shell-scripts",
+      "bins": ["del-cli", "del"],
+      "about": "Удаляет файлы. Так называется и пакет del-cli для скриптов package.json, и команда del в командной строке Windows.",
+      "default": { "say": "Удаляет файлы безвозвратно", "fx": ["delete"] },
+      "sub": [
+        { "match": "(?:^|\\s)/s(?:\\s|$)", "part": "во вложенных папках", "say": "Удаляет подходящие файлы во всех вложенных папках, мимо корзины", "fx": ["delete"] }
+      ],
+      "flags": [
+        { "flag": "--force", "text": "Разрешить удалять за пределами текущей папки" },
+        { "flag": "--dry-run", "alias": ["-d"], "text": "Показать, что будет удалено, ничего не удаляя", "say": "понарошку: только показывает, что удалил бы", "fx": ["read"], "fxRemove": ["delete"] },
+        { "flag": "--verbose", "alias": ["-v"], "text": "Печатать каждый удалённый путь" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "rmdir",
+      "name": "rmdir",
+      "topic": "terminal",
+      "bins": ["rmdir", "rd"],
+      "about": "Удаляет папку. Без ключей - только пустую.",
+      "default": { "say": "Удаляет пустую папку", "fx": ["delete"] },
+      "sub": [
+        { "match": "(?:^|\\s)/s(?:\\s|$)", "part": "со всем содержимым", "say": "Удаляет папку вместе со всем содержимым, мимо корзины", "fx": ["delete"] }
+      ],
+      "flags": [
+        { "flag": "--parents", "alias": ["-p"], "text": "Linux и macOS: удалить и пустые родительские папки" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "rm",
+      "name": "rm",
+      "topic": "terminal",
+      "bins": ["rm"],
+      "about": "Команда Linux и macOS для удаления файлов. В PowerShell rm - короткое имя Remove-Item.",
+      "default": { "say": "Удаляет файлы безвозвратно", "fx": ["delete"] },
+      "flags": [
+        { "flag": "-rf", "alias": ["-fr", "-Rf"], "text": "Удалить папки целиком и ни о чём не спрашивать", "say": "вместе с папками и без вопросов" },
+        { "flag": "--recursive", "alias": ["-r", "-R"], "text": "Удалять папки со всем содержимым", "say": "вместе с папками" },
+        { "flag": "--force", "alias": ["-f"], "text": "Не спрашивать и не ругаться на отсутствующие файлы" },
+        { "flag": "--interactive", "alias": ["-i"], "text": "Спрашивать перед каждым удалением" },
+        { "flag": "--verbose", "alias": ["-v"], "text": "Печатать каждый удалённый путь" },
+        { "flag": "-Recurse", "text": "PowerShell: удалять папку со всем содержимым", "say": "вместе с папками" },
+        { "flag": "-Force", "text": "PowerShell: удалять и скрытые файлы и файлы только для чтения" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "cp",
+      "name": "cp",
+      "topic": "terminal",
+      "bins": ["cp"],
+      "about": "Команда Linux и macOS для копирования файлов. В PowerShell cp - короткое имя Copy-Item.",
+      "default": { "say": "Копирует файлы", "fx": ["write"] },
+      "flags": [
+        { "flag": "--recursive", "alias": ["-r", "-R"], "text": "Копировать папки со всем содержимым", "say": "вместе с папками" },
+        { "flag": "--force", "alias": ["-f"], "text": "Перезаписывать файлы, даже если их нельзя открыть на запись" },
+        { "flag": "--no-clobber", "alias": ["-n"], "text": "Не перезаписывать существующие файлы" },
+        { "flag": "--update", "alias": ["-u"], "text": "Копировать, только если исходный файл новее" },
+        { "flag": "--verbose", "alias": ["-v"], "text": "Печатать каждый скопированный файл" },
+        { "flag": "-Recurse", "text": "PowerShell: копировать папки со всем содержимым", "say": "вместе с папками" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "mv",
+      "name": "mv",
+      "topic": "terminal",
+      "bins": ["mv", "move"],
+      "about": "Переносит или переименовывает файлы и папки. mv - в Linux, macOS и PowerShell, move - в командной строке Windows.",
+      "default": { "say": "Переносит или переименовывает файлы", "fx": ["write"] },
+      "flags": [
+        { "flag": "--force", "alias": ["-f"], "text": "Перезаписывать без вопросов" },
+        { "flag": "--no-clobber", "alias": ["-n"], "text": "Не перезаписывать существующие файлы" },
+        { "flag": "--interactive", "alias": ["-i"], "text": "Спрашивать перед перезаписью" },
+        { "flag": "--verbose", "alias": ["-v"], "text": "Печатать каждый перенесённый файл" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "mkdir",
+      "name": "mkdir",
+      "topic": "terminal",
+      "bins": ["mkdir", "md", "mkdirp"],
+      "about": "Создаёт папку.",
+      "default": { "say": "Создаёт папку", "fx": ["write"] },
+      "flags": [
+        { "flag": "--parents", "alias": ["-p"], "text": "Создать и все недостающие папки по пути, не ругаться, если папка уже есть" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "copy",
+      "name": "copy",
+      "topic": "terminal",
+      "bins": ["copy"],
+      "about": "Команда командной строки Windows для копирования файлов. Ключи пишутся через косую черту: /Y.",
+      "default": { "say": "Копирует файлы", "fx": ["write"] },
+      "sub": [
+        { "match": "(?:^|\\s)/y(?:\\s|$)", "part": "без вопросов", "say": "Копирует файлы и перезаписывает существующие без вопроса", "fx": ["write"] }
+      ],
+      "help": "/?"
+    },
+    {
+      "id": "xcopy",
+      "name": "xcopy",
+      "topic": "terminal",
+      "bins": ["xcopy"],
+      "about": "Команда Windows для копирования файлов и папок. Частые ключи: /E - с вложенными папками, /I - назначение считать папкой, /Y - не спрашивать.",
+      "default": { "say": "Копирует файлы", "fx": ["write"] },
+      "sub": [
+        { "match": "(?:^|\\s)/[es](?:\\s|$)", "part": "с вложенными папками", "say": "Копирует папку со всеми вложенными папками", "fx": ["write"] }
+      ],
+      "help": "/?"
+    },
+    {
+      "id": "robocopy",
+      "name": "robocopy",
+      "topic": "terminal",
+      "bins": ["robocopy"],
+      "about": "Надёжное копирование папок в Windows: повторяет при сбоях и копирует только изменённое. Ключи пишутся через косую черту.",
+      "default": { "say": "Копирует папку, пропуская файлы, которые не менялись", "fx": ["write"] },
+      "sub": [
+        { "match": "(?:^|\\s)/(?:mir|purge)(?:\\s|$)", "part": "зеркало", "say": "Делает папку назначения точной копией: лишние файлы в ней УДАЛЯЮТСЯ", "fx": ["write", "delete"] },
+        { "match": "(?:^|\\s)/mov[e]?(?:\\s|$)", "part": "перенос", "say": "Переносит файлы: после копирования удаляет их из исходной папки", "fx": ["write", "delete"] }
+      ],
+      "help": "/?"
+    },
+    {
+      "id": "shx",
+      "name": "shx",
+      "topic": "shell-scripts",
+      "bins": ["shx"],
+      "about": "Команды rm, cp, mv, mkdir и другие, которые одинаково работают на Windows, macOS и Linux. Ставят в скрипты package.json.",
+      "default": { "say": "Выполняет команду оболочки через shx", "fx": [] },
+      "sub": [
+        { "match": "^rm(?:\\s|$)", "part": "удаление", "say": "Удаляет файлы безвозвратно", "fx": ["delete"] },
+        { "match": "^cp(?:\\s|$)", "part": "копирование", "say": "Копирует файлы", "fx": ["write"] },
+        { "match": "^mv(?:\\s|$)", "part": "перенос", "say": "Переносит или переименовывает файлы", "fx": ["write"] },
+        { "match": "^mkdir(?:\\s|$)", "part": "папка", "say": "Создаёт папку", "fx": ["write"] },
+        { "match": "^(?:touch|ln|chmod)(?:\\s|$)", "part": "файлы", "say": "Создаёт файл, ссылку или меняет права", "fx": ["write"] },
+        { "match": "^sed\\b.*\\s-i(?:\\s|$)", "part": "замена в файле", "say": "Заменяет текст прямо в файле", "fx": ["write"] },
+        { "match": "^(?:echo|cat|ls|head|tail|grep|which|pwd|find|sed|test)(?:\\s|$)", "part": "просмотр", "say": "Печатает текст, файл или список файлов", "fx": ["read"] }
+      ],
+      "flags": [
+        { "flag": "-r", "alias": ["-R"], "text": "У rm и cp: вместе с папками и их содержимым" },
+        { "flag": "-f", "text": "Не спрашивать и не ругаться на отсутствующие файлы" },
+        { "flag": "-rf", "alias": ["-fr"], "text": "У rm: удалить папки целиком без вопросов" },
+        { "flag": "-p", "text": "У mkdir: создать и недостающие папки по пути" },
+        { "flag": "--silent", "text": "Не печатать ошибки" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "copyfiles",
+      "name": "copyfiles",
+      "topic": "shell-scripts",
+      "bins": ["copyfiles"],
+      "about": "Копирует файлы по шаблону из скриптов package.json одинаково на всех системах.",
+      "default": { "say": "Копирует файлы по шаблону", "fx": ["write"] },
+      "flags": [
+        { "flag": "--up", "alias": ["-u"], "text": "Сколько первых папок пути отбросить при копировании" },
+        { "flag": "--flat", "alias": ["-f"], "text": "Сложить все файлы в одну папку, без вложенных" },
+        { "flag": "--all", "alias": ["-a"], "text": "Копировать и скрытые файлы с точкой в начале имени" },
+        { "flag": "--exclude", "alias": ["-e"], "text": "Какие файлы не копировать" },
+        { "flag": "--verbose", "alias": ["-V"], "text": "Печатать каждый скопированный файл" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "cpy",
+      "name": "cpy",
+      "topic": "shell-scripts",
+      "bins": ["cpy"],
+      "about": "Копирует файлы по шаблону из скриптов package.json.",
+      "default": { "say": "Копирует файлы по шаблону", "fx": ["write"] },
+      "flags": [
+        { "flag": "--flat", "text": "Сложить все файлы в одну папку, без вложенных" },
+        { "flag": "--cwd", "text": "Из какой папки считать пути" },
+        { "flag": "--rename", "text": "Новое имя для файлов" },
+        { "flag": "--no-overwrite", "text": "Не перезаписывать существующие файлы" },
+        { "flag": "--dot", "text": "Копировать и скрытые файлы с точкой в начале имени" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "cpx",
+      "name": "cpx",
+      "topic": "shell-scripts",
+      "bins": ["cpx", "cpx2"],
+      "about": "Копирует файлы по шаблону и умеет копировать заново при каждой правке.",
+      "default": { "say": "Копирует файлы по шаблону", "fx": ["write"] },
+      "flags": [
+        { "flag": "--watch", "alias": ["-w"], "text": "Копировать заново при каждой правке", "say": "и повторяет при каждой правке", "long": true },
+        { "flag": "--clean", "alias": ["-C"], "text": "Сначала удалить в папке назначения файлы, подходящие под шаблон", "say": "и сначала чистит папку назначения", "fx": ["delete"] },
+        { "flag": "--update", "alias": ["-u"], "text": "Не перезаписывать файлы, которые новее исходных" },
+        { "flag": "--verbose", "alias": ["-v"], "text": "Печатать каждый скопированный файл" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "echo",
+      "name": "echo",
+      "topic": "terminal",
+      "bins": ["echo", "printf"],
+      "about": "Печатает текст в терминал. Со знаком > пишет текст в файл.",
+      "default": { "say": "Печатает текст", "fx": ["read"] },
+      "sub": [
+        { "match": ">>", "part": "дописать в файл", "say": "Дописывает текст в конец файла", "fx": ["write"] },
+        { "match": ">", "part": "запись в файл", "say": "Записывает текст в файл, заменяя его содержимое", "fx": ["write"] }
+      ],
+      "flags": [
+        { "flag": "-e", "text": "Понимать спецсимволы вроде \\n - перенос строки" },
+        { "flag": "-n", "text": "Не добавлять перенос строки в конце" }
+      ],
+      "help": null
+    },
+    {
+      "id": "curl",
+      "name": "curl",
+      "topic": "terminal",
+      "bins": ["curl", "curl.exe"],
+      "about": "Отправляет запросы по адресу и печатает ответ: скачивает файлы, проверяет API. В старом PowerShell curl - короткое имя Invoke-WebRequest, настоящая программа - curl.exe.",
+      "default": { "say": "Отправляет запрос по адресу", "fx": ["network"] },
+      "flags": [
+        { "flag": "--output", "alias": ["-o"], "text": "Сохранить ответ в файл с указанным именем", "say": "и сохраняет ответ в файл", "fx": ["write"] },
+        { "flag": "--remote-name", "alias": ["-O"], "text": "Сохранить ответ в файл с именем из адреса", "say": "и сохраняет ответ в файл", "fx": ["write"] },
+        { "flag": "--location", "alias": ["-L"], "text": "Идти по перенаправлениям на другой адрес" },
+        { "flag": "--request", "alias": ["-X"], "text": "Метод запроса: GET, POST, PUT, DELETE" },
+        { "flag": "--data", "alias": ["-d"], "text": "Отправить данные в теле запроса (метод POST)", "say": "и отправляет данные" },
+        { "flag": "--form", "alias": ["-F"], "text": "Отправить форму, например с файлом" },
+        { "flag": "--header", "alias": ["-H"], "text": "Добавить заголовок запроса" },
+        { "flag": "--silent", "alias": ["-s"], "text": "Не показывать полоску загрузки и ошибки" },
+        { "flag": "--fail", "alias": ["-f"], "text": "Завершиться с ошибкой, если сервер ответил ошибкой (код 400 и выше)" },
+        { "flag": "--head", "alias": ["-I"], "text": "Запросить только заголовки ответа" },
+        { "flag": "--user", "alias": ["-u"], "text": "Логин и пароль для входа на сервер" },
+        { "flag": "--insecure", "alias": ["-k"], "text": "Не проверять сертификат сайта. Небезопасно" },
+        { "flag": "--retry", "text": "Сколько раз повторить при сбое сети" },
+        { "flag": "--verbose", "alias": ["-v"], "text": "Печатать запрос и ответ целиком, с заголовками" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "wget",
+      "name": "wget",
+      "topic": "terminal",
+      "bins": ["wget"],
+      "about": "Скачивает файлы по адресу. В старом PowerShell wget - короткое имя Invoke-WebRequest.",
+      "default": { "say": "Скачивает файл по адресу", "fx": ["network", "write"] },
+      "flags": [
+        { "flag": "-O", "alias": ["--output-document"], "text": "Под каким именем сохранить; дефис вместо имени - печатать в терминал" },
+        { "flag": "--quiet", "alias": ["-q"], "text": "Ничего не печатать" },
+        { "flag": "--continue", "alias": ["-c"], "text": "Докачать недокачанный файл" },
+        { "flag": "--recursive", "alias": ["-r"], "text": "Скачать и страницы, на которые есть ссылки" },
+        { "flag": "--mirror", "alias": ["-m"], "text": "Скачать сайт целиком для просмотра без сети" },
+        { "flag": "--directory-prefix", "alias": ["-P"], "text": "В какую папку сохранять" },
+        { "flag": "--timestamping", "alias": ["-N"], "text": "Не скачивать, если файл на диске не старше" },
+        { "flag": "--tries", "alias": ["-t"], "text": "Сколько раз пробовать при сбое" },
+        { "flag": "--no-check-certificate", "text": "Не проверять сертификат сайта. Небезопасно" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "open",
+      "name": "open / start",
+      "topic": "terminal",
+      "bins": ["open", "start", "xdg-open", "explorer", "open-cli"],
+      "about": "Открывает файл, папку или адрес в программе по умолчанию: open - macOS, start и explorer - Windows, xdg-open - Linux.",
+      "default": { "say": "Открывает файл, папку или адрес в программе по умолчанию", "fx": [] },
+      "help": null
+    },
+    {
+      "id": "ffmpeg",
+      "name": "FFmpeg",
+      "topic": "terminal",
+      "bins": ["ffmpeg"],
+      "about": "Программа для видео и звука: перекодирует, сжимает, режет, склеивает, меняет размер.",
+      "how": [
+        "Открывает входной файл из ключа -i и разбирает его на потоки: видео, звук, субтитры",
+        "Пропускает каждый поток через фильтры и кодек",
+        "Записывает результат в выходной файл - последний аргумент команды"
+      ],
+      "default": { "say": "Обрабатывает видео или звук и записывает результат в файл", "fx": ["write"] },
+      "flags": [
+        { "flag": "-i", "text": "Входной файл" },
+        { "flag": "-y", "text": "Перезаписывать выходной файл без вопроса", "say": "без вопроса о перезаписи" },
+        { "flag": "-n", "text": "Никогда не перезаписывать выходной файл" },
+        { "flag": "-c", "text": "Кодек для всех потоков; -c copy - без перекодирования, быстро и без потерь" },
+        { "flag": "-c:v", "alias": ["-vcodec"], "text": "Кодек видео, например libx264 или libvpx-vp9" },
+        { "flag": "-c:a", "alias": ["-acodec"], "text": "Кодек звука, например aac или libopus" },
+        { "flag": "-crf", "text": "Качество видео: меньше число - лучше и тяжелее (для x264 обычно 18-28)" },
+        { "flag": "-preset", "text": "Скорость сжатия: медленнее - меньше файл при том же качестве" },
+        { "flag": "-vf", "text": "Фильтры картинки: размер, обрезка, поворот, например scale=1280:-2" },
+        { "flag": "-ss", "text": "С какого момента начать, например 00:01:30" },
+        { "flag": "-t", "text": "Сколько секунд взять" },
+        { "flag": "-an", "text": "Убрать звук" },
+        { "flag": "-r", "text": "Частота кадров" },
+        { "flag": "-b:v", "text": "Битрейт видео, например 2M" },
+        { "flag": "-movflags", "text": "+faststart - видео начнёт играть в браузере до полной загрузки" },
+        { "flag": "-hide_banner", "text": "Не печатать сведения о сборке ffmpeg" }
+      ],
+      "help": "-h"
+    },
+    {
+      "id": "ffprobe",
+      "name": "ffprobe",
+      "topic": "terminal",
+      "bins": ["ffprobe"],
+      "about": "Показывает, что внутри видео или звукового файла: длительность, кодеки, размер, битрейт.",
+      "default": { "say": "Показывает сведения о видео или звуковом файле", "fx": ["read"] },
+      "flags": [
+        { "flag": "-v", "text": "Сколько печатать, например -v error - только ошибки" },
+        { "flag": "-show_format", "text": "Показать сведения о файле целиком" },
+        { "flag": "-show_streams", "text": "Показать сведения о каждом потоке" },
+        { "flag": "-of", "alias": ["-print_format"], "text": "Формат вывода, например json" }
+      ],
+      "help": "-h"
+    },
+    {
+      "id": "svgo",
+      "name": "SVGO",
+      "topic": "frontend",
+      "bins": ["svgo"],
+      "about": "Сжимает SVG-картинки: убирает лишнее из кода, не меняя вид.",
+      "default": { "say": "Сжимает SVG-картинки; без -o перезаписывает исходные файлы", "fx": ["write"] },
+      "flags": [
+        { "flag": "--output", "alias": ["-o"], "text": "Куда сохранить результат вместо исходного файла" },
+        { "flag": "--folder", "alias": ["-f"], "text": "Сжать все SVG в папке" },
+        { "flag": "--recursive", "alias": ["-r"], "text": "И во вложенных папках" },
+        { "flag": "--precision", "alias": ["-p"], "text": "Сколько знаков после запятой оставлять в числах" },
+        { "flag": "--config", "text": "Какой файл настроек использовать вместо svgo.config" },
+        { "flag": "--multipass", "text": "Сжимать в несколько проходов, пока файл уменьшается" },
+        { "flag": "--pretty", "text": "Оставить код читаемым, с отступами" },
+        { "flag": "--quiet", "alias": ["-q"], "text": "Печатать только ошибки" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "sharp",
+      "name": "sharp-cli",
+      "topic": "frontend",
+      "bins": ["sharp"],
+      "about": "Быстро меняет размер и формат картинок: JPEG, PNG, WebP, AVIF.",
+      "default": { "say": "Меняет размер или формат картинок и сохраняет результат", "fx": ["write"] },
+      "flags": [
+        { "flag": "--input", "alias": ["-i"], "text": "Какие картинки брать" },
+        { "flag": "--output", "alias": ["-o"], "text": "Куда сохранить результат" },
+        { "flag": "--format", "alias": ["-f"], "text": "В какой формат перевести: webp, avif, jpeg, png" },
+        { "flag": "--quality", "alias": ["-q"], "text": "Качество от 1 до 100" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "imagemin",
+      "name": "imagemin",
+      "topic": "frontend",
+      "bins": ["imagemin"],
+      "about": "Сжимает картинки подключёнными плагинами: mozjpeg, pngquant, svgo и другими.",
+      "default": { "say": "Сжимает картинки", "fx": ["write"] },
+      "flags": [
+        { "flag": "--out-dir", "alias": ["-o"], "text": "Куда сохранить сжатые картинки" },
+        { "flag": "--plugin", "alias": ["-p"], "text": "Каким плагином сжимать" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "gltf-transform",
+      "name": "glTF Transform",
+      "topic": "frontend",
+      "bins": ["gltf-transform"],
+      "about": "Обрабатывает 3D-модели в формате glTF и GLB: сжимает геометрию и текстуры, убирает лишнее, проверяет файл.",
+      "how": [
+        "Читает модель .glb или .gltf со всеми текстурами",
+        "Прогоняет её через выбранные шаги: склейка повторов, упрощение сетки, сжатие",
+        "Записывает результат в новый файл - второй аргумент команды"
+      ],
+      "default": { "say": "Обрабатывает 3D-модель и сохраняет результат в новый файл", "fx": ["write"] },
+      "sub": [
+        { "match": "^(?:inspect|validate)(?:\\s|$)", "part": "проверка", "say": "Показывает, из чего состоит 3D-модель, или проверяет её на ошибки", "fx": ["read"] },
+        { "match": "^optimize(?:\\s|$)", "part": "полное сжатие", "say": "Сжимает 3D-модель целиком: геометрию, текстуры, повторы и лишнее", "fx": ["write"] },
+        { "match": "^(?:draco|meshopt|quantize)(?:\\s|$)", "part": "сжатие геометрии", "say": "Сжимает геометрию 3D-модели", "fx": ["write"] },
+        { "match": "^(?:webp|avif|ktx|uastc|etc1s|resize|png|jpeg)(?:\\s|$)", "part": "текстуры", "say": "Пережимает или уменьшает текстуры 3D-модели", "fx": ["write"] },
+        { "match": "^(?:simplify|weld|dedup|prune|flatten|join|instance|palette|center|merge|copy|partition|resample|sparse)(?:\\s|$)", "part": "перестройка", "say": "Перестраивает 3D-модель и сохраняет в новый файл", "fx": ["write"] }
+      ],
+      "flags": [
+        { "flag": "--compress", "text": "Как сжимать геометрию: draco, meshopt, quantize или false" },
+        { "flag": "--texture-compress", "text": "Как сжимать текстуры: webp, avif, ktx2, auto или false" },
+        { "flag": "--texture-size", "text": "Наибольший размер текстуры в пикселях, например 1024" },
+        { "flag": "--simplify", "text": "Упрощать ли сетку (false - не упрощать)" },
+        { "flag": "--simplify-ratio", "text": "Какую долю треугольников оставить, например 0.5" },
+        { "flag": "--simplify-error", "text": "Насколько сильно можно исказить форму при упрощении" },
+        { "flag": "--instance", "text": "Заменять одинаковые объекты копиями одного" },
+        { "flag": "--join", "text": "Склеивать соседние объекты с одним материалом" },
+        { "flag": "--flatten", "text": "Убирать вложенность объектов в сцене" },
+        { "flag": "--palette", "text": "Сводить простые материалы в одну текстуру-палитру" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "gltfpack",
+      "name": "gltfpack",
+      "topic": "frontend",
+      "bins": ["gltfpack"],
+      "about": "Сжимает 3D-модели glTF и GLB для быстрой загрузки в браузере: геометрию, анимации и текстуры.",
+      "default": { "say": "Сжимает 3D-модель и сохраняет результат в новый файл", "fx": ["write"] },
+      "flags": [
+        { "flag": "-i", "text": "Входной файл" },
+        { "flag": "-o", "text": "Выходной файл" },
+        { "flag": "-c", "text": "Сжать геометрию алгоритмом meshopt" },
+        { "flag": "-cc", "text": "Сжать геометрию сильнее, ценой времени распаковки" },
+        { "flag": "-tc", "text": "Перевести текстуры в формат KTX2: меньше памяти видеокарты" },
+        { "flag": "-tw", "text": "Перевести текстуры в формат WebP" },
+        { "flag": "-tq", "text": "Качество текстур от 1 до 10" },
+        { "flag": "-si", "text": "Упростить сетку, оставив указанную долю треугольников, например 0.5" },
+        { "flag": "-sa", "text": "Упрощать сильнее, даже ценой искажения формы" },
+        { "flag": "-kn", "text": "Сохранить объекты с именами, не склеивать их" },
+        { "flag": "-km", "text": "Сохранить все материалы, даже неиспользуемые" },
+        { "flag": "-noq", "text": "Не сжимать числа в геометрии: файл больше, точность выше" },
+        { "flag": "-v", "text": "Печатать подробности" }
+      ],
+      "help": "-h"
+    },
+    {
+      "id": "vercel",
+      "name": "Vercel CLI",
+      "topic": "deploy",
+      "bins": ["vercel", "vc"],
+      "about": "Командная строка хостинга Vercel: выкладывает сайт, запускает его локально и управляет настройками проекта.",
+      "how": [
+        "Отправляет файлы проекта на серверы Vercel или берёт готовую сборку при --prebuilt",
+        "Vercel собирает сайт у себя командой сборки из настроек",
+        "Без --prod сайт получает отдельный адрес для проверки, а рабочий сайт не меняется",
+        "С --prod новая версия сразу становится рабочим сайтом"
+      ],
+      "default": { "say": "Выкладывает проект на Vercel по отдельному адресу для проверки", "fx": ["network", "danger"], "danger": true },
+      "sub": [
+        { "match": "^dev(?:\\s|$)", "part": "локальный запуск", "say": "Запускает сайт локально так, как он работает на Vercel", "fx": ["read"], "long": true, "url": true },
+        { "match": "^build(?:\\s|$)", "part": "сборка", "say": "Собирает проект локально в папку .vercel/output", "fx": ["write"] },
+        { "match": "^pull(?:\\s|$)", "part": "настройки", "say": "Скачивает настройки и переменные окружения проекта в папку .vercel", "fx": ["write", "network"] },
+        { "match": "^link(?:\\s|$)", "part": "привязка", "say": "Привязывает папку к проекту на Vercel", "fx": ["write", "network"] },
+        { "match": "^env\\s+pull(?:\\s|$)", "part": "переменные в файл", "say": "Скачивает переменные окружения проекта в файл .env", "fx": ["write", "network"] },
+        { "match": "^env\\s+(?:add|rm|remove|update)(?:\\s|$)", "part": "переменные", "say": "Меняет переменные окружения проекта на Vercel", "fx": ["network", "danger"], "danger": true },
+        { "match": "^env(?:\\s|$)", "part": "переменные", "say": "Показывает переменные окружения проекта", "fx": ["read", "network"] },
+        { "match": "^(?:login|logout|whoami|switch|teams)(?:\\s|$)", "part": "аккаунт", "say": "Входит в аккаунт Vercel, выходит или показывает, кто вошёл", "fx": ["network"] },
+        { "match": "^(?:ls|list|inspect|logs|domains\\s+ls)(?:\\s|$)", "part": "просмотр", "say": "Показывает выкладки, их состояние или журнал", "fx": ["read", "network"] },
+        { "match": "^(?:rm|remove)(?:\\s|$)", "part": "удаление", "say": "Удаляет выкладку или проект на Vercel", "fx": ["network", "delete", "danger"], "danger": true },
+        { "match": "^(?:promote|rollback|redeploy|alias)(?:\\s|$)", "part": "смена рабочей версии", "say": "Меняет, какая выкладка работает как рабочий сайт", "fx": ["network", "danger"], "danger": true },
+        { "match": "^init(?:\\s|$)", "part": "пример", "say": "Создаёт проект из примера Vercel", "fx": ["write", "network"] },
+        { "match": "(?:^|\\s)--prod(?:\\s|$)", "part": "рабочий сайт", "say": "Выкладывает проект на Vercel сразу в рабочую версию сайта, которую видят все", "fx": ["network", "danger"], "danger": true }
+      ],
+      "flags": [
+        { "flag": "--prod", "text": "Выложить сразу в рабочую версию сайта, а не на адрес для проверки" },
+        { "flag": "--prebuilt", "text": "Выложить готовую сборку из .vercel/output, не собирая на Vercel" },
+        { "flag": "--yes", "alias": ["-y"], "text": "Не задавать вопросов" },
+        { "flag": "--scope", "alias": ["-S"], "text": "От имени какой команды (team) работать" },
+        { "flag": "--cwd", "text": "Какую папку выкладывать" },
+        { "flag": "--force", "alias": ["-f"], "text": "Выложить заново, даже если ничего не поменялось" },
+        { "flag": "--env", "alias": ["-e"], "text": "Задать переменную окружения для этой выкладки" },
+        { "flag": "--build-env", "alias": ["-b"], "text": "Задать переменную окружения для сборки" },
+        { "flag": "--archive", "text": "Отправить файлы одним архивом: быстрее, когда файлов много" },
+        { "flag": "--debug", "alias": ["-d"], "text": "Печатать подробности" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "netlify",
+      "name": "Netlify CLI",
+      "topic": "deploy",
+      "bins": ["netlify", "ntl"],
+      "about": "Командная строка хостинга Netlify: выкладывает сайт, запускает его локально вместе с функциями и управляет настройками.",
+      "default": { "say": "Выполняет команду Netlify", "fx": ["network"] },
+      "sub": [
+        { "match": "^dev(?:\\s|$)", "part": "локальный запуск", "say": "Запускает сайт локально вместе с функциями и переадресациями Netlify", "fx": ["read"], "long": true, "url": true },
+        { "match": "^serve(?:\\s|$)", "part": "сборка и запуск", "say": "Собирает сайт и запускает собранное локально", "fx": ["write"], "long": true, "url": true },
+        { "match": "^build(?:\\s|$)", "part": "сборка", "say": "Собирает сайт локально так же, как это сделает Netlify", "fx": ["write"] },
+        { "match": "^deploy\\b.*\\s--prod(?:\\s|$)", "part": "рабочий сайт", "say": "Выкладывает сайт на Netlify сразу в рабочую версию, которую видят все", "fx": ["network", "danger"], "danger": true },
+        { "match": "^deploy(?:\\s|$)", "part": "черновик", "say": "Выкладывает сайт на Netlify по отдельному черновому адресу для проверки", "fx": ["network", "danger"], "danger": true },
+        { "match": "^(?:init|link)(?:\\s|$)", "part": "привязка", "say": "Привязывает папку к сайту на Netlify", "fx": ["write", "network"] },
+        { "match": "^unlink(?:\\s|$)", "part": "отвязка", "say": "Отвязывает папку от сайта на Netlify", "fx": ["write"] },
+        { "match": "^(?:login|logout|status|switch)(?:\\s|$)", "part": "аккаунт", "say": "Входит в аккаунт Netlify, выходит или показывает, к чему привязана папка", "fx": ["network"] },
+        { "match": "^env:(?:set|unset|import|clone)(?:\\s|$)", "part": "переменные", "say": "Меняет переменные окружения сайта на Netlify", "fx": ["network", "danger"], "danger": true },
+        { "match": "^env:(?:list|get)(?:\\s|$)", "part": "переменные", "say": "Показывает переменные окружения сайта", "fx": ["read", "network"] },
+        { "match": "^functions:serve(?:\\s|$)", "part": "функции", "say": "Запускает функции Netlify локально", "fx": ["read"], "long": true, "url": true },
+        { "match": "^functions:create(?:\\s|$)", "part": "новая функция", "say": "Создаёт заготовку функции", "fx": ["write", "network"] },
+        { "match": "^sites:delete(?:\\s|$)", "part": "удаление сайта", "say": "УДАЛЯЕТ сайт на Netlify", "fx": ["network", "delete", "danger"], "danger": true },
+        { "match": "^(?:sites:list|open)(?:\\s|$)", "part": "просмотр", "say": "Показывает сайты аккаунта или открывает панель Netlify", "fx": ["read", "network"] },
+        { "match": "^(?:logs|watch)(?:\\s|$)", "part": "журнал", "say": "Показывает журнал или ход выкладки в реальном времени", "fx": ["read", "network"], "long": true }
+      ],
+      "flags": [
+        { "flag": "--prod", "text": "Выложить сразу в рабочую версию сайта, а не на черновой адрес" },
+        { "flag": "--dir", "alias": ["-d"], "text": "Какую папку выкладывать, например dist" },
+        { "flag": "--functions", "alias": ["-f"], "text": "Где лежат функции" },
+        { "flag": "--message", "alias": ["-m"], "text": "Подпись к выкладке" },
+        { "flag": "--alias", "text": "Своё имя для чернового адреса" },
+        { "flag": "--site", "text": "Какой сайт: имя или номер" },
+        { "flag": "--build", "text": "Перед выкладкой собрать сайт" },
+        { "flag": "--open", "alias": ["-o"], "text": "Открыть сайт в браузере после выкладки" },
+        { "flag": "--port", "alias": ["-p"], "text": "У dev: на каком порту открыть" },
+        { "flag": "--offline", "text": "У dev: не обращаться к Netlify" },
+        { "flag": "--context", "text": "Какой набор переменных взять: production, deploy-preview, dev" },
+        { "flag": "--json", "text": "Напечатать результат в формате JSON" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "firebase",
+      "name": "Firebase CLI",
+      "topic": "deploy",
+      "bins": ["firebase"],
+      "about": "Командная строка Firebase: выкладывает сайт, функции и правила базы, запускает всё это локально в эмуляторах.",
+      "default": { "say": "Выполняет команду Firebase", "fx": ["network"] },
+      "sub": [
+        { "match": "^deploy(?:\\s|$)", "part": "выкладка", "say": "Выкладывает в Firebase сайт, функции и правила из firebase.json", "fx": ["network", "danger"], "danger": true },
+        { "match": "^hosting:channel:deploy(?:\\s|$)", "part": "адрес для проверки", "say": "Выкладывает сайт на временный адрес для проверки", "fx": ["network", "danger"], "danger": true },
+        { "match": "^emulators:start(?:\\s|$)", "part": "эмуляторы", "say": "Запускает локальные копии сервисов Firebase: базу, функции, вход", "fx": ["read"], "long": true, "url": true },
+        { "match": "^emulators:exec(?:\\s|$)", "part": "команда в эмуляторах", "say": "Поднимает эмуляторы, выполняет команду (например, тесты) и останавливает их", "fx": ["read"] },
+        { "match": "^serve(?:\\s|$)", "part": "локальный запуск", "say": "Запускает сайт и функции локально", "fx": ["read"], "long": true, "url": true },
+        { "match": "^init(?:\\s|$)", "part": "подключение", "say": "Подключает Firebase к папке: задаёт вопросы и создаёт firebase.json", "fx": ["write", "network"] },
+        { "match": "^use(?:\\s|$)", "part": "выбор проекта", "say": "Выбирает, с каким проектом Firebase работать", "fx": ["write"] },
+        { "match": "^(?:login|logout)(?:\\s|$)", "part": "аккаунт", "say": "Входит в аккаунт Google или выходит из него", "fx": ["network"] },
+        { "match": "^(?:projects:list|apps:list|functions:log|hosting:channel:list)(?:\\s|$)", "part": "просмотр", "say": "Показывает проекты, приложения или журнал функций", "fx": ["read", "network"] },
+        { "match": "^(?:functions:delete|firestore:delete|database:remove|hosting:disable)(?:\\s|$)", "part": "удаление", "say": "УДАЛЯЕТ функции, данные или выключает сайт в Firebase", "fx": ["network", "delete", "danger"], "danger": true },
+        { "match": "^functions:shell(?:\\s|$)", "part": "консоль функций", "say": "Открывает консоль, где функции можно вызывать вручную", "fx": [], "long": true }
+      ],
+      "flags": [
+        { "flag": "--only", "text": "Выложить только часть: hosting, functions, firestore:rules" },
+        { "flag": "--except", "text": "Выложить всё, кроме указанного" },
+        { "flag": "--project", "alias": ["-P"], "text": "С каким проектом Firebase работать" },
+        { "flag": "--message", "alias": ["-m"], "text": "Подпись к выкладке" },
+        { "flag": "--force", "alias": ["-f"], "text": "Не спрашивать подтверждения, в том числе на удаление" },
+        { "flag": "--import", "text": "У эмуляторов: загрузить сохранённые данные" },
+        { "flag": "--export-on-exit", "text": "У эмуляторов: сохранить данные при остановке" },
+        { "flag": "--non-interactive", "text": "Не задавать вопросов" },
+        { "flag": "--debug", "text": "Печатать подробности" },
+        { "flag": "--json", "text": "Напечатать результат в формате JSON" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "wrangler",
+      "name": "Wrangler",
+      "topic": "deploy",
+      "bins": ["wrangler"],
+      "about": "Командная строка Cloudflare Workers: запускает воркер локально, выкладывает его и управляет базами D1, хранилищами KV и R2.",
+      "default": { "say": "Выполняет команду Cloudflare Wrangler", "fx": ["network"] },
+      "sub": [
+        { "match": "^dev(?:\\s|$)", "part": "локальный запуск", "say": "Запускает Cloudflare Worker локально", "fx": ["read"], "long": true, "url": true },
+        { "match": "^(?:deploy|publish)(?:\\s|$)", "part": "выкладка", "say": "Выкладывает воркер в Cloudflare - его сразу видят пользователи", "fx": ["network", "danger"], "danger": true },
+        { "match": "^versions\\s+upload(?:\\s|$)", "part": "новая версия", "say": "Загружает новую версию воркера, не включая её", "fx": ["network"] },
+        { "match": "^versions\\s+deploy(?:\\s|$)", "part": "включение версии", "say": "Включает загруженную версию воркера для пользователей", "fx": ["network", "danger"], "danger": true },
+        { "match": "^rollback(?:\\s|$)", "part": "откат", "say": "Возвращает прошлую версию воркера", "fx": ["network", "danger"], "danger": true },
+        { "match": "^delete(?:\\s|$)", "part": "удаление", "say": "УДАЛЯЕТ воркер из Cloudflare", "fx": ["network", "delete", "danger"], "danger": true },
+        { "match": "^pages\\s+dev(?:\\s|$)", "part": "Pages локально", "say": "Запускает сайт Cloudflare Pages локально", "fx": ["read"], "long": true, "url": true },
+        { "match": "^pages\\s+(?:deploy|publish)(?:\\s|$)", "part": "выкладка Pages", "say": "Выкладывает папку на Cloudflare Pages", "fx": ["network", "danger"], "danger": true },
+        { "match": "^tail(?:\\s|$)", "part": "журнал", "say": "Показывает журнал работающего воркера в реальном времени", "fx": ["read", "network"], "long": true },
+        { "match": "^d1\\s+(?:migrations\\s+apply|execute)\\b.*\\s--remote(?:\\s|$)", "part": "облачная база", "say": "Меняет НАСТОЯЩУЮ базу D1 в Cloudflare", "fx": ["db", "network", "danger"], "danger": true },
+        { "match": "^d1\\s+migrations\\s+apply(?:\\s|$)", "part": "миграции", "say": "Применяет миграции к базе D1 (без --remote - к локальной копии)", "fx": ["db"] },
+        { "match": "^d1\\s+execute(?:\\s|$)", "part": "SQL", "say": "Выполняет SQL на базе D1 (без --remote - на локальной копии)", "fx": ["db"] },
+        { "match": "^d1\\s+migrations\\s+create(?:\\s|$)", "part": "новая миграция", "say": "Создаёт пустой файл миграции D1", "fx": ["write"] },
+        { "match": "^secret\\s+(?:put|delete|bulk)(?:\\s|$)", "part": "секреты", "say": "Меняет секретные переменные воркера в Cloudflare", "fx": ["network", "danger"], "danger": true },
+        { "match": "^types(?:\\s|$)", "part": "типы", "say": "Создаёт типы TypeScript для привязок из настроек wrangler", "fx": ["write"] },
+        { "match": "^init(?:\\s|$)", "part": "новый проект", "say": "Создаёт новый проект воркера", "fx": ["write", "network"] },
+        { "match": "^(?:login|logout|whoami)(?:\\s|$)", "part": "аккаунт", "say": "Входит в аккаунт Cloudflare, выходит или показывает, кто вошёл", "fx": ["network"] }
+      ],
+      "flags": [
+        { "flag": "--env", "alias": ["-e"], "text": "Какое окружение из настроек взять, например staging" },
+        { "flag": "--remote", "text": "Работать с настоящими ресурсами в Cloudflare, а не с локальной копией", "fx": ["network"] },
+        { "flag": "--local", "text": "Работать с локальной копией ресурсов" },
+        { "flag": "--dry-run", "text": "Собрать и проверить, ничего не выкладывая", "say": "понарошку, без выкладки", "fx": ["read"], "fxRemove": ["danger"], "danger": false },
+        { "flag": "--port", "text": "У dev: на каком порту открыть (по умолчанию 8787)" },
+        { "flag": "--ip", "text": "У dev: на каком адресе слушать" },
+        { "flag": "--minify", "text": "Сжать код перед выкладкой" },
+        { "flag": "--name", "text": "Имя воркера" },
+        { "flag": "--config", "alias": ["-c"], "text": "Какой файл настроек использовать вместо wrangler.toml или wrangler.jsonc" },
+        { "flag": "--compatibility-date", "text": "С поведением какой даты работать" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "surge",
+      "name": "Surge",
+      "topic": "deploy",
+      "bins": ["surge"],
+      "about": "Простой хостинг для статических сайтов: выкладывает папку одной командой.",
+      "default": { "say": "Выкладывает папку на хостинг Surge - сайт сразу видят все", "fx": ["network", "danger"], "danger": true },
+      "sub": [
+        { "match": "^(?:list|ls)(?:\\s|$)", "part": "список", "say": "Показывает ваши сайты на Surge", "fx": ["read", "network"] },
+        { "match": "^teardown(?:\\s|$)", "part": "удаление", "say": "УДАЛЯЕТ сайт с Surge", "fx": ["network", "delete", "danger"], "danger": true },
+        { "match": "^(?:login|logout|whoami|token)(?:\\s|$)", "part": "аккаунт", "say": "Входит в аккаунт Surge, выходит или показывает, кто вошёл", "fx": ["network"] }
+      ],
+      "flags": [
+        { "flag": "--project", "alias": ["-p"], "text": "Какую папку выкладывать" },
+        { "flag": "--domain", "alias": ["-d"], "text": "На какой адрес выкладывать, например my-app.surge.sh" }
+      ],
+      "help": "--help"
+    }
+  ]
+}

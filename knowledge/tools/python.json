@@ -1,0 +1,565 @@
+{
+  "tools": [
+    {
+      "id": "python",
+      "name": "Python",
+      "topic": "python",
+      "bins": [ "python", "python3", "py" ],
+      "runsFile": true,
+      "about": "Интерпретатор Python: читает программу на Python и сразу выполняет её строка за строкой.",
+      "how": [ "Ищет Python: в активном виртуальном окружении, а без него - установленный в системе", "С именем файла - выполняет этот файл; с -m - находит модуль среди установленных пакетов и запускает его", "Подключает пакеты из окружения через import" ],
+      "default": { "say": "Запускает программу на Python", "fx": [] },
+      "sub": [
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+pytest\\b", "part": "тесты", "say": "Запускает тесты Python через pytest", "fx": [ "read" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+unittest\\b", "part": "тесты", "say": "Запускает тесты Python через встроенный unittest", "fx": [ "read" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+pip\\s+install\\b", "part": "установка пакетов", "say": "Устанавливает Python-пакеты в текущее окружение", "fx": [ "install", "network" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+pip\\s+uninstall\\b", "part": "удаление пакетов", "say": "Удаляет Python-пакеты из текущего окружения", "fx": [ "install", "delete" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+pip\\s+(?:list|show|freeze|check)\\b", "part": "пакеты", "say": "Показывает установленные Python-пакеты", "fx": [ "read" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+pip\\b", "part": "pip", "say": "Управляет Python-пакетами через pip", "fx": [ "install" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+venv\\b", "part": "виртуальное окружение", "say": "Создаёт виртуальное окружение - отдельную папку с Python и пакетами только этого проекта", "fx": [ "write" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+http\\.server\\b", "part": "раздача папки", "say": "Раздаёт текущую папку как сайт на локальном адресе", "fx": [], "long": true, "url": true },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+ruff\\s+check\\b(?=.*\\s(?:--fix)(?:[\\s=:]|$))", "part": "линтер с исправлением", "say": "Проверяет Python-код линтером Ruff и сам исправляет, что может", "fx": [ "write" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+ruff\\s+format\\b(?=.*\\s(?:--check|--diff|--check-only|-c)(?:\\s|$))", "part": "проверка формата", "say": "Проверяет форматирование Python-кода, ничего не меняя", "fx": [ "read" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+ruff\\s+format\\b", "part": "форматирование", "say": "Переформатирует Python-код", "fx": [ "write" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+ruff\\b", "part": "линтер", "say": "Проверяет Python-код линтером Ruff", "fx": [ "read" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+(?:black|isort)\\b(?=.*\\s(?:--check|--diff|--check-only|-c)(?:\\s|$))", "part": "проверка формата", "say": "Проверяет форматирование Python-кода, ничего не меняя", "fx": [ "read" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+(?:black|isort|autopep8|yapf)\\b", "part": "форматирование", "say": "Переформатирует Python-код", "fx": [ "write" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+(?:mypy|pyright|flake8|pylint|bandit|pyflakes)\\b", "part": "проверка кода", "say": "Проверяет Python-код: типы, стиль или уязвимости", "fx": [ "read" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+(?:uvicorn|gunicorn|hypercorn|flask\\s+run|streamlit\\s+run|fastapi\\s+(?:dev|run))\\b", "part": "сервер", "say": "Запускает веб-сервер для приложения на Python", "fx": [], "long": true, "url": true },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+(?:jupyter|notebook|jupyterlab)\\b", "part": "Jupyter", "say": "Открывает Jupyter - блокноты с кодом и результатами в браузере", "fx": [], "long": true, "url": true },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+build\\b", "part": "сборка пакета", "say": "Собирает Python-пакет в папку dist: архив исходников и wheel", "fx": [ "write" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+twine\\s+upload\\b", "part": "публикация", "say": "Публикует пакет на PyPI - его смогут поставить все", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+alembic\\s+upgrade\\b", "part": "миграции", "say": "Применяет миграции базы данных (Alembic)", "fx": [ "db" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-m\\s+\\S+", "part": "модуль", "say": "Запускает установленный модуль Python как программу", "fx": [] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*-c\\s", "part": "код из команды", "say": "Выполняет короткий код Python прямо из команды", "fx": [] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+runserver\\b", "part": "сервер Django", "say": "Запускает сервер разработки Django: правки в коде подхватываются сразу", "fx": [], "long": true, "url": true },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+makemigrations\\b", "part": "новые миграции", "say": "Создаёт файлы миграций Django по изменениям в моделях", "fx": [ "write" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+migrate\\b", "part": "миграции", "say": "Применяет миграции Django к базе данных", "fx": [ "db" ], "how": [ "Читает настройки базы из settings.py", "Смотрит в таблицу django_migrations, какие миграции уже применены", "Применяет недостающие по порядку и отмечает их в этой таблице" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+showmigrations\\b", "part": "миграции", "say": "Показывает миграции Django и какие из них применены", "fx": [ "read" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+test\\b", "part": "тесты Django", "say": "Запускает тесты Django на отдельной временной базе", "fx": [ "read" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+(?:shell|dbshell)\\b", "part": "консоль Django", "say": "Открывает консоль Python или базы с загруженным проектом Django", "fx": [], "long": true },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+createsuperuser\\b", "part": "администратор", "say": "Создаёт администратора сайта Django: спросит имя и пароль", "fx": [ "db" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+collectstatic\\b", "part": "статика", "say": "Собирает статические файлы (CSS, JS, картинки) в одну папку для выкладки", "fx": [ "write" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+flush\\b", "part": "очистка базы", "say": "Удаляет все данные из базы, оставляя таблицы", "fx": [ "db", "delete", "danger" ], "danger": true },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+loaddata\\b", "part": "загрузка данных", "say": "Загружает данные в базу из файла", "fx": [ "db" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+dumpdata\\b", "part": "выгрузка данных", "say": "Выгружает данные базы в JSON", "fx": [ "read" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+(?:startapp|startproject)\\b", "part": "новое приложение", "say": "Создаёт заготовку нового приложения Django", "fx": [ "write" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+check\\b", "part": "проверка", "say": "Проверяет проект Django на ошибки в настройках", "fx": [ "read" ] },
+        { "match": "^(?:(?:-[BbdEhiIOqsSuvVx]+|-X\\s+\\S+|-W\\s+\\S+|-\\d+(?:\\.\\d+)?)\\s+)*(?:\\S*[\\\\/])?manage\\.py\\s+", "part": "команда Django", "say": "Выполняет команду Django через manage.py", "fx": [] },
+        { "match": "^(?:-V|--version)\\b", "part": "версия", "say": "Печатает версию Python", "fx": [ "read" ] }
+      ],
+      "flags": [
+        { "flag": "-m", "text": "Запустить модуль по имени, а не файл: python -m pytest" },
+        { "flag": "-c", "text": "Выполнить код, написанный прямо в команде" },
+        { "flag": "-u", "text": "Печатать вывод сразу, без буфера - полезно для журналов" },
+        { "flag": "-X", "text": "Особые настройки: -X utf8 - работать в UTF-8 независимо от системы" },
+        { "flag": "-i", "text": "После выполнения остаться в интерактивной консоли Python", "long": true },
+        { "flag": "-O", "text": "Выключить проверки assert" },
+        { "flag": "-B", "text": "Не записывать файлы .pyc в папки __pycache__" },
+        { "flag": "-I", "text": "Изолированный режим: не брать пакеты из папки пользователя и текущей папки" },
+        { "flag": "--version", "alias": [ "-V" ], "text": "Показать версию Python" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "pip",
+      "name": "pip",
+      "topic": "python",
+      "bins": [ "pip", "pip3" ],
+      "about": "Программа, которая ставит Python-пакеты из каталога PyPI.",
+      "how": [ "Определяет, в какое окружение ставить: в активное виртуальное или в системный Python", "Находит пакет на PyPI и подбирает версию под ограничения", "Скачивает его и все его зависимости", "Раскладывает файлы в папку site-packages окружения" ],
+      "default": { "say": "Управляет Python-пакетами", "fx": [ "install" ] },
+      "sub": [
+        { "match": "^install\\b(?=.*\\s(?:-r|--requirement)(?:[\\s=:]|$))", "part": "установка по списку", "say": "Устанавливает все Python-пакеты из файла со списком, обычно requirements.txt", "fx": [ "install", "network" ] },
+        { "match": "^install\\b", "part": "установка", "say": "Устанавливает Python-пакеты в текущее окружение", "fx": [ "install", "network" ] },
+        { "match": "^uninstall\\b", "part": "удаление", "say": "Удаляет Python-пакеты из текущего окружения", "fx": [ "install", "delete" ] },
+        { "match": "^(?:list|show|freeze|check)\\b", "part": "просмотр", "say": "Показывает установленные пакеты: список, версии, зависимости", "fx": [ "read" ] },
+        { "match": "^download\\b", "part": "скачивание", "say": "Скачивает пакеты в папку, не устанавливая их", "fx": [ "network", "write" ] },
+        { "match": "^cache\\s+(?:purge|remove)\\b", "part": "очистка кэша", "say": "Удаляет скачанные раньше пакеты из кэша pip", "fx": [ "delete" ] },
+        { "match": "^config\\b", "part": "настройки", "say": "Показывает или меняет настройки pip", "fx": [] }
+      ],
+      "flags": [
+        { "flag": "--requirement", "alias": [ "-r" ], "text": "Взять список пакетов из файла: -r requirements.txt" },
+        { "flag": "--editable", "alias": [ "-e" ], "text": "Поставить свой пакет из папки так, чтобы правки в коде были видны без переустановки" },
+        { "flag": "--upgrade", "alias": [ "-U" ], "text": "Обновить пакет, если он уже стоит" },
+        { "flag": "--user", "text": "Поставить в папку пользователя, а не для всей системы" },
+        { "flag": "--no-cache-dir", "text": "Не брать и не сохранять пакеты в кэш" },
+        { "flag": "--index-url", "alias": [ "-i" ], "text": "Брать пакеты из другого каталога вместо PyPI" },
+        { "flag": "--pre", "text": "Разрешить предварительные версии (alpha, beta)" },
+        { "flag": "--yes", "alias": [ "-y" ], "text": "В uninstall - не спрашивать подтверждение" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "pytest",
+      "name": "pytest",
+      "topic": "testing",
+      "bins": [ "pytest", "py.test" ],
+      "about": "Программа, которая запускает тесты на Python.",
+      "how": [ "Ищет файлы test_*.py и *_test.py в текущей папке и ниже", "Внутри берёт функции, имя которых начинается с test_, и классы Test*", "Готовит фикстуры - данные и объекты, которые тест просит в аргументах", "Запускает каждый тест: если assert не выполнился, тест упал", "Печатает итог и подробности по упавшим тестам" ],
+      "default": { "say": "Запускает тесты Python", "fx": [ "read" ] },
+      "flags": [
+        { "flag": "-k", "text": "Запустить только тесты, имя которых подходит под выражение: -k \"login and not slow\"" },
+        { "flag": "-x", "alias": [ "--exitfirst" ], "text": "Остановиться на первом упавшем тесте" },
+        { "flag": "--verbose", "alias": [ "-v" ], "text": "Печатать имя каждого теста" },
+        { "flag": "--quiet", "alias": [ "-q" ], "text": "Печатать меньше" },
+        { "flag": "--lf", "alias": [ "--last-failed" ], "text": "Запустить только тесты, упавшие в прошлый раз" },
+        { "flag": "--ff", "alias": [ "--failed-first" ], "text": "Сначала прошлые упавшие, потом остальные" },
+        { "flag": "-m", "text": "Запустить тесты с меткой: -m \"not slow\"" },
+        { "flag": "-s", "text": "Показывать print из тестов сразу" },
+        { "flag": "--cov", "text": "Посчитать покрытие кода (нужен pytest-cov)", "say": "и считает покрытие кода" },
+        { "flag": "--maxfail", "text": "Остановиться после стольких упавших тестов" },
+        { "flag": "-n", "text": "Запустить тесты в нескольких процессах параллельно (нужен pytest-xdist): -n auto" },
+        { "flag": "--pdb", "text": "При падении открыть отладчик - процесс ждёт ввода", "long": true }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "ruff",
+      "name": "Ruff",
+      "topic": "code-quality",
+      "bins": [ "ruff" ],
+      "about": "Быстрый линтер и форматер Python-кода: ищет ошибки и подозрительные места, выравнивает стиль.",
+      "default": { "say": "Проверяет Python-код линтером Ruff", "fx": [ "read" ] },
+      "sub": [
+        { "match": "^check\\b(?=.*\\s(?:--fix)(?:[\\s=:]|$))", "part": "линтер с исправлением", "say": "Проверяет Python-код линтером Ruff и сам исправляет, что может", "fx": [ "write" ] },
+        { "match": "^check\\b(?=.*\\s(?:--watch|-w)(?:[\\s=:]|$))", "part": "линтер при правках", "say": "Проверяет Python-код и повторяет проверку при каждой правке", "fx": [ "read" ], "long": true },
+        { "match": "^check\\b", "part": "линтер", "say": "Проверяет Python-код линтером Ruff", "fx": [ "read" ] },
+        { "match": "^format\\b(?=.*\\s(?:--check|--diff)(?:[\\s=:]|$))", "part": "проверка формата", "say": "Проверяет форматирование Python-кода, ничего не меняя", "fx": [ "read" ] },
+        { "match": "^format\\b", "part": "форматирование", "say": "Переформатирует Python-код", "fx": [ "write" ] },
+        { "match": "^rule\\b", "part": "правило", "say": "Объясняет правило линтера по его коду", "fx": [ "read" ] }
+      ],
+      "flags": [
+        { "flag": "--fix", "text": "Исправить то, что можно исправить автоматически" },
+        { "flag": "--unsafe-fixes", "text": "Разрешить исправления, которые могут поменять поведение кода" },
+        { "flag": "--watch", "alias": [ "-w" ], "text": "Повторять проверку при каждой правке", "long": true },
+        { "flag": "--select", "text": "Какие правила включить: --select E,F,I" },
+        { "flag": "--ignore", "text": "Какие правила выключить" },
+        { "flag": "--diff", "text": "Показать, что было бы исправлено, ничего не меняя" },
+        { "flag": "--check", "text": "В format - только проверить, ничего не меняя" },
+        { "flag": "--config", "text": "Взять настройки из другого файла" },
+        { "flag": "--output-format", "text": "Формат вывода: full, concise, github, json" },
+        { "flag": "--statistics", "text": "Посчитать, сколько раз сработало каждое правило" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "black",
+      "name": "Black",
+      "topic": "code-quality",
+      "bins": [ "black" ],
+      "about": "Форматер Python-кода: переписывает файлы в одном строгом стиле без настроек под вкус.",
+      "default": { "say": "Переформатирует Python-код", "fx": [ "write" ] },
+      "sub": [
+        { "match": "(?:^|.*\\s)(?:--check|--diff|--check-only|-c)(?:\\s|$)", "part": "проверка формата", "say": "Проверяет форматирование Python-кода, ничего не меняя", "fx": [ "read" ] }
+      ],
+      "flags": [
+        { "flag": "--check", "text": "Только проверить формат, ничего не меняя" },
+        { "flag": "--diff", "text": "Показать, что поменялось бы, ничего не меняя" },
+        { "flag": "--line-length", "alias": [ "-l" ], "text": "Длина строки, по умолчанию 88" },
+        { "flag": "--exclude", "text": "Какие файлы не трогать" },
+        { "flag": "--quiet", "alias": [ "-q" ], "text": "Печатать только ошибки" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "isort",
+      "name": "isort",
+      "topic": "code-quality",
+      "bins": [ "isort" ],
+      "about": "Программа, которая сортирует строки import в Python-файлах.",
+      "default": { "say": "Переформатирует Python-код", "fx": [ "write" ] },
+      "sub": [
+        { "match": "(?:^|.*\\s)(?:--check|--diff|--check-only|-c)(?:\\s|$)", "part": "проверка формата", "say": "Проверяет форматирование Python-кода, ничего не меняя", "fx": [ "read" ] }
+      ],
+      "flags": [
+        { "flag": "--check-only", "alias": [ "--check", "-c" ], "text": "Только проверить порядок, ничего не меняя" },
+        { "flag": "--diff", "text": "Показать, что поменялось бы" },
+        { "flag": "--profile", "text": "Набор правил, совместимый с форматером: --profile black" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "mypy",
+      "name": "mypy",
+      "topic": "code-quality",
+      "bins": [ "mypy" ],
+      "about": "Программа, которая проверяет типы в Python-коде по аннотациям.",
+      "default": { "say": "Проверяет типы в Python-коде", "fx": [ "read" ] },
+      "flags": [
+        { "flag": "--strict", "text": "Включить все строгие проверки" },
+        { "flag": "--ignore-missing-imports", "text": "Не ругаться на пакеты без описания типов" },
+        { "flag": "--install-types", "text": "Доставить недостающие пакеты с типами", "fx": [ "install", "network" ] },
+        { "flag": "--config-file", "text": "Взять настройки из другого файла" },
+        { "flag": "--package", "alias": [ "-p" ], "text": "Проверить пакет по имени" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "pyright",
+      "name": "Pyright",
+      "topic": "code-quality",
+      "bins": [ "pyright" ],
+      "about": "Программа, которая проверяет типы в Python-коде.",
+      "default": { "say": "Проверяет типы в Python-коде", "fx": [ "read" ] },
+      "flags": [
+        { "flag": "--watch", "alias": [ "-w" ], "text": "Повторять проверку при каждой правке", "long": true },
+        { "flag": "--outputjson", "text": "Вывести результат в JSON" },
+        { "flag": "--project", "alias": [ "-p" ], "text": "Путь к файлу настроек или папке проекта" },
+        { "flag": "--pythonpath", "text": "Какой Python использовать для поиска пакетов" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "flake8",
+      "name": "Flake8",
+      "topic": "code-quality",
+      "bins": [ "flake8" ],
+      "about": "Линтер Python-кода: стиль PEP 8 и простые ошибки.",
+      "default": { "say": "Проверяет стиль и простые ошибки в Python-коде", "fx": [ "read" ] },
+      "flags": [
+        { "flag": "--max-line-length", "text": "Предельная длина строки" },
+        { "flag": "--select", "text": "Какие проверки включить" },
+        { "flag": "--ignore", "text": "Какие проверки выключить" },
+        { "flag": "--count", "text": "Напечатать число найденных ошибок" },
+        { "flag": "--exit-zero", "text": "Не считать находки ошибкой - команда всегда завершается успешно" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "pylint",
+      "name": "Pylint",
+      "topic": "code-quality",
+      "bins": [ "pylint" ],
+      "about": "Подробный линтер Python-кода: ошибки, стиль, сложность.",
+      "default": { "say": "Проверяет Python-код линтером Pylint", "fx": [ "read" ] },
+      "flags": [
+        { "flag": "--disable", "text": "Выключить проверки по коду или имени" },
+        { "flag": "--rcfile", "text": "Взять настройки из файла" },
+        { "flag": "--fail-under", "text": "Считать ошибкой оценку ниже указанной" },
+        { "flag": "--jobs", "alias": [ "-j" ], "text": "Сколько процессов использовать" },
+        { "flag": "--output-format", "text": "Формат вывода: text, json, colorized" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "bandit",
+      "name": "Bandit",
+      "topic": "code-quality",
+      "bins": [ "bandit" ],
+      "about": "Программа, которая ищет в Python-коде места, опасные с точки зрения безопасности.",
+      "default": { "say": "Ищет уязвимости в Python-коде", "fx": [ "read" ] },
+      "flags": [
+        { "flag": "-r", "text": "Проверить папку целиком" },
+        { "flag": "-ll", "text": "Показывать только находки средней и высокой важности" },
+        { "flag": "--configfile", "alias": [ "-c" ], "text": "Взять настройки из файла" },
+        { "flag": "--exclude", "alias": [ "-x" ], "text": "Какие папки пропустить" },
+        { "flag": "--format", "alias": [ "-f" ], "text": "Формат отчёта: txt, json, html" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "poetry",
+      "name": "Poetry",
+      "topic": "python",
+      "bins": [ "poetry" ],
+      "about": "Программа, которая ведёт зависимости Python-проекта по pyproject.toml и держит для него виртуальное окружение.",
+      "default": { "say": "Управляет зависимостями Python-проекта", "fx": [] },
+      "sub": [
+        { "match": "^install\\b", "part": "установка", "say": "Устанавливает зависимости проекта из poetry.lock в его окружение", "fx": [ "install", "network" ] },
+        { "match": "^sync\\b", "part": "синхронизация", "say": "Приводит окружение в точное соответствие с poetry.lock: лишнее удаляет", "fx": [ "install", "network" ] },
+        { "match": "^add\\b", "part": "новая зависимость", "say": "Добавляет пакет в pyproject.toml и ставит его", "fx": [ "install", "write", "network" ] },
+        { "match": "^remove\\b", "part": "убрать зависимость", "say": "Убирает пакет из pyproject.toml и из окружения", "fx": [ "install", "write" ] },
+        { "match": "^update\\b", "part": "обновление", "say": "Обновляет зависимости до новых разрешённых версий", "fx": [ "install", "write", "network" ] },
+        { "match": "^lock\\b", "part": "фиксация версий", "say": "Пересчитывает версии зависимостей и записывает poetry.lock", "fx": [ "write", "network" ] },
+        { "match": "^run\\b", "part": "команда в окружении", "say": "Выполняет команду внутри виртуального окружения проекта", "fx": [] },
+        { "match": "^shell\\b", "part": "консоль окружения", "say": "Открывает командную строку с включённым окружением проекта", "fx": [], "long": true },
+        { "match": "^build\\b", "part": "сборка", "say": "Собирает пакет в папку dist", "fx": [ "write" ] },
+        { "match": "^publish\\b", "part": "публикация", "say": "Публикует пакет на PyPI - его смогут поставить все", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^(?:show|check|env\\s+info|env\\s+list)\\b", "part": "просмотр", "say": "Показывает зависимости, окружение или проверяет pyproject.toml", "fx": [ "read" ] },
+        { "match": "^(?:new|init)\\b", "part": "новый проект", "say": "Создаёт заготовку Python-проекта с pyproject.toml", "fx": [ "write" ] },
+        { "match": "^export\\b", "part": "выгрузка", "say": "Выгружает зависимости в requirements.txt", "fx": [ "write" ] },
+        { "match": "^version\\b", "part": "версия проекта", "say": "Показывает или поднимает версию проекта в pyproject.toml", "fx": [ "write" ] }
+      ],
+      "flags": [
+        { "flag": "--no-root", "text": "Не ставить сам проект, только его зависимости" },
+        { "flag": "--only", "text": "Поставить только указанные группы зависимостей: --only main" },
+        { "flag": "--with", "text": "Добавить необязательные группы: --with dev" },
+        { "flag": "--without", "text": "Пропустить группы: --without dev" },
+        { "flag": "--dry-run", "text": "Показать, что было бы сделано, ничего не меняя", "fxRemove": [ "write", "install", "danger" ], "danger": false },
+        { "flag": "--directory", "alias": [ "-C" ], "text": "Работать с проектом в другой папке" },
+        { "flag": "--build", "text": "В publish - сначала собрать пакет" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "uv",
+      "name": "uv",
+      "topic": "python",
+      "bins": [ "uv" ],
+      "about": "Быстрый менеджер Python-проектов: ставит Python и пакеты, ведёт pyproject.toml и uv.lock, держит виртуальное окружение .venv.",
+      "default": { "say": "Управляет Python-проектом и его зависимостями", "fx": [] },
+      "sub": [
+        { "match": "^sync\\b", "part": "синхронизация", "say": "Ставит зависимости из uv.lock в папку .venv и убирает лишние", "fx": [ "install", "network" ] },
+        { "match": "^add\\b", "part": "новая зависимость", "say": "Добавляет пакет в pyproject.toml и ставит его", "fx": [ "install", "write", "network" ] },
+        { "match": "^remove\\b", "part": "убрать зависимость", "say": "Убирает пакет из pyproject.toml и из окружения", "fx": [ "install", "write" ] },
+        { "match": "^lock\\b", "part": "фиксация версий", "say": "Пересчитывает версии зависимостей и записывает uv.lock", "fx": [ "write", "network" ] },
+        { "match": "^run\\b", "part": "команда в окружении", "say": "Выполняет команду в окружении проекта, перед этим доставив недостающие пакеты", "fx": [] },
+        { "match": "^pip\\s+install\\b", "part": "установка пакетов", "say": "Устанавливает пакеты в окружение, как pip, но быстрее", "fx": [ "install", "network" ] },
+        { "match": "^pip\\s+(?:list|show|freeze|check|tree)\\b", "part": "пакеты", "say": "Показывает установленные пакеты", "fx": [ "read" ] },
+        { "match": "^pip\\b", "part": "пакеты", "say": "Управляет пакетами окружения, как pip", "fx": [ "install" ] },
+        { "match": "^venv\\b", "part": "окружение", "say": "Создаёт виртуальное окружение .venv", "fx": [ "write" ] },
+        { "match": "^python\\s+install\\b", "part": "установка Python", "say": "Скачивает и ставит нужную версию Python", "fx": [ "install", "network" ] },
+        { "match": "^tool\\s+(?:install|upgrade)\\b", "part": "программа", "say": "Ставит программу на Python отдельно от проектов", "fx": [ "install", "network" ] },
+        { "match": "^tool\\s+run\\b", "part": "разовый запуск", "say": "Запускает программу на Python, не ставя её в проект", "fx": [ "network" ] },
+        { "match": "^build\\b", "part": "сборка", "say": "Собирает пакет в папку dist", "fx": [ "write" ] },
+        { "match": "^publish\\b", "part": "публикация", "say": "Публикует пакет на PyPI - его смогут поставить все", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^init\\b", "part": "новый проект", "say": "Создаёт заготовку Python-проекта с pyproject.toml", "fx": [ "write" ] },
+        { "match": "^(?:tree|python\\s+list)\\b", "part": "просмотр", "say": "Показывает дерево зависимостей или установленные версии Python", "fx": [ "read" ] },
+        { "match": "^export\\b", "part": "выгрузка", "say": "Выгружает зависимости в другой формат, например requirements.txt", "fx": [ "write" ] },
+        { "match": "^cache\\s+(?:clean|prune)\\b", "part": "очистка кэша", "say": "Удаляет скачанные раньше пакеты из кэша uv", "fx": [ "delete" ] }
+      ],
+      "flags": [
+        { "flag": "--frozen", "text": "Брать версии строго из uv.lock, не пересчитывая его" },
+        { "flag": "--locked", "text": "Остановиться с ошибкой, если uv.lock устарел - так делают в CI" },
+        { "flag": "--dev", "text": "Добавить пакет в группу разработки" },
+        { "flag": "--group", "text": "В какую группу зависимостей добавить или какую поставить" },
+        { "flag": "--no-dev", "text": "Не ставить зависимости разработки" },
+        { "flag": "--all-extras", "text": "Поставить все необязательные возможности" },
+        { "flag": "--python", "alias": [ "-p" ], "text": "Какую версию Python использовать" },
+        { "flag": "--with", "text": "В run - добавить пакет только на этот запуск" },
+        { "flag": "--upgrade", "alias": [ "-U" ], "text": "Обновить версии вместо уже зафиксированных" },
+        { "flag": "--offline", "text": "Не ходить в сеть, брать только из кэша", "fxRemove": [ "network" ] }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "uvx",
+      "name": "uvx",
+      "topic": "python",
+      "bins": [ "uvx" ],
+      "about": "Короткая форма uv tool run: запускает программу на Python, не ставя её в проект.",
+      "default": { "say": "Скачивает программу на Python во временное окружение и запускает её", "fx": [ "network" ] },
+      "flags": [
+        { "flag": "--from", "text": "Из какого пакета взять программу, если имена разные" },
+        { "flag": "--with", "text": "Добавить пакет на время запуска" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "pdm",
+      "name": "PDM",
+      "topic": "python",
+      "bins": [ "pdm" ],
+      "about": "Менеджер Python-проектов: ведёт зависимости по pyproject.toml и pdm.lock.",
+      "default": { "say": "Управляет зависимостями Python-проекта", "fx": [] },
+      "sub": [
+        { "match": "^(?:install|sync)\\b", "part": "установка", "say": "Устанавливает зависимости проекта из pdm.lock", "fx": [ "install", "network" ] },
+        { "match": "^add\\b", "part": "новая зависимость", "say": "Добавляет пакет в pyproject.toml и ставит его", "fx": [ "install", "write", "network" ] },
+        { "match": "^remove\\b", "part": "убрать зависимость", "say": "Убирает пакет из проекта", "fx": [ "install", "write" ] },
+        { "match": "^update\\b", "part": "обновление", "say": "Обновляет зависимости до новых разрешённых версий", "fx": [ "install", "write", "network" ] },
+        { "match": "^lock\\b", "part": "фиксация версий", "say": "Пересчитывает версии и записывает pdm.lock", "fx": [ "write", "network" ] },
+        { "match": "^run\\b", "part": "команда в окружении", "say": "Выполняет команду или скрипт из pyproject.toml в окружении проекта", "fx": [] },
+        { "match": "^build\\b", "part": "сборка", "say": "Собирает пакет в папку dist", "fx": [ "write" ] },
+        { "match": "^publish\\b", "part": "публикация", "say": "Публикует пакет на PyPI - его смогут поставить все", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^(?:list|show|info)\\b", "part": "просмотр", "say": "Показывает пакеты и сведения о проекте", "fx": [ "read" ] },
+        { "match": "^init\\b", "part": "новый проект", "say": "Создаёт заготовку Python-проекта", "fx": [ "write" ] }
+      ],
+      "flags": [
+        { "flag": "--dev", "alias": [ "-d" ], "text": "Работать с зависимостями разработки" },
+        { "flag": "--group", "alias": [ "-G" ], "text": "С какой группой зависимостей работать" },
+        { "flag": "--prod", "text": "Поставить только рабочие зависимости, без разработки" },
+        { "flag": "--frozen-lockfile", "text": "Не менять pdm.lock" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "pipenv",
+      "name": "Pipenv",
+      "topic": "python",
+      "bins": [ "pipenv" ],
+      "about": "Менеджер зависимостей Python: ведёт Pipfile и Pipfile.lock и создаёт для проекта виртуальное окружение.",
+      "default": { "say": "Управляет зависимостями Python-проекта", "fx": [] },
+      "sub": [
+        { "match": "^install\\s+(?:-(?!r\\b)\\S+\\s+)*[a-z0-9]", "part": "новая зависимость", "say": "Ставит пакет и добавляет его в Pipfile", "fx": [ "install", "write", "network" ] },
+        { "match": "^install\\b", "part": "установка", "say": "Устанавливает зависимости проекта из Pipfile", "fx": [ "install", "network" ] },
+        { "match": "^sync\\b", "part": "синхронизация", "say": "Ставит зависимости строго по Pipfile.lock", "fx": [ "install", "network" ] },
+        { "match": "^uninstall\\b", "part": "удаление", "say": "Удаляет пакет из окружения и Pipfile", "fx": [ "install", "write" ] },
+        { "match": "^(?:lock|update|upgrade)\\b", "part": "обновление", "say": "Пересчитывает версии и обновляет Pipfile.lock", "fx": [ "install", "write", "network" ] },
+        { "match": "^run\\b", "part": "команда в окружении", "say": "Выполняет команду внутри окружения проекта", "fx": [] },
+        { "match": "^shell\\b", "part": "консоль окружения", "say": "Открывает командную строку с включённым окружением проекта", "fx": [], "long": true },
+        { "match": "^(?:graph|check|scan|verify|requirements)\\b", "part": "просмотр", "say": "Показывает зависимости или проверяет их на уязвимости", "fx": [ "read" ] },
+        { "match": "^clean\\b", "part": "очистка", "say": "Удаляет из окружения пакеты, которых нет в Pipfile.lock", "fx": [ "delete" ] },
+        { "match": "^--rm\\b", "part": "удаление окружения", "say": "Удаляет виртуальное окружение проекта", "fx": [ "delete" ] }
+      ],
+      "flags": [
+        { "flag": "--dev", "alias": [ "-d" ], "text": "Поставить и зависимости разработки" },
+        { "flag": "--deploy", "text": "Остановиться с ошибкой, если Pipfile.lock устарел" },
+        { "flag": "--system", "text": "Ставить в системный Python, без виртуального окружения" },
+        { "flag": "--python", "text": "Какую версию Python использовать для окружения" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "twine",
+      "name": "Twine",
+      "topic": "python",
+      "bins": [ "twine" ],
+      "about": "Программа, которая отправляет собранные Python-пакеты на PyPI.",
+      "default": { "say": "Работает с собранными Python-пакетами", "fx": [] },
+      "sub": [
+        { "match": "^upload\\b", "part": "публикация", "say": "Публикует пакеты из папки dist на PyPI - их смогут поставить все", "fx": [ "network", "danger" ], "danger": true },
+        { "match": "^check\\b", "part": "проверка", "say": "Проверяет, что описание пакета правильно покажется на PyPI", "fx": [ "read" ] }
+      ],
+      "flags": [
+        { "flag": "--repository", "alias": [ "-r" ], "text": "Куда публиковать: pypi или testpypi" },
+        { "flag": "--repository-url", "text": "Адрес другого каталога пакетов" },
+        { "flag": "--skip-existing", "text": "Пропустить версии, которые уже опубликованы" },
+        { "flag": "--username", "alias": [ "-u" ], "text": "Имя пользователя каталога" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "uvicorn",
+      "name": "Uvicorn",
+      "topic": "python",
+      "bins": [ "uvicorn" ],
+      "about": "Веб-сервер для Python-приложений на ASGI: FastAPI, Starlette, Django в асинхронном режиме.",
+      "default": { "say": "Запускает веб-сервер для приложения на Python", "fx": [], "long": true, "url": true },
+      "flags": [
+        { "flag": "--reload", "text": "Перезапускать сервер при каждой правке кода", "say": "и перезапускает его при каждой правке" },
+        { "flag": "--host", "text": "На каком адресе слушать: 127.0.0.1 - только эта машина, 0.0.0.0 - вся сеть" },
+        { "flag": "--port", "text": "Порт, по умолчанию 8000" },
+        { "flag": "--workers", "text": "Сколько процессов запустить" },
+        { "flag": "--log-level", "text": "Сколько печатать в журнал: debug, info, warning" },
+        { "flag": "--app-dir", "text": "Папка, где искать приложение" },
+        { "flag": "--env-file", "text": "Файл с переменными окружения" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "gunicorn",
+      "name": "Gunicorn",
+      "topic": "python",
+      "bins": [ "gunicorn" ],
+      "about": "Веб-сервер для Python-приложений на WSGI (Flask, Django) для боевой работы на Linux.",
+      "default": { "say": "Запускает веб-сервер для приложения на Python", "fx": [], "long": true, "url": true },
+      "flags": [
+        { "flag": "--bind", "alias": [ "-b" ], "text": "Адрес и порт: -b 0.0.0.0:8000" },
+        { "flag": "--workers", "alias": [ "-w" ], "text": "Сколько процессов запустить" },
+        { "flag": "--worker-class", "alias": [ "-k" ], "text": "Тип процесса: uvicorn.workers.UvicornWorker для ASGI" },
+        { "flag": "--reload", "text": "Перезапускать сервер при каждой правке кода" },
+        { "flag": "--daemon", "alias": [ "-D" ], "text": "Уйти в фон и вернуть терминал", "long": false },
+        { "flag": "--timeout", "alias": [ "-t" ], "text": "Через сколько секунд перезапускать зависший процесс" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "flask",
+      "name": "Flask CLI",
+      "topic": "python",
+      "bins": [ "flask" ],
+      "about": "Командная строка веб-фреймворка Flask.",
+      "default": { "say": "Выполняет команду Flask", "fx": [] },
+      "sub": [
+        { "match": "^(?:--app\\s+\\S+\\s+|--debug\\s+)*run\\b", "part": "сервер", "say": "Запускает сервер разработки Flask", "fx": [], "long": true, "url": true },
+        { "match": "^(?:--app\\s+\\S+\\s+|--debug\\s+)*shell\\b", "part": "консоль", "say": "Открывает консоль Python с загруженным приложением", "fx": [], "long": true },
+        { "match": "^(?:--app\\s+\\S+\\s+|--debug\\s+)*db\\s+(?:upgrade|downgrade|stamp)\\b", "part": "миграции", "say": "Применяет миграции базы данных (Flask-Migrate)", "fx": [ "db" ] },
+        { "match": "^(?:--app\\s+\\S+\\s+|--debug\\s+)*db\\s+(?:migrate|revision)\\b", "part": "новая миграция", "say": "Создаёт файл миграции по изменениям в моделях (Flask-Migrate)", "fx": [ "write" ] },
+        { "match": "^(?:--app\\s+\\S+\\s+|--debug\\s+)*routes\\b", "part": "адреса", "say": "Показывает все адреса приложения", "fx": [ "read" ] }
+      ],
+      "flags": [
+        { "flag": "--app", "text": "Где приложение: модуль или файл, например app:create_app" },
+        { "flag": "--debug", "text": "Режим отладки: перезапуск при правках и подробные ошибки в браузере", "say": "в режиме отладки" },
+        { "flag": "--host", "alias": [ "-h" ], "text": "На каком адресе слушать" },
+        { "flag": "--port", "alias": [ "-p" ], "text": "Порт, по умолчанию 5000" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "fastapi",
+      "name": "FastAPI CLI",
+      "topic": "python",
+      "bins": [ "fastapi" ],
+      "about": "Командная строка веб-фреймворка FastAPI.",
+      "default": { "say": "Выполняет команду FastAPI", "fx": [] },
+      "sub": [
+        { "match": "^dev\\b", "part": "сервер разработки", "say": "Запускает приложение FastAPI в режиме разработки: перезапуск при каждой правке", "fx": [], "long": true, "url": true },
+        { "match": "^run\\b", "part": "сервер", "say": "Запускает приложение FastAPI в рабочем режиме", "fx": [], "long": true, "url": true }
+      ],
+      "flags": [
+        { "flag": "--port", "text": "Порт, по умолчанию 8000" },
+        { "flag": "--host", "text": "На каком адресе слушать" },
+        { "flag": "--reload", "text": "Перезапускать сервер при каждой правке" },
+        { "flag": "--workers", "text": "Сколько процессов запустить" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "streamlit",
+      "name": "Streamlit",
+      "topic": "python",
+      "bins": [ "streamlit" ],
+      "about": "Программа, которая превращает Python-скрипт в веб-страницу с графиками и элементами управления.",
+      "default": { "say": "Выполняет команду Streamlit", "fx": [] },
+      "sub": [
+        { "match": "^run\\b", "part": "приложение", "say": "Запускает Streamlit-приложение и открывает его в браузере", "fx": [], "long": true, "url": true },
+        { "match": "^hello\\b", "part": "пример", "say": "Открывает пример Streamlit-приложения", "fx": [], "long": true, "url": true },
+        { "match": "^cache\\s+clear\\b", "part": "очистка кэша", "say": "Очищает кэш данных Streamlit", "fx": [ "delete" ] }
+      ],
+      "flags": [
+        { "flag": "--server.port", "text": "Порт, по умолчанию 8501" },
+        { "flag": "--server.headless", "text": "Не открывать браузер сам: --server.headless true" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "jupyter",
+      "name": "Jupyter",
+      "topic": "python",
+      "bins": [ "jupyter", "jupyter-lab", "jupyter-notebook" ],
+      "about": "Программа для блокнотов: код, его результаты, графики и текст в одном документе в браузере.",
+      "default": { "say": "Открывает Jupyter в браузере", "fx": [], "long": true, "url": true },
+      "sub": [
+        { "match": "^(?:lab|notebook)\\b", "part": "блокноты", "say": "Открывает Jupyter в браузере", "fx": [], "long": true, "url": true },
+        { "match": "^nbconvert\\b(?=.*\\s(?:--execute)(?:[\\s=:]|$))", "part": "выполнение блокнота", "say": "Выполняет блокнот и сохраняет его в другом формате", "fx": [ "write" ] },
+        { "match": "^nbconvert\\b", "part": "преобразование", "say": "Сохраняет блокнот в другом формате: HTML, PDF, .py", "fx": [ "write" ] },
+        { "match": "^kernelspec\\s+list\\b", "part": "ядра", "say": "Показывает доступные ядра - языки, на которых можно писать в блокнотах", "fx": [ "read" ] }
+      ],
+      "flags": [
+        { "flag": "--no-browser", "text": "Не открывать браузер сам" },
+        { "flag": "--port", "text": "Порт, по умолчанию 8888" },
+        { "flag": "--ip", "text": "На каком адресе слушать" },
+        { "flag": "--to", "text": "В nbconvert - в какой формат сохранить: html, pdf, script" },
+        { "flag": "--execute", "text": "В nbconvert - сначала выполнить все ячейки" }
+      ],
+      "help": "--help"
+    },
+    {
+      "id": "alembic",
+      "name": "Alembic",
+      "topic": "databases",
+      "bins": [ "alembic" ],
+      "about": "Программа миграций базы данных для Python-проектов на SQLAlchemy.",
+      "how": [ "Читает alembic.ini: адрес базы и папку с миграциями", "Смотрит в таблицу alembic_version, на какой миграции стоит база", "Применяет или откатывает миграции по цепочке до нужной" ],
+      "default": { "say": "Работает с миграциями базы данных", "fx": [] },
+      "sub": [
+        { "match": "^(?:-\\S+\\s+(?:\\S+\\s+)?)*upgrade\\b(?=.*\\s(?:--sql)(?:[\\s=:]|$))", "part": "SQL миграций", "say": "Печатает SQL миграций, не трогая базу", "fx": [ "read" ] },
+        { "match": "^(?:-\\S+\\s+(?:\\S+\\s+)?)*upgrade\\b", "part": "применение миграций", "say": "Применяет миграции к базе данных", "fx": [ "db" ] },
+        { "match": "^(?:-\\S+\\s+(?:\\S+\\s+)?)*downgrade\\b", "part": "откат миграций", "say": "Откатывает миграции: таблицы и колонки из них удаляются вместе с данными", "fx": [ "db", "delete", "danger" ], "danger": true },
+        { "match": "^(?:-\\S+\\s+(?:\\S+\\s+)?)*revision\\b", "part": "новая миграция", "say": "Создаёт файл новой миграции (с --autogenerate - по изменениям в моделях)", "fx": [ "write" ] },
+        { "match": "^(?:-\\S+\\s+(?:\\S+\\s+)?)*stamp\\b", "part": "отметка версии", "say": "Записывает в базу номер миграции, ничего не применяя", "fx": [ "db" ] },
+        { "match": "^(?:-\\S+\\s+(?:\\S+\\s+)?)*(?:current|history|heads|show|check|branches)\\b", "part": "просмотр", "say": "Показывает миграции и на какой из них стоит база", "fx": [ "read" ] },
+        { "match": "^init\\b", "part": "заготовка", "say": "Создаёт папку миграций и alembic.ini", "fx": [ "write" ] }
+      ],
+      "flags": [
+        { "flag": "--autogenerate", "text": "В revision - сравнить модели с базой и написать миграцию самому" },
+        { "flag": "--message", "alias": [ "-m" ], "text": "Описание миграции, попадает в имя файла" },
+        { "flag": "--config", "alias": [ "-c" ], "text": "Путь к alembic.ini" },
+        { "flag": "--sql", "text": "Не трогать базу, только напечатать SQL" },
+        { "flag": "-x", "text": "Передать свой параметр в env.py" }
+      ],
+      "help": "--help"
+    }
+  ]
+}

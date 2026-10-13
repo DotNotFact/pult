@@ -1,0 +1,134 @@
+{
+  "id": "java",
+  "title": "Java",
+  "color": "#e76f00",
+  "icon": "cube",
+  "level": "основы",
+  "summary": "Java - язык для серверов, банковских систем и Android. Код собирают в файл .jar, а запускает его виртуальная машина Java. Сборкой заведует Maven или Gradle.",
+  "detect": { "files": ["pom.xml", "build.gradle", "build.gradle.kts", "mvnw", "gradlew"], "deps": [], "bins": ["java", "javac", "mvn", "mvnw", "gradle", "gradlew"], "stacks": ["Java"] },
+  "related": ["testing", "docker", "ci-cd"],
+  "sections": [
+    {
+      "type": "idea",
+      "title": "Зачем это нужно",
+      "text": "Java создавали с правилом: написал один раз - запускается везде. Компилятор переводит код не в команды конкретного процессора, а в байт-код. Его выполняет JVM - виртуальная машина Java, которая есть для Windows, Linux и macOS. Проект почти никогда не собирают руками: этим заняты Maven или Gradle. Они качают библиотеки, компилируют, гоняют тесты и упаковывают результат.",
+      "analogy": "Ноты. Их пишут один раз, а играть может любой музыкант на своём инструменте. Байт-код - ноты, JVM - музыкант на конкретном компьютере."
+    },
+    {
+      "type": "diagram",
+      "title": "Как устроено",
+      "nodes": [
+        { "id": "code", "label": "Файлы .java", "note": "ваш код в src/main/java", "icon": "file" },
+        { "id": "build", "label": "Maven или Gradle", "note": "читает pom.xml или build.gradle", "icon": "wrench" },
+        { "id": "repo", "label": "Maven Central", "note": "склад библиотек", "icon": "cloud" },
+        { "id": "jar", "label": "Файл .jar", "note": "в target/ или build/libs/", "icon": "package" },
+        { "id": "jvm", "label": "JVM", "note": "выполняет байт-код", "icon": "chip" }
+      ],
+      "edges": [
+        ["repo", "build", "библиотеки"],
+        ["code", "build", "компилирует"],
+        ["build", "jar", "упаковывает"],
+        ["jar", "jvm", "java -jar"]
+      ],
+      "caption": "Инструмент сборки скачивает библиотеки, компилирует код в байт-код и упаковывает в .jar. Запускает его JVM."
+    },
+    {
+      "type": "terms",
+      "title": "Слова, которые надо знать",
+      "items": [
+        { "term": "JDK", "text": "Java Development Kit - набор разработчика: компилятор javac, JVM и инструменты. Нужен, чтобы собирать программы. Для работы берут версию с долгой поддержкой (LTS): 17, 21 или 25.", "forms": ["Java Development Kit"] },
+        { "term": "JVM", "text": "Java Virtual Machine - программа, которая выполняет байт-код. Есть в составе JDK и в облегчённой поставке только для запуска (JRE).", "forms": ["JRE", "виртуальная машина Java"] },
+        { "term": "Байт-код", "text": "Код, переведённый в команды для JVM, а не для процессора. Лежит в файлах .class.", "forms": [".class"] },
+        { "term": "jar", "text": "Архив с байт-кодом и ресурсами. Готовую программу запускают командой java -jar my-app.jar.", "forms": [".jar", "джарник"] },
+        { "term": "Maven", "text": "Инструмент сборки. Настройки в pom.xml в формате XML. Работа идёт фазами по порядку: compile, test, package, install.", "forms": ["mvn", "мавен"] },
+        { "term": "Gradle", "text": "Инструмент сборки с настройками в виде кода: build.gradle (язык Groovy) или build.gradle.kts (Kotlin). Обычно быстрее Maven на больших проектах за счёт кэша.", "forms": ["градл"] },
+        { "term": "Wrapper", "text": "Скрипты mvnw и gradlew в корне проекта. Скачивают нужную версию Maven или Gradle сами. Запускайте их вместо установленного mvn или gradle, чтобы у всех была одна версия.", "forms": ["mvnw", "gradlew", "обёртка"] },
+        { "term": "JAVA_HOME", "text": "Переменная окружения с путём к JDK. По ней Maven, Gradle и редакторы находят Java.", "forms": [] }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Как собрать чужой проект на Java",
+      "items": [
+        "Проверьте Java: java -version. Нужная версия обычно указана в pom.xml или build.gradle",
+        "Посмотрите в корень: pom.xml - это Maven, build.gradle или build.gradle.kts - Gradle",
+        "Maven: ./mvnw package. Gradle: ./gradlew build. На Windows без ./ в начале: mvnw.cmd или gradlew.bat",
+        "Первый раз скачаются инструмент сборки и библиотеки, это долго",
+        "Готовый файл: Maven кладёт его в target/, Gradle в build/libs/",
+        "Запустите: java -jar target/my-app-1.0.jar"
+      ]
+    },
+    {
+      "type": "example",
+      "title": "pom.xml (Maven)",
+      "code": "<project>\n  <modelVersion>4.0.0</modelVersion>\n  <groupId>com.example</groupId>\n  <artifactId>my-app</artifactId>\n  <version>1.0</version>\n\n  <properties>\n    <maven.compiler.release>21</maven.compiler.release>\n  </properties>\n\n  <dependencies>\n    <dependency>\n      <groupId>org.junit.jupiter</groupId>\n      <artifactId>junit-jupiter</artifactId>\n      <version>5.11.0</version>\n      <scope>test</scope>\n    </dependency>\n  </dependencies>\n</project>",
+      "note": "groupId, artifactId и version - адрес проекта, как у любой библиотеки. maven.compiler.release - версия Java. В dependencies библиотеки; scope test значит, что JUnit нужен только для тестов и не попадёт в готовую программу."
+    },
+    {
+      "type": "example",
+      "title": "build.gradle.kts (Gradle)",
+      "code": "plugins {\n    application\n}\n\njava {\n    toolchain { languageVersion = JavaLanguageVersion.of(21) }\n}\n\nrepositories {\n    mavenCentral()\n}\n\ndependencies {\n    testImplementation(\"org.junit.jupiter:junit-jupiter:5.11.0\")\n    testRuntimeOnly(\"org.junit.platform:junit-platform-launcher\")\n}\n\napplication {\n    mainClass = \"com.example.App\"\n}\n\ntasks.test {\n    useJUnitPlatform()\n}",
+      "note": "То же самое на Gradle. plugins подключает готовые умения, application - запуск программы. toolchain выбирает версию Java. repositories - откуда качать. testImplementation - библиотека только для тестов."
+    },
+    {
+      "type": "anatomy",
+      "title": "Разбор команды Maven",
+      "parts": [
+        { "text": "./mvnw", "note": "Maven через wrapper, нужной для проекта версии" },
+        { "text": "clean", "note": "удалить папку target со старой сборкой" },
+        { "text": "package", "note": "пройти фазы до упаковки: компиляция, тесты, сборка .jar" },
+        { "text": "-DskipTests", "note": "не запускать тесты. Быстрее, но ошибки пройдут незамеченными" }
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "Maven и Gradle",
+      "cols": ["", "Maven", "Gradle"],
+      "rows": [
+        ["Файл настроек", "pom.xml", "build.gradle или build.gradle.kts"],
+        ["Формат", "XML, только описание", "Код на Groovy или Kotlin"],
+        ["Собрать", "./mvnw package", "./gradlew build"],
+        ["Тесты", "./mvnw test", "./gradlew test"],
+        ["Куда кладёт результат", "target/", "build/libs/"],
+        ["Где встречается чаще", "Серверы, старые корпоративные проекты", "Android, новые проекты"]
+      ]
+    },
+    {
+      "type": "mistakes",
+      "title": "Что ломается чаще всего",
+      "items": [
+        { "problem": "JAVA_HOME is not set или указывает не туда", "fix": "Укажите в переменной JAVA_HOME папку JDK нужной версии и откройте терминал заново." },
+        { "problem": "release version 21 not supported", "fix": "Проект требует Java новее установленной. Поставьте JDK нужной версии." },
+        { "problem": "./gradlew: Permission denied", "fix": "У скрипта нет права на запуск. Выполните chmod +x gradlew. На Windows запускайте gradlew.bat." },
+        { "problem": "Сборка проходит только с -DskipTests", "fix": "Тесты красные, и их просто пропускают. Ошибка останется в программе. Запустите тесты отдельно и почините причину." },
+        { "problem": "Странные ошибки после смены версий библиотек", "fix": "Мешают старые файлы сборки. Maven: ./mvnw clean. Gradle: ./gradlew clean." }
+      ]
+    },
+    {
+      "type": "cheatsheet",
+      "title": "Шпаргалка",
+      "items": [
+        { "cmd": "java -version", "text": "Какая Java запускается" },
+        { "cmd": "./mvnw package", "text": "Maven: собрать .jar с тестами" },
+        { "cmd": "./mvnw test", "text": "Maven: только тесты" },
+        { "cmd": "./mvnw clean install", "text": "Maven: собрать с нуля и положить в локальный склад для других проектов" },
+        { "cmd": "./gradlew build", "text": "Gradle: собрать с тестами" },
+        { "cmd": "./gradlew test", "text": "Gradle: только тесты" },
+        { "cmd": "./gradlew run", "text": "Gradle: запустить программу (плагин application)" },
+        { "cmd": "./gradlew tasks", "text": "Gradle: какие задачи есть в проекте" },
+        { "cmd": "java -jar target/my-app-1.0.jar", "text": "Запустить собранную программу" }
+      ]
+    },
+    {
+      "type": "quiz",
+      "title": "Проверьте себя",
+      "items": [
+        { "q": "Что нужно, чтобы собрать программу на Java?", "options": ["Только JVM", "JDK", "Только Maven"], "answer": 1, "why": "Компилятор javac входит в JDK. Maven и Gradle вызывают его, но сами его не содержат." },
+        { "q": "Как понять, какой инструмент сборки в проекте?", "options": ["По файлу pom.xml или build.gradle в корне", "По имени папки", "Никак"], "answer": 0, "why": "pom.xml - Maven, build.gradle или build.gradle.kts - Gradle." },
+        { "q": "Зачем запускать ./mvnw вместо mvn?", "options": ["Так короче", "Wrapper берёт ту версию Maven, которую выбрал проект", "mvn не умеет собирать"], "answer": 1, "why": "У всех разработчиков и в CI будет одна версия инструмента сборки." },
+        { "q": "Где искать готовый .jar после ./gradlew build?", "options": ["target/", "build/libs/", "src/"], "answer": 1, "why": "Gradle кладёт результаты в build/, а Maven - в target/." }
+      ]
+    },
+    { "type": "project", "title": "Где это в вашем проекте" }
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "id": "docker-compose",
+  "title": "Docker Compose",
+  "color": "#1d63ed",
+  "icon": "layers",
+  "level": "основы",
+  "summary": "Docker Compose запускает несколько контейнеров одной командой по описанию из одного файла: сайт, сервер, базу и всё, что им нужно.",
+  "detect": { "files": ["compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"], "deps": [], "bins": ["docker compose", "docker-compose"], "stacks": ["Docker Compose"] },
+  "related": ["docker", "wsl", "databases", "env"],
+  "sections": [
+    {
+      "type": "idea",
+      "title": "Зачем это нужно",
+      "text": "Настоящее приложение редко состоит из одной программы. Обычно это сайт, сервер с данными и база. Запускать каждый контейнер своей длинной командой неудобно и легко ошибиться. Compose описывает все части в одном файле. Дальше хватает одной команды, чтобы поднять всё вместе, и одной, чтобы всё остановить.",
+      "analogy": "Ноты для оркестра. Каждый музыкант знает свою партию, а дирижёр по одним нотам запускает всех сразу. Файл compose - это ноты, команда up - взмах палочки."
+    },
+    {
+      "type": "diagram",
+      "title": "Как устроено",
+      "nodes": [
+        { "id": "file", "label": "compose.yaml", "note": "описание всех частей", "icon": "file" },
+        { "id": "web", "label": "web", "note": "сайт, открыт наружу", "icon": "window" },
+        { "id": "api", "label": "api", "note": "сервер с данными", "icon": "server" },
+        { "id": "db", "label": "db", "note": "база данных", "icon": "database" },
+        { "id": "net", "label": "Сеть", "note": "сервисы видят друг друга по имени", "icon": "link" },
+        { "id": "vol", "label": "Том", "note": "файлы базы на диске", "icon": "folder" }
+      ],
+      "edges": [
+        ["file", "web", "описывает"],
+        ["file", "api", "описывает"],
+        ["file", "db", "описывает"],
+        ["web", "net", "ходит в api"],
+        ["api", "net", "ходит в db"],
+        ["db", "vol", "хранит данные"]
+      ],
+      "caption": "Один файл описывает три сервиса. Compose создаёт для них общую сеть и том. Внутри сети api обращается к базе просто по имени db."
+    },
+    {
+      "type": "terms",
+      "title": "Слова, которые надо знать",
+      "items": [
+        { "term": "Сервис", "text": "Одна часть приложения в файле compose: web, api, db. Для каждого сервиса Compose запускает контейнер.", "forms": ["сервиса", "сервисы", "сервисов", "service", "services"] },
+        { "term": "Compose-файл", "text": "Файл compose.yaml или docker-compose.yml в корне проекта. В нём перечислены сервисы, их образы, порты, тома и переменные.", "forms": ["compose.yaml", "docker-compose.yml"] },
+        { "term": "Проект", "text": "Набор контейнеров, сетей и томов одного compose-файла. По умолчанию называется как папка. Имя проекта стоит в начале имён контейнеров и томов.", "forms": ["проекта"] },
+        { "term": "Сеть", "text": "Compose сам создаёт сеть для сервисов проекта. В ней сервисы обращаются друг к другу по имени: адрес базы - db, а не localhost.", "forms": ["сети", "network", "networks"] },
+        { "term": "Том", "text": "Хранилище данных, которое переживает перезапуск и удаление контейнеров. Описывается в разделе volumes.", "forms": ["тома", "томе", "volume", "volumes"] },
+        { "term": "depends_on", "text": "Порядок запуска: сервис стартует после тех, от кого зависит. Сам по себе не ждёт, пока база будет готова принимать запросы. Для этого нужна проверка здоровья: healthcheck и condition: service_healthy.", "forms": [] },
+        { "term": "healthcheck", "text": "Команда, которой Compose проверяет, что сервис не просто запущен, а работает. Пока проверка не прошла, сервис считается неготовым.", "forms": ["проверка здоровья"] }
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Сайт, сервер и база в одном файле",
+      "code": "services:\n  web:\n    build: ./web\n    ports:\n      - \"8080:80\"\n    depends_on:\n      - api\n\n  api:\n    build: ./api\n    environment:\n      DATABASE_URL: postgres://app:secret@db:5432/app\n    depends_on:\n      db:\n        condition: service_healthy\n\n  db:\n    image: postgres:17\n    environment:\n      POSTGRES_USER: app\n      POSTGRES_PASSWORD: secret\n    volumes:\n      - db-data:/var/lib/postgresql/data\n    healthcheck:\n      test: [\"CMD\", \"pg_isready\", \"-U\", \"app\"]\n      interval: 5s\n\nvolumes:\n  db-data:",
+      "note": "web и api собираются из своих папок, db берётся готовым образом. Наружу открыт только сайт на порту 8080. api находит базу по адресу db:5432. api ждёт, пока проверка здоровья базы пройдёт. Файлы базы лежат в томе db-data. Пароль здесь для примера: настоящие пароли хранят в файле .env, который не попадает в git."
+    },
+    {
+      "type": "anatomy",
+      "title": "Разбор команды запуска",
+      "parts": [
+        { "text": "docker compose", "note": "Compose встроен в Docker. Старое написание через дефис - docker-compose" },
+        { "text": "up", "note": "создать сеть, тома и контейнеры и запустить всё" },
+        { "text": "-d", "note": "в фоне: терминал свободен, логи смотрят отдельно" },
+        { "text": "--build", "note": "сначала пересобрать образы сервисов, у которых есть build" },
+        { "text": "api", "note": "необязательно: поднять только этот сервис и тех, от кого он зависит" }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Как работать с проектом на Compose",
+      "items": [
+        "Откройте терминал в папке, где лежит compose.yaml",
+        "Запустите docker compose up -d. В первый раз Docker скачает и соберёт образы, это займёт время",
+        "Проверьте docker compose ps: у каждого сервиса должно быть состояние running или healthy",
+        "Если что-то не так, смотрите docker compose logs -f и имя сервиса",
+        "Поправили код сервиса со сборкой - запустите docker compose up -d --build",
+        "Закончили работу - docker compose down. Данные в томах при этом сохранятся"
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "stop, down и down -v",
+      "cols": ["Команда", "Контейнеры", "Сеть", "Тома с данными"],
+      "rows": [
+        ["docker compose stop", "Остановлены, но не удалены", "Остаётся", "Остаются"],
+        ["docker compose down", "Остановлены и удалены", "Удалена", "Остаются"],
+        ["docker compose down -v", "Остановлены и удалены", "Удалена", "Удалены вместе с данными"]
+      ]
+    },
+    {
+      "type": "mistakes",
+      "title": "Что ломается чаще всего",
+      "items": [
+        { "problem": "После down -v база пустая", "fix": "Ключ -v удаляет тома, а с ними все данные базы. Вернуть их можно только из резервной копии. Для обычной остановки хватает down без ключей." },
+        { "problem": "api не может подключиться к базе по localhost", "fix": "Внутри сети Compose у каждого сервиса свой localhost. Пишите имя сервиса: db:5432." },
+        { "problem": "api падает при старте, потому что база ещё не готова", "fix": "depends_on без условий ждёт только запуска контейнера. Добавьте базе healthcheck, а в api - condition: service_healthy." },
+        { "problem": "Поправил код, а изменений не видно", "fix": "Контейнер работает со старым образом. Запустите docker compose up -d --build." },
+        { "problem": "port is already allocated", "fix": "Порт занят другой программой или контейнером другого проекта. Поменяйте левое число в ports или остановите того, кто занял порт." },
+        { "problem": "Команда docker-compose не найдена", "fix": "В новых версиях Docker Compose встроен в Docker и пишется через пробел: docker compose." }
+      ]
+    },
+    {
+      "type": "cheatsheet",
+      "title": "Шпаргалка",
+      "items": [
+        { "cmd": "docker compose up -d", "text": "Поднять все сервисы в фоне" },
+        { "cmd": "docker compose up -d --build", "text": "Пересобрать образы и поднять" },
+        { "cmd": "docker compose ps", "text": "Какие сервисы работают и в каком состоянии" },
+        { "cmd": "docker compose logs -f api", "text": "Смотреть вывод сервиса api, пока не нажмёте Ctrl+C" },
+        { "cmd": "docker compose exec db psql -U app", "text": "Выполнить команду внутри работающего сервиса db" },
+        { "cmd": "docker compose restart api", "text": "Перезапустить один сервис" },
+        { "cmd": "docker compose stop", "text": "Остановить, ничего не удаляя" },
+        { "cmd": "docker compose down", "text": "Остановить и удалить контейнеры и сеть. Тома остаются" },
+        { "cmd": "docker compose down -v", "text": "То же плюс удалить тома. Данные базы пропадут" },
+        { "cmd": "docker compose config", "text": "Показать итоговый файл с подставленными переменными" }
+      ]
+    },
+    {
+      "type": "quiz",
+      "title": "Проверьте себя",
+      "items": [
+        { "q": "Что сделает docker compose down -v?", "options": ["Остановит контейнеры, данные останутся", "Удалит контейнеры, сеть и тома с данными", "Покажет версию Compose"], "answer": 1, "why": "Ключ -v добавляет к удалению тома. Данные базы, которые в них лежали, пропадут." },
+        { "q": "Как сервис api должен обращаться к сервису db?", "options": ["localhost:5432", "db:5432", "127.0.0.1:5432"], "answer": 1, "why": "В общей сети Compose сервисы находят друг друга по имени. localhost внутри контейнера - это сам контейнер." },
+        { "q": "depends_on без условий гарантирует, что база готова принимать запросы?", "options": ["Да", "Нет, только что контейнер базы запущен"], "answer": 1, "why": "Готовность проверяет healthcheck. Чтобы ждать её, нужно condition: service_healthy." },
+        { "q": "Как увидеть, почему сервис упал?", "options": ["docker compose logs имя-сервиса", "docker compose down", "docker compose config"], "answer": 0, "why": "logs показывает вывод программы внутри контейнера, там обычно и написана причина." }
+      ]
+    },
+    { "type": "project", "title": "Где это в вашем проекте" }
+  ]
+}
