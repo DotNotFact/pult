@@ -1,0 +1,136 @@
+# Релиз: тег vX.Y.Z -> сборка release -> установщик, zip и SHA256SUMS.txt -> GitHub Release.
+# Zip собирает tools/package.ps1, установщик - tools/build-installer.ps1: те же скрипты, что и локально,
+# чтобы файлы релиза не расходились с проверенными на машине.
+# Ручной запуск (workflow_dispatch) берёт версию из поля или из Cargo.toml и по умолчанию
+# создаёт черновик - удобно проверить сборку, ничего не публикуя.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия без v (пусто - из Cargo.toml)"
+        required: false
+        default: ""
+      draft:
+        description: "Создать черновик, а не опубликованный релиз"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+# Два релиза одной версии одновременно не нужны; идущий не отменяем - он может быть на середине загрузки.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  release:
+    name: Сборка и релиз (Windows x64)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Код
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+
+      - name: База знаний - схема, ссылки, текст
+        run: node knowledge/validate.mjs
+
+      - name: Rust stable
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+        with:
+          toolchain: stable
+
+      - name: Версия
+        id: ver
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $v = $env:GITHUB_REF_NAME -replace '^v', ''
+          } else {
+            $v = "$env:INPUT_VERSION".Trim() -replace '^v', ''
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Output "Версия: $(if ($v) { $v } else { 'из Cargo.toml' })"
+
+      - name: Сборка и zip
+        id: pkg
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          $p = @{}
+          if ($env:VERSION) { $p.Version = $env:VERSION }
+          # на теге версия обязана совпасть с Cargo.toml - иначе exe покажет не ту версию, что в релизе
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $p.StrictVersion = $true }
+          ./tools/package.ps1 @p
+
+      # Tauri CLI закреплённой версии берётся через npx (версия - в самом скрипте), NSIS он качает сам.
+      # Окно пересобирается с настройками установщика, поэтому exe в zip и в установщике - две сборки
+      # одного кода; pult-cli.exe у них общий.
+      - name: Установщик
+        id: setup
+        run: |
+          $p = @{}
+          # на теге версия обязана совпасть с Cargo.toml и app/tauri.conf.json
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $p.Version = $env:GITHUB_REF_NAME }
+          ./tools/build-installer.ps1 @p
+
+      - name: SHA256SUMS.txt
+        id: sums
+        env:
+          SETUP: ${{ steps.setup.outputs.setup }}
+          ZIP: ${{ steps.pkg.outputs.zip }}
+        run: |
+          $out = Join-Path (Split-Path $env:ZIP) 'SHA256SUMS.txt'
+          $lines = foreach ($f in $env:SETUP, $env:ZIP) {
+            "$((Get-FileHash $f -Algorithm SHA256).Hash.ToLowerInvariant())  $(Split-Path $f -Leaf)"
+          }
+          [IO.File]::WriteAllText($out, ($lines -join "`n") + "`n", [Text.Encoding]::ASCII)
+          Get-Content $out
+          "file=$out" >> $env:GITHUB_OUTPUT
+
+      - name: Заметки из CHANGELOG.md
+        id: notes
+        env:
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          $found = ./tools/release-notes.ps1 -Version $env:VERSION -Out "$env:RUNNER_TEMP\notes.md"
+          "found=$found" >> $env:GITHUB_OUTPUT
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+          SETUP: ${{ steps.setup.outputs.setup }}
+          ZIP: ${{ steps.pkg.outputs.zip }}
+          SUMS: ${{ steps.sums.outputs.file }}
+          NOTES_FOUND: ${{ steps.notes.outputs.found }}
+          DRAFT: ${{ inputs.draft }}
+        run: |
+          $tag = "v$env:VERSION"
+          $a = @('release', 'create', $tag, $env:SETUP, $env:ZIP, $env:SUMS, '--title', "Пульт $env:VERSION")
+          if ($env:NOTES_FOUND -eq 'true') { $a += @('--notes-file', "$env:RUNNER_TEMP\notes.md") }
+          else { $a += '--generate-notes' }
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $a += '--verify-tag'
+          } else {
+            # ручной запуск: тега может не быть - gh создаст его на текущем коммите
+            $a += @('--target', $env:GITHUB_SHA)
+            if ($env:DRAFT -eq 'true') { $a += '--draft' }
+          }
+          if ($env:VERSION -match '-') { $a += '--prerelease' }
+          gh @a
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }

@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#
+# Сообщение и автор коммита.
+#
+# 1. Нет Co-Authored-By на ИИ и строки «Generated with ...» - коммит
+#    отклоняется, а не чинится молча: сообщение правит тот, кто его писал.
+# 2. Автор и коммиттер - только DotNotFact (канонический noreply-адрес).
+#
+# Включение (один раз на рабочую копию): git config core.hooksPath .githooks
+# Обход проверки автора: IDENTITY_FORCE=1 git commit ...
+
+set -euo pipefail
+
+. "$(dirname "$0")/identity.sh"
+
+msg="${1:-}"
+fail=0
+
+if [ -n "$msg" ] && [ -f "$msg" ]; then
+  if ! bad="$(identity_ai_lines < "$msg")"; then
+    echo "" >&2
+    echo "Коммит отклонён: в сообщении строка про ИИ." >&2
+    printf '%s\n' "$bad" >&2
+    echo "  Co-Authored-By на ИИ добавляет аккаунт claude в Contributors," >&2
+    echo "  строку «Generated with» владелец не хочет нигде. Уберите строку и повторите." >&2
+    fail=1
+  fi
+fi
+
+if [ "${IDENTITY_FORCE:-}" != "1" ]; then
+  ae="$(identity_email_of GIT_AUTHOR_IDENT)"
+  ce="$(identity_email_of GIT_COMMITTER_IDENT)"
+  if [ "$ae" != "$IDENTITY_CANON" ] || [ "$ce" != "$IDENTITY_CANON" ]; then
+    echo "" >&2
+    echo "Коммит отклонён: автор не DotNotFact." >&2
+    echo "  автор:       ${ae:-<не задан>}" >&2
+    echo "  коммиттер:   ${ce:-<не задан>}" >&2
+    echo "  должно быть: $IDENTITY_CANON" >&2
+    echo "  git config user.name \"DotNotFact\" && git config user.email \"$IDENTITY_CANON\"" >&2
+    fail=1
+  fi
+fi
+
+[ "$fail" = 0 ] || { echo "" >&2; exit 1; }
+exit 0

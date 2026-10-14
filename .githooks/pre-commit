@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#
+# Проверки содержимого до коммита. Смотрит ИНДЕКС (то, что уедет), а не
+# рабочую копию - кроме базы знаний, см. пункт 3.
+#
+# 1. Длинное и среднее тире в добавленных строках текстовых файлов.
+#    В Пульте везде только дефис «-» (CLAUDE.md, правило 4).
+# 2. Файлы .env* в коммите. Пульт .env не читает и не хранит.
+# 3. Тронута knowledge/ - node knowledge/validate.mjs по всей базе. Проверка
+#    идёт по рабочей копии: частично добавленный JSON она не отличит.
+#
+# Включение (один раз на рабочую копию): git config core.hooksPath .githooks
+# Осознанный обход одного коммита: git commit --no-verify
+
+set -euo pipefail
+
+fail=0
+staged() { git -c core.quotepath=false diff --cached --name-only --diff-filter="$1"; }
+
+# 1. Тире. -U0: только добавленные строки, с номером строки в новом файле.
+dashes="$(git -c core.quotepath=false diff --cached -U0 --no-color --no-ext-diff --diff-filter=ACMR \
+  | perl -CSD -ne '
+      if (/^\+\+\+ b\/(.*)$/) { $f = $1; next }
+      if (/^@@ -\d+(?:,\d+)? \+(\d+)/) { $n = $1; next }
+      next if /^\+\+\+ /;
+      if (/^\+/) { print "    $f:$n: ", substr($_, 1) if /[\x{2013}\x{2014}]/; $n++ }')"
+if [ -n "$dashes" ]; then
+  echo "" >&2
+  echo "Коммит отклонён: длинное или среднее тире, в Пульте только дефис «-»." >&2
+  printf '%s\n' "$dashes" >&2
+  fail=1
+fi
+
+# 2. .env* - по имени файла в любом каталоге.
+envs="$(staged ACMR | awk -F/ '$NF ~ /^\.env/' || true)"
+if [ -n "$envs" ]; then
+  echo "" >&2
+  echo "Коммит отклонён: в индексе файл .env*. В нём бывают ключи и токены." >&2
+  printf '    %s\n' $envs >&2
+  echo "  Убрать из индекса: git rm --cached <файл>" >&2
+  fail=1
+fi
+
+# 3. База знаний.
+# grep без -q: с -q он закрыл бы трубу раньше git, и pipefail счёл бы это провалом.
+if staged ACMRD | grep '^knowledge/' >/dev/null; then
+  if ! command -v node >/dev/null 2>&1; then
+    echo "" >&2
+    echo "Коммит отклонён: тронута knowledge/, а node не найден - база НЕ проверена." >&2
+    fail=1
+  elif ! out="$(node knowledge/validate.mjs 2>&1)"; then
+    echo "" >&2
+    echo "Коммит отклонён: база знаний красная (node knowledge/validate.mjs)." >&2
+    printf '%s\n' "$out" | tail -20 >&2
+    fail=1
+  fi
+fi
+
+[ "$fail" = 0 ] || { echo "" >&2; exit 1; }
+exit 0

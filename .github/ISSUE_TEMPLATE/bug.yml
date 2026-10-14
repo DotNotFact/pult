@@ -1,0 +1,39 @@
+name: Ошибка
+description: Пульт делает что-то не так
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Что случилось
+      description: Что сделали, что ожидали и что увидели
+    validations:
+      required: true
+  - type: textarea
+    id: project
+    attributes:
+      label: На каком проекте
+      description: Кусок package.json, Makefile, .gitlab-ci.yml или другого файла, на котором видна ошибка. Без секретов.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Версия Пульта
+      placeholder: "2.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Где
+      options:
+        - Окно (Pult.exe)
+        - Терминал (pult-cli)
+        - Оба
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Система
+      placeholder: Windows 11 24H2

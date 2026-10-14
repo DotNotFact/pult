@@ -1,11 +1,25 @@
-# сборка
-/target/
+# сборка (target/ без слеша в начале - и корневая, и у отдельного крейта)
+target/
 /dist/
 /bin/
 /app/gen/
+node_modules/
 # данные приложения живут в %LOCALAPPDATA%, но старая папка могла остаться
 /data/
-# служебное
+# служебное и черновики
 *.tmp
+*.log
+*.bak
+*.orig
+*.swp
+*~
+/scratch/
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
+# локальные разрешения Claude Code - у каждого свои
+.claude/settings.local.json
+
+# рабочие копии агентов (git worktree)
+.claude/worktrees/

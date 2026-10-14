@@ -1,0 +1,64 @@
+# Проверка на каждый push в main и каждый PR: база знаний, формат, clippy, тесты.
+# Только Windows: окно собирается на WebView2, а Linux потребовал бы webkit2gtk - лишние минуты.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Новый push в ту же ветку отменяет прошлый прогон - его результат уже никому не нужен.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  check:
+    name: Проверка (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Код
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+
+      - name: База знаний - схема, ссылки, текст
+        run: node knowledge/validate.mjs
+
+      - name: Контраст палитры - текст и границы в обеих темах
+        run: node tools/contrast.mjs
+
+      - name: Состояние дерева - docs/status.md совпадает с деревом
+        run: node tools/status.mjs --check
+
+      - name: Rust stable
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Кэш cargo
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          # кэш пишет только main: ветки PR его читают, но не плодят свои копии
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Формат
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Тесты
+        run: cargo test --workspace

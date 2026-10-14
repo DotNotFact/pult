@@ -1,0 +1,29 @@
+name: Объяснение команды
+description: Пульт не знает программу или объясняет её неверно
+labels: [knowledge]
+body:
+  - type: input
+    id: command
+    attributes:
+      label: Команда
+      placeholder: "docker compose up -d --build"
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: Что Пульт говорит сейчас
+      description: Можно скопировать из панели скрипта или из pult-cli explain
+  - type: textarea
+    id: right
+    attributes:
+      label: Как правильно
+      description: Что делает команда и её ключи, простыми словами. Ссылка на документацию программы поможет.
+    validations:
+      required: true
+  - type: checkboxes
+    id: pr
+    attributes:
+      label: Помощь
+      options:
+        - label: Могу сам прислать PR в knowledge/ (формат описан в knowledge/SCHEMA.md)

@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+#
+# Пауза между пушами и авторство того, что уезжает.
+#
+# Зачем пауза. Личный аккаунт владельца уже блокировала защита GitHub от
+# злоупотреблений - за «несколько ИИ-агентов пушат ветки и мержат, десятки
+# операций за минуты». Лимиты считают отправки, а не коммиты, поэтому:
+#   ветка задачи - не чаще раза в 3 минуты,
+#   отправка, в которой есть main, - не чаще раза в 10 минут.
+# Коммитить в это время можно и нужно: коммит локальный и лимитов не стоит.
+# Удаление веток и пустая отправка паузы не стоят.
+#
+# Штамп общий для всех рабочих копий (лежит в общем .git): соседняя сессия
+# сдвигает ваше окно. Сколько осталось:
+#   echo $(( 180 - ($(date +%s) - $(cat "$(git rev-parse --git-common-dir)/last-push-at")) ))
+#
+# Включение (один раз на рабочую копию): git config core.hooksPath .githooks
+# Срочный обход паузы: PULT_PUSH_FORCE=1 git push. Исключение, а не режим.
+# Обход проверки автора: IDENTITY_FORCE=1. Не --no-verify: он снимает обе.
+#
+# Хук взят у Истока и упрощён под один адрес (у Пульта нет второго хостинга).
+# Опознание «того же пуша» по паре «ссылка + sha» оставлено: если однажды у
+# origin появится второй push-url, git позовёт хук дважды на одну отправку.
+
+set -euo pipefail
+
+BRANCH_INTERVAL_SECONDS=180
+MAIN_INTERVAL_SECONDS=600
+SAME_PUSH_WINDOW_SECONDS=300
+ZERO=0000000000000000000000000000000000000000
+
+git_dir="$(git rev-parse --git-common-dir)"
+stamp="$git_dir/last-push-at"
+fingerprint_file="$git_dir/last-push-refs"
+
+refs="$(cat)"
+
+. "$(dirname "$0")/identity.sh"
+
+# --- Авторство: до паузы. PUSH_FORCE снимает паузу, но не право уехать под чужим именем.
+if [ "${IDENTITY_FORCE:-}" != "1" ] && [ -n "$refs" ]; then
+  bad=""
+  while read -r local_ref local_sha remote_ref remote_sha; do
+    [ -n "${local_sha:-}" ] || continue
+    [ "$local_sha" = "$ZERO" ] && continue
+    if [ -z "${remote_sha:-}" ] || [ "$remote_sha" = "$ZERO" ]; then
+      range="$local_sha --not --remotes"   # новая ветка: только то, чего нет ни на одном remote
+    else
+      range="$remote_sha..$local_sha"
+    fi
+    while IFS=$'\t' read -r sha ae ce; do
+      [ -n "${sha:-}" ] || continue
+      identity_allowed "$ae" || bad="${bad}    $sha  автор      $ae"$'\n'
+      identity_allowed "$ce" || bad="${bad}    $sha  коммиттер  $ce"$'\n'
+    done < <(git log --format='%h%x09%ae%x09%ce' $range 2>/dev/null || true)
+    while read -r sha; do
+      [ -n "${sha:-}" ] || continue
+      if ! lines="$(git log -1 --format=%B "$sha" | identity_ai_lines)"; then
+        bad="${bad}    $sha  строка про ИИ в сообщении"$'\n'"$lines"$'\n'
+      fi
+    done < <(git log --format='%h' $range 2>/dev/null || true)
+  done <<< "$refs"
+
+  if [ -n "$bad" ]; then
+    echo "" >&2
+    echo "Пуш отклонён: в уезжающих коммитах не только DotNotFact или есть строка про ИИ." >&2
+    printf '%s' "$bad" >&2
+    echo "  Допустимы: $IDENTITY_CANON, kilyatti@gmail.com, noreply@github.com." >&2
+    echo "  Сообщение последнего коммита: git commit --amend; более ранних - git rebase -i от main." >&2
+    echo "" >&2
+    exit 1
+  fi
+fi
+
+# --- Пауза.
+if [ "${PULT_PUSH_FORCE:-}" = "1" ]; then
+  date +%s > "$stamp"
+  exit 0
+fi
+
+# Пусто: на этом адресе уже всё есть. Только удаления: содержимое не едет.
+[ -n "$refs" ] || exit 0
+printf '%s\n' "$refs" | grep -qv '^(delete) 0\{40,\} ' || exit 0
+
+# Отпечаток - локальная ссылка, sha и УДАЛЁННАЯ ссылка. Без третьего поля
+# `push HEAD:task/x`, а через 4 минуты `push HEAD:main` того же sha считались
+# одной отправкой и main уезжал без паузы (поймано verify-gates). Четвёртое поле
+# (sha на той стороне) не берётся: у двух адресов одной отправки оно разное.
+pairs="$(printf '%s\n' "$refs" | awk 'NF && $1 != "(delete)" { print $1, $2, $3 }')"
+
+if printf '%s\n' "$refs" | awk '$1 != "(delete)" && $3 == "refs/heads/main" { f = 1 } END { exit !f }'; then
+  need=$MAIN_INTERVAL_SECONDS; kind="main"
+else
+  need=$BRANCH_INTERVAL_SECONDS; kind="ветка задачи"
+fi
+
+now=$(date +%s)
+if [ -f "$stamp" ]; then
+  last=$(cat "$stamp" 2>/dev/null || echo 0)
+  case "$last" in ''|*[!0-9]*) last=0 ;; esac
+  elapsed=$(( now - last ))
+
+  # Общая пара «ссылка + sha» внутри окна - та же отправка по второму адресу.
+  if [ "$elapsed" -lt "$SAME_PUSH_WINDOW_SECONDS" ] && [ -f "$fingerprint_file" ] \
+     && printf '%s\n' "$pairs" | grep -Fxqf "$fingerprint_file" 2>/dev/null; then
+    exit 0
+  fi
+
+  if [ "$elapsed" -lt "$need" ]; then
+    wait=$(( (need - elapsed + 59) / 60 ))
+    echo "" >&2
+    echo "Пуш отклонён: с прошлого прошло $(( elapsed / 60 )) мин, нужно $(( need / 60 )) (отправка: $kind; ветка - 3 мин, main - 10)." >&2
+    echo "Подождите ещё ~$wait мин и отправьте накопившиеся коммиты одной пачкой." >&2
+    echo "Коммитить в это время можно. Срочно: PULT_PUSH_FORCE=1 git push" >&2
+    echo "" >&2
+    exit 1
+  fi
+fi
+
+printf '%s\n' "$pairs" > "$fingerprint_file"
+date +%s > "$stamp"
+exit 0
