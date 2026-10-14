@@ -4,7 +4,7 @@
 //! а у файлов-скриптов - из шапки-комментария.
 use crate::kb::{Desc, Kb, Tool};
 use crate::model::{FlagInfo, Info, Part, Script};
-use crate::util::{cap, inside, is_unc, lower_first, mtime_ms, read_head};
+use crate::util::{cap, inside, is_unc, lower_first, mtime_ms, read_head, resolve_inside};
 use regex::Regex;
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -53,8 +53,52 @@ pub fn split_segments(cmd: &str) -> Vec<String> {
     out.into_iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
 }
 
+/// Слова команды с учётом кавычек. Обратная косая - разделитель папок Windows
+/// (`tools\build.ps1`, `D:\app\gradlew.bat`), а не экранирование, как в sh: она остаётся в слове.
+/// Экранирует она только кавычку и пробел (`\"`, `\ `); `\` в конце строки - перенос, его нет.
 pub fn tokens(s: &str) -> Vec<String> {
-    shell_words::split(s).unwrap_or_else(|_| s.split_whitespace().map(str::to_string).collect())
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut started = false;
+    let mut q: Option<char> = None;
+    let mut it = s.chars().peekable();
+    while let Some(c) = it.next() {
+        match (q, c) {
+            (Some(qc), _) if c == qc => q = None,
+            (Some('"'), '\\') if it.peek() == Some(&'"') => cur.push(it.next().unwrap_or('"')),
+            (Some(_), _) => cur.push(c),
+            (None, '"' | '\'') => {
+                q = Some(c);
+                started = true;
+            }
+            (None, '\\') => match it.peek() {
+                Some(&n) if n == '"' || n == '\'' || n == ' ' => {
+                    cur.push(n);
+                    it.next();
+                    started = true;
+                }
+                Some('\n') | None => {}
+                Some(_) => {
+                    cur.push(c);
+                    started = true;
+                }
+            },
+            (None, c) if c.is_whitespace() => {
+                if started {
+                    out.push(std::mem::take(&mut cur));
+                    started = false;
+                }
+            }
+            (None, c) => {
+                cur.push(c);
+                started = true;
+            }
+        }
+    }
+    if started {
+        out.push(cur);
+    }
+    out
 }
 
 fn normalize(seg: &str, kb: &Kb) -> String {
@@ -88,7 +132,48 @@ struct Ref {
     filter: Option<String>,
     dir: Option<String>,
 }
-const PM_BUILTIN: [&str; 40] = ["install", "i", "ci", "add", "remove", "rm", "uninstall", "update", "up", "upgrade", "exec", "dlx", "run", "publish", "link", "why", "outdated", "audit", "list", "ls", "store", "init", "create", "prune", "rebuild", "import", "deploy", "pack", "setup", "env", "licenses", "dedupe", "config", "cache", "version", "help", "login", "logout", "patch", "fetch"];
+const PM_BUILTIN: [&str; 40] = [
+    "install",
+    "i",
+    "ci",
+    "add",
+    "remove",
+    "rm",
+    "uninstall",
+    "update",
+    "up",
+    "upgrade",
+    "exec",
+    "dlx",
+    "run",
+    "publish",
+    "link",
+    "why",
+    "outdated",
+    "audit",
+    "list",
+    "ls",
+    "store",
+    "init",
+    "create",
+    "prune",
+    "rebuild",
+    "import",
+    "deploy",
+    "pack",
+    "setup",
+    "env",
+    "licenses",
+    "dedupe",
+    "config",
+    "cache",
+    "version",
+    "help",
+    "login",
+    "logout",
+    "patch",
+    "fetch",
+];
 
 /// «pnpm run x», «npm run x», «yarn x», «pnpm --filter web build» -> ссылка на скрипт.
 fn script_ref(toks: &[String]) -> Option<Ref> {
@@ -170,7 +255,10 @@ fn header_of(text: &str, ext: &str) -> String {
     if ext == "ps1" {
         if let Some(c) = crate::re!(r"(?s)<#(.*?)#>").captures(&head6) {
             let body = &c[1];
-            let grab = |name: &str| crate::util::cached_re(&format!(r"(?is)\.{name}\s*\n(.*?)(?:\n\s*\.[A-Z]|\z)")).and_then(|r| r.captures(body).map(|m| m[1].trim().to_string()));
+            let grab = |name: &str| {
+                crate::util::cached_re(&format!(r"(?is)\.{name}\s*\n(.*?)(?:\n\s*\.[A-Z]|\z)"))
+                    .and_then(|r| r.captures(body).map(|m| m[1].trim().to_string()))
+            };
             let t = [grab("SYNOPSIS"), grab("DESCRIPTION")].into_iter().flatten().collect::<Vec<_>>().join("\n");
             let t = if t.is_empty() && !crate::re!(r"\.[A-Z]{4,}").is_match(body) { body.trim().to_string() } else { t };
             if !t.is_empty() {
@@ -191,7 +279,13 @@ fn header_of(text: &str, ext: &str) -> String {
             return clean(&body);
         }
     }
-    let prefix = if ext == "bat" || ext == "cmd" { crate::re!(r"(?i)^\s*(?:@?rem\b|::)\s?(.*)$") } else if js { crate::re!(r"^\s*//\s?(.*)$") } else { crate::re!(r"^\s*#\s?(.*)$") };
+    let prefix = if ext == "bat" || ext == "cmd" {
+        crate::re!(r"(?i)^\s*(?:@?rem\b|::)\s?(.*)$")
+    } else if js {
+        crate::re!(r"^\s*//\s?(.*)$")
+    } else {
+        crate::re!(r"^\s*#\s?(.*)$")
+    };
     let skip = crate::re!(r"(?i)^\s*(@?echo\s+off|set\s+-|setlocal|#requires|import\s|'use strict'|\x22use strict\x22)");
     let noise = crate::re!(r"eslint-disable|@ts-|prettier-ignore|shellcheck|^[-=_*#\s]*$");
     let mut out: Vec<String> = Vec::new();
@@ -215,11 +309,47 @@ fn header_of(text: &str, ext: &str) -> String {
             continue;
         }
         out.push(m[1].to_string());
-        if out.join(" ").len() > 700 {
+        if out.join(" ").chars().count() > 700 {
             break;
         }
     }
     clean(&out.join("\n"))
+}
+
+/// Первая фраза шапки - для краткого описания. Фраза в комментарии часто переносится на
+/// следующую строку («...держатель,» / «Docker Engine и раннер.»): строки первого абзаца
+/// склеиваются до конца первого предложения. Пункт списка начинает новую мысль - на нём стоп.
+pub fn lead(header: &str) -> String {
+    let mut text = String::new();
+    let mut prev_len = 0;
+    for l in header.lines().map(str::trim) {
+        if !text.is_empty() {
+            // следующая строка - продолжение, если прежняя оборвалась на запятой и т.п., была
+            // длинной (перенос по ширине комментария) или эта начинается не с заглавной буквы;
+            // короткая строка без точки и заглавная следом - это заголовок и новая мысль
+            let open = crate::re!(r"[,;:(\-]$").is_match(&text);
+            let wrapped = prev_len >= 60;
+            let upper = l.chars().next().is_some_and(char::is_uppercase);
+            if l.is_empty() || crate::re!(r"^(?:[-*•]\s|\d+[.)]\s)").is_match(l) || !(open || wrapped || !upper) {
+                break;
+            }
+            text.push(' ');
+        }
+        prev_len = l.chars().count();
+        text.push_str(l);
+        if crate::re!(r"[.!?…]$").is_match(l) || text.chars().count() > 220 {
+            break;
+        }
+    }
+    // конец предложения: знак, пробел и заглавная буква (не «т.е. в», не «ci-off.ps1 и»)
+    if let Some(m) = crate::re!(r"[.!?…]\s+\p{Lu}").find(&text) {
+        text.truncate(m.start() + text[m.start()..].chars().next().map_or(1, char::len_utf8));
+    }
+    if text.chars().count() > 220 {
+        let cut: String = text.chars().take(219).collect();
+        text = format!("{}…", cut.rsplit_once(' ').map_or(cut.as_str(), |x| x.0).trim_end_matches([',', ';', ':']));
+    }
+    text
 }
 
 fn flags_of(text: &str, ext: &str, kb: &Kb) -> Vec<String> {
@@ -237,8 +367,12 @@ fn flags_of(text: &str, ext: &str, kb: &Kb) -> Vec<String> {
             "sh" | "bash" => ".sh",
             _ => ".js",
         };
-        let pats: Vec<Regex> = ff[key].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).filter_map(|p| crate::util::cached_re(&format!("(?m){p}"))).collect()).unwrap_or_default();
-        let only_lines = (key == ".js").then(|| ff["linesWith"].as_str().and_then(|p| crate::util::cached_re(&format!("(?i){p}")))).flatten();
+        let pats: Vec<Regex> = ff[key]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str()).filter_map(|p| crate::util::cached_re(&format!("(?m){p}"))).collect())
+            .unwrap_or_default();
+        let only_lines =
+            (key == ".js").then(|| ff["linesWith"].as_str().and_then(|p| crate::util::cached_re(&format!("(?i){p}")))).flatten();
         for line in text.lines() {
             if let Some(o) = &only_lines {
                 if !o.is_match(line) {
@@ -255,7 +389,7 @@ fn flags_of(text: &str, ext: &str, kb: &Kb) -> Vec<String> {
     set.into_iter().take(16).collect()
 }
 
-pub fn analyze_file(abs: &Path, kb: &Kb) -> Option<FileInfo> {
+pub(crate) fn analyze_file(abs: &Path, kb: &Kb) -> Option<FileInfo> {
     let m = mtime_ms(abs);
     if m == 0 {
         return None;
@@ -292,14 +426,18 @@ fn is_script_path(t: &str) -> bool {
     FILE_EXT.iter().any(|e| low.ends_with(&format!(".{e}")))
 }
 
-/// Безопасно разрешить путь файла из команды: внутри проекта и не сетевой.
+/// Безопасно разрешить путь файла из команды: внутри проекта и не сетевой, в том числе после
+/// разрешения ссылок (ссылка из проекта на \\host\share или за его пределы не читается).
 fn safe_file(tok: &str, cwd: &Path, root: &Path) -> Option<PathBuf> {
     if is_unc(tok) {
         return None;
     }
     let p = Path::new(tok.trim_matches(['"', '\'']));
     let abs = if p.is_absolute() { p.to_path_buf() } else { cwd.join(p) };
-    (inside(root, &abs) && abs.is_file()).then_some(abs)
+    if !inside(root, &abs) {
+        return None;
+    }
+    resolve_inside(root, &abs).filter(|a| a.is_file())
 }
 
 /// Описание незнакомой программы - из её пакета в node_modules (офлайн, без базы знаний).
@@ -314,7 +452,10 @@ fn package_about(bin: &str, cwd: &Path, root: &Path) -> Option<(String, String)>
         let bindir = nm.join(".bin");
         for shim in [bindir.join(format!("{bin}.cmd")), bindir.join(bin)] {
             if let Some(text) = read_head(&shim, 4096) {
-                let pkg = pkg_re.captures_iter(&text).map(|c| c[1].replace('\\', "/")).find(|p| p != ".bin" && nm.join(p).join("package.json").is_file());
+                let pkg = pkg_re
+                    .captures_iter(&text)
+                    .map(|c| c[1].replace('\\', "/"))
+                    .find(|p| p != ".bin" && nm.join(p).join("package.json").is_file());
                 if let Some(pkg) = pkg {
                     let j: serde_json::Value = serde_json::from_str(&read_head(&nm.join(&pkg).join("package.json"), 200_000)?).ok()?;
                     let desc = j["description"].as_str().unwrap_or("").trim().to_string();
@@ -367,7 +508,7 @@ fn apply(tool: &Tool, toks: &[String], n: usize) -> Applied {
     let mut d = tool.default.clone();
     let mut sub_hit = None;
     for s in &tool.sub {
-        if s.re().is_some_and(|r| r.is_match(&rest).unwrap_or(false)) {
+        if s.re().is_some_and(|r| r.is_match(&rest)) {
             d = merge(&tool.default, &s.d);
             sub_hit = Some(s);
             break;
@@ -381,10 +522,18 @@ fn apply(tool: &Tool, toks: &[String], n: usize) -> Applied {
     let mut long = d.long.unwrap_or(false);
     let url = d.url.unwrap_or(false);
     let mut danger = d.danger.unwrap_or(false);
-    let mut parts = vec![Part { text: toks[..n].join(" "), note: if tool.about.is_empty() { tool.name.clone() } else { tool.about.clone() }, kind: "bin".into() }];
+    let mut parts = vec![Part {
+        text: toks[..n].join(" "),
+        note: if tool.about.is_empty() { tool.name.clone() } else { tool.about.clone() },
+        kind: "bin".into(),
+    }];
     // какие слова «съела» подкоманда: все не-ключи до первого ключа, которые входят в совпадение
     let sub_words = match sub_hit {
-        Some(s) => s.re().and_then(|r| r.find(&rest).ok().flatten()).map(|m| rest[..m.end()].split_whitespace().filter(|w| !w.starts_with('-')).count()).unwrap_or(0),
+        Some(s) => s
+            .re()
+            .and_then(|r| r.find_end(&rest))
+            .map(|end| rest[..end].split_whitespace().filter(|w| !w.starts_with('-')).count())
+            .unwrap_or(0),
         None => 0,
     };
     let mut used = vec![false; tool.flags.len()];
@@ -421,10 +570,21 @@ fn apply(tool: &Tool, toks: &[String], n: usize) -> Applied {
             }
             continue;
         }
-        let kind = if is_script_path(t) { "file" } else if t.starts_with('-') { "flag" } else { "arg" };
+        let kind = if is_script_path(t) {
+            "file"
+        } else if t.starts_with('-') {
+            "flag"
+        } else {
+            "arg"
+        };
         parts.push(Part { text: t.clone(), note: String::new(), kind: kind.into() });
     }
-    let flags = tool.flags.iter().zip(&used).map(|(f, u)| FlagInfo { flag: f.flag.clone(), text: f.text.clone(), used: *u, from: "kb".into() }).collect();
+    let flags = tool
+        .flags
+        .iter()
+        .zip(&used)
+        .map(|(f, u)| FlagInfo { flag: f.flag.clone(), text: f.text.clone(), used: *u, from: "kb".into() })
+        .collect();
     let how = if d.how.is_empty() { tool.how.clone() } else { d.how.clone() };
     Applied { say, fx, long, url, danger, parts, flags, how }
 }
@@ -503,7 +663,11 @@ pub fn explain(s: &Script, cwd: &Path, ctx: &Ctx) -> Info {
                     Some(t) if ctx.depth < 3 && r.name != s.name => {
                         let sub = Script { name: r.name.clone(), raw: vec![t.clone()], cmd: t, file_rel: None, ..s.clone() };
                         let si = explain(&sub, cwd, &Ctx { depth: ctx.depth + 1, ..*ctx });
-                        says.push(if ctx.depth > 1 { format!("скрипт «{}»", r.name) } else { format!("«{}»: {}", r.name, lower_first(&si.summary)) });
+                        says.push(if ctx.depth > 1 {
+                            format!("скрипт «{}»", r.name)
+                        } else {
+                            format!("«{}»: {}", r.name, lower_first(&si.summary))
+                        });
                         fx.extend(si.fx.iter().cloned());
                         info.long |= si.long;
                         info.url |= si.url;
@@ -544,7 +708,7 @@ pub fn explain(s: &Script, cwd: &Path, ctx: &Ctx) -> Info {
                 if let Some(abs) = toks[n..].iter().filter(|t| is_script_path(t)).find_map(|t| safe_file(t, cwd, ctx.root)) {
                     if let Some(fi) = add_file(&abs, &mut info, &mut fx) {
                         if !fi.header.is_empty() {
-                            say = fi.header.lines().next().unwrap_or("").to_string();
+                            say = lead(&fi.header);
                         }
                         info.source = "file".into();
                     }
@@ -590,7 +754,7 @@ pub fn explain(s: &Script, cwd: &Path, ctx: &Ctx) -> Info {
         if is_script_path(&toks[0]) {
             if let Some(abs) = safe_file(&toks[0], cwd, ctx.root) {
                 let fi = add_file(&abs, &mut info, &mut fx);
-                says.push(fi.map(|f| f.header.lines().next().unwrap_or("").to_string()).filter(|h| !h.is_empty()).unwrap_or_else(|| format!("выполняет {}", toks[0])));
+                says.push(fi.map(|f| lead(&f.header)).filter(|h| !h.is_empty()).unwrap_or_else(|| format!("выполняет {}", toks[0])));
                 info.source = "file".into();
                 info.known |= !info.header.is_empty();
                 continue;
@@ -601,7 +765,8 @@ pub fn explain(s: &Script, cwd: &Path, ctx: &Ctx) -> Info {
         if let Some((pkg, desc)) = package_about(&bin, cwd, ctx.root) {
             says.push(format!("запускает {bin}"));
             if info.about.is_empty() {
-                info.about = if desc.is_empty() { format!("Пакет npm «{pkg}»") } else { format!("Пакет npm «{pkg}»: {desc}") };
+                info.about =
+                    if desc.is_empty() { format!("Пакет npm «{pkg}»") } else { format!("Пакет npm «{pkg}»: {desc}") };
             }
             info.parts.push(Part { text: toks[0].clone(), note: info.about.clone(), kind: "bin".into() });
             if info.source.is_empty() {
@@ -617,7 +782,7 @@ pub fn explain(s: &Script, cwd: &Path, ctx: &Ctx) -> Info {
     if let Some(fr) = &s.file_rel {
         let abs = ctx.root.join(fr);
         if let Some(fi) = add_file(&abs, &mut info, &mut fx) {
-            let h = fi.header.lines().next().unwrap_or("").to_string();
+            let h = lead(&fi.header);
             if !h.is_empty() {
                 says = vec![h];
                 info.known = true;
@@ -656,6 +821,7 @@ pub fn explain(s: &Script, cwd: &Path, ctx: &Ctx) -> Info {
     }
     if fx.is_empty() && info.known {
         fx.insert("read".into());
+        info.fx_default = true;
     }
     fx.remove("long");
     info.fx = fx.into_iter().collect();

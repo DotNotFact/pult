@@ -6,6 +6,10 @@ members = ["core", "app", "cli"]
 version = "2.0.0"
 edition = "2021"
 license = "MIT"
+authors = ["DotNotFact"]
+repository = "https://github.com/DotNotFact/pult"
+homepage = "https://github.com/DotNotFact/pult"
+description = "Пульт: команды любого проекта с объяснениями, запуском, CI и уроками"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

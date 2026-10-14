@@ -19,12 +19,32 @@ pub struct Settings {
     pub notify: bool,
     /// режим обучения: подробные пояснения, подсказки к терминам, «что внутри»
     pub learn: bool,
+    /// минимальный интерфейс: без подсказок и пояснений, плотнее - для тех, кто уже привык (противоположность learn)
+    pub minimal: bool,
     /// хосты CI, которым можно отдавать запросы (кроме gitlab.com и github.com)
     pub ci_hosts: Vec<String>,
+    /// крестик окна прячет его в трей, а не закрывает Пульт (идущие запуски и сценарии продолжаются)
+    pub close_to_tray: bool,
+    /// что показывает виджет (узкое окно), по порядку: runs, quick, scenarios, ci, git
+    pub widget: Vec<String>,
+    /// виджет поверх всех окон
+    pub widget_on_top: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
-        Self { confirm_danger: true, auto_refresh: true, ci_autoload: true, colors: true, notify: true, learn: false, ci_hosts: vec![] }
+        Self {
+            confirm_danger: true,
+            auto_refresh: true,
+            ci_autoload: true,
+            colors: true,
+            notify: true,
+            learn: false,
+            minimal: false,
+            ci_hosts: vec![],
+            close_to_tray: false,
+            widget: ["runs", "quick", "scenarios", "ci"].map(String::from).to_vec(),
+            widget_on_top: false,
+        }
     }
 }
 
@@ -46,6 +66,40 @@ pub struct Config {
     pub last: Option<String>,
     pub favorites: HashMap<String, Vec<String>>,
     pub settings: Settings,
+    /// корни репозиториев, которым пользователь доверил запуск git несмотря на опасные настройки.
+    /// Не в Settings: их меняет команда settings из окна, а доверие ставится только кнопкой
+    pub trusted_repos: Vec<String>,
+    /// сценарии - свои цепочки команд, запускаются из окна и из трея
+    pub scenarios: Vec<Scenario>,
+}
+
+/// Шаг сценария: скрипт проекта и дополнительные аргументы. Имя хранится рядом с id:
+/// id может смениться после правки проекта, тогда шаг находится по имени.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Step {
+    pub script_id: String,
+    pub name: String,
+    pub args: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Scenario {
+    pub id: String,
+    pub name: String,
+    /// папка проекта
+    pub project: String,
+    pub steps: Vec<Step>,
+    /// упавший шаг останавливает цепочку
+    pub stop_on_error: bool,
+    /// показывать в меню значка в трее
+    pub in_tray: bool,
+}
+impl Default for Scenario {
+    fn default() -> Self {
+        Self { id: String::new(), name: String::new(), project: String::new(), steps: vec![], stop_on_error: true, in_tray: true }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -71,11 +125,11 @@ fn file(name: &str) -> PathBuf {
     paths::data_dir().join(name)
 }
 
-pub fn read_json<T: for<'a> Deserialize<'a> + Default>(p: &Path) -> T {
+pub(crate) fn read_json<T: for<'a> Deserialize<'a> + Default>(p: &Path) -> T {
     std::fs::read_to_string(p).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
 }
 
-pub fn write_json<T: Serialize>(p: &Path, v: &T) {
+pub(crate) fn write_json<T: Serialize>(p: &Path, v: &T) {
     let tmp = p.with_extension("tmp");
     if let Ok(t) = serde_json::to_string(v) {
         if std::fs::write(&tmp, t).is_ok() {
@@ -104,6 +158,45 @@ pub fn trusted_hosts() -> Vec<String> {
     let mut v = kb.str_list("ciHosts");
     v.extend(config().settings.ci_hosts);
     v
+}
+
+fn repo_key(work: &Path) -> String {
+    let s = work.to_string_lossy().replace('/', "\\");
+    s.trim_end_matches('\\').to_lowercase()
+}
+
+/// Пользователь доверил этот репозиторий (корень рабочей папки).
+pub(crate) fn repo_trusted(work: &Path) -> bool {
+    let k = repo_key(work);
+    config().trusted_repos.iter().any(|r| repo_key(Path::new(r)) == k)
+}
+
+/// Доверять репозиторию: git для него запускается, даже если его настройки запускают программы.
+pub fn trust_repo(work: &Path) {
+    let k = repo_key(work);
+    update_config(|c| {
+        if !c.trusted_repos.iter().any(|r| repo_key(Path::new(r)) == k) {
+            c.trusted_repos.push(work.to_string_lossy().into_owned());
+        }
+    });
+}
+
+/// Добавить или заменить сценарий (по id). Пустой id - новый сценарий.
+pub fn save_scenario(mut s: Scenario) -> Scenario {
+    if s.id.is_empty() {
+        s.id = key_of(&format!("{}{}{}", s.project, s.name, crate::util::now_ms()));
+    }
+    s.name = s.name.trim().to_string();
+    let out = s.clone();
+    update_config(|c| match c.scenarios.iter_mut().find(|x| x.id == s.id) {
+        Some(x) => *x = s,
+        None => c.scenarios.push(s),
+    });
+    out
+}
+
+pub fn delete_scenario(id: &str) {
+    update_config(|c| c.scenarios.retain(|x| x.id != id));
 }
 
 pub fn touch_recent(path: &str, name: &str) {
@@ -147,7 +240,7 @@ fn scan_file(root: &str) -> PathBuf {
 pub fn cached_scan(root: &str) -> Option<Project> {
     let t = std::fs::read_to_string(scan_file(root)).ok()?;
     let p: Project = serde_json::from_str(&t).ok()?;
-    (p.path.eq_ignore_ascii_case(root) && !p.scripts.is_empty() || p.path.eq_ignore_ascii_case(root)).then_some(p)
+    p.path.eq_ignore_ascii_case(root).then_some(p)
 }
 
 pub fn save_scan(p: &Project) {

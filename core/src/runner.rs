@@ -85,7 +85,7 @@ pub fn forget_which() {
     }
 }
 
-pub fn git_bash() -> Option<PathBuf> {
+pub(crate) fn git_bash() -> Option<PathBuf> {
     if !cfg!(windows) {
         return Some(PathBuf::from("bash"));
     }
@@ -114,37 +114,109 @@ fn command(argv: &[String], cwd: &Path) -> io::Result<Command> {
 // ---------- декодирование вывода ----------
 /// Склеивает куски: буква, разрезанная между кусками, не превращается в «�».
 /// Если вывод не UTF-8 (консольные программы Windows пишут в cp866) - перекодирует.
+///
+/// Кодировка потока запоминается, как только появилось надёжное свидетельство.
+/// Без этого cp866 ломался на кусках, которые случайно оказываются допустимым UTF-8:
+/// «р»-«я» в cp866 - это 0xE0-0xEF, начало трёхбайтового символа UTF-8, а «а»-«п»
+/// (0xA0-0xAF) - его продолжение. «тем» (E2 A5 AC) или «р|аз», разрезанное после «р»,
+/// склеивались в один чужой символ вместо трёх русских букв.
+///
+/// Свидетельства выбраны так, чтобы не путаться:
+/// - UTF-8: кириллица в UTF-8 (U+0400-U+04FF, байты D0/D1 + продолжение). Любой другой
+///   двухбайтовый символ не годится: псевдографика cp866 (0xC1-0xDF) перед русской буквой
+///   (0x80-0xBF) - тоже допустимый UTF-8. Трёхбайтовые не годятся тем более: «тем» в cp866
+///   выглядит как один из них, а «✓» в UTF-8 - как три буквы cp866;
+/// - cp866: кусок с байтами, недопустимыми в UTF-8, которые в cp866 дают русские буквы, и
+///   до этого в потоке не было ни одного допустимого многобайтового символа UTF-8.
+///
+/// Без надёжного свидетельства кодировка решается для каждого куска отдельно: битый кусок
+/// с символами UTF-8 до порчи - UTF-8 (битое - «�»), без них - cp866.
+///
+/// Чего декодер не умеет: кусок cp866, который целиком оказался допустимым UTF-8 без
+/// кириллицы («тем», «═Итог»), до первого свидетельства показывается как UTF-8, то есть
+/// мусором. Придержать такой кусок до свидетельства нельзя: поток UTF-8 с одними «✓» и
+/// значками ждал бы свидетельства вечно, и живой вывод стоял бы.
 pub struct Decoder {
     pending: Vec<u8>,
+    mode: Mode,
+    /// в потоке уже был допустимый многобайтовый символ UTF-8 - запирать cp866 нельзя
+    seen_multibyte: bool,
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Mode {
+    Unknown,
+    Utf8,
+    Cp866,
+}
+
+fn cp866(bytes: &[u8]) -> String {
+    encoding_rs::IBM866.decode(bytes).0.into_owned()
+}
+
+fn has_cyrillic(s: &str) -> bool {
+    s.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c))
+}
+
+/// Длина незаконченного символа UTF-8 в конце (0 - его нет).
+fn incomplete_tail(b: &[u8]) -> usize {
+    (1..=3.min(b.len()))
+        .find(|&k| matches!(std::str::from_utf8(&b[b.len() - k..]), Err(e) if e.valid_up_to() == 0 && e.error_len().is_none()))
+        .unwrap_or(0)
+}
+
 impl Decoder {
     pub fn new() -> Self {
-        Self { pending: Vec::new() }
+        Self { pending: Vec::new(), mode: Mode::Unknown, seen_multibyte: false }
     }
+
     pub fn push(&mut self, chunk: &[u8]) -> String {
-        self.pending.extend_from_slice(chunk);
-        match std::str::from_utf8(&self.pending) {
-            Ok(s) => {
-                let out = s.to_string();
-                self.pending.clear();
-                out
-            }
-            Err(e) if e.error_len().is_none() => {
-                let n = e.valid_up_to();
-                let out = String::from_utf8_lossy(&self.pending[..n]).into_owned();
-                self.pending.drain(..n);
-                out
-            }
-            Err(_) => {
-                let (s, _, _) = encoding_rs::IBM866.decode(&self.pending);
-                let out = s.into_owned();
-                self.pending.clear();
-                out
-            }
+        if self.mode == Mode::Cp866 {
+            return cp866(chunk);
         }
+        self.pending.extend_from_slice(chunk);
+        let (valid, broken) = match std::str::from_utf8(&self.pending) {
+            Ok(_) => (self.pending.len(), false),
+            // хвост - начало символа, продолжение придёт следующим куском
+            Err(e) if e.error_len().is_none() => (e.valid_up_to(), false),
+            Err(e) => (e.valid_up_to(), true),
+        };
+        // valid байт проверены from_utf8 выше
+        let head = std::str::from_utf8(&self.pending[..valid]).unwrap_or_default();
+        let head_multibyte = !head.is_ascii();
+        if has_cyrillic(head) {
+            self.mode = Mode::Utf8;
+        }
+        if !broken {
+            self.seen_multibyte |= head_multibyte;
+            let out = head.to_string();
+            self.pending.drain(..valid);
+            return out;
+        }
+        if self.mode == Mode::Utf8 || head_multibyte {
+            // в UTF-8 битая последовательность - порча; незаконченный символ в конце ждёт продолжения
+            self.seen_multibyte |= head_multibyte;
+            let cut = self.pending.len() - incomplete_tail(&self.pending);
+            let out = String::from_utf8_lossy(&self.pending[..cut]).into_owned();
+            self.pending.drain(..cut);
+            return out;
+        }
+        let s = cp866(&self.pending);
+        if has_cyrillic(&s) && !self.seen_multibyte {
+            self.mode = Mode::Cp866;
+        }
+        self.pending.clear();
+        s
     }
+
     pub fn finish(&mut self) -> String {
-        let out = String::from_utf8_lossy(&self.pending).into_owned();
+        let out = match (self.mode, std::str::from_utf8(&self.pending)) {
+            (_, Ok(s)) => s.to_string(),
+            (Mode::Utf8, Err(_)) => String::from_utf8_lossy(&self.pending).into_owned(),
+            (_, Err(_)) if self.seen_multibyte => String::from_utf8_lossy(&self.pending).into_owned(),
+            // поток оборвался на «начале символа»: в cp866 это целая буква («р»-«я»)
+            (Mode::Unknown | Mode::Cp866, Err(_)) => cp866(&self.pending),
+        };
         self.pending.clear();
         out
     }
@@ -266,7 +338,11 @@ where
     });
     let on_text = Arc::new(on_text);
     let mut readers = Vec::new();
-    for stream in [child.stdout.take().map(|s| Box::new(s) as Box<dyn Read + Send>), child.stderr.take().map(|s| Box::new(s) as Box<dyn Read + Send>)].into_iter().flatten() {
+    for stream in
+        [child.stdout.take().map(|s| Box::new(s) as Box<dyn Read + Send>), child.stderr.take().map(|s| Box::new(s) as Box<dyn Read + Send>)]
+            .into_iter()
+            .flatten()
+    {
         let cb = on_text.clone();
         readers.push(thread::spawn(move || {
             let mut stream = stream;
@@ -312,29 +388,30 @@ pub fn capture(argv: &[String], cwd: &Path, timeout: Duration) -> io::Result<Cap
     capture_env(argv, cwd, timeout, &[])
 }
 
-pub fn capture_env(argv: &[String], cwd: &Path, timeout: Duration, envs: &[(&str, &str)]) -> io::Result<Captured> {
+pub(crate) fn capture_env(argv: &[String], cwd: &Path, timeout: Duration, envs: &[(&str, &str)]) -> io::Result<Captured> {
     let mut c = command(argv, cwd)?;
     for (k, v) in envs {
         c.env(k, v);
     }
     c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = c.spawn()?;
-    let mut so = child.stdout.take();
-    let mut se = child.stderr.take();
-    let t1 = thread::spawn(move || {
-        let mut v = Vec::new();
-        if let Some(s) = so.as_mut() {
-            let _ = s.read_to_end(&mut v);
+    // потомки (git.exe за обёрткой Git for Windows, node за .cmd) держат трубы открытыми и после
+    // смерти прямого потомка: по сроку гасим всё дерево через объект задания
+    #[cfg(windows)]
+    let job = {
+        use std::os::windows::io::AsRawHandle;
+        job::Job::for_process(child.as_raw_handle() as _)
+    };
+    let kill_tree = |child: &mut Child| {
+        #[cfg(windows)]
+        if let Some(j) = &job {
+            j.kill();
         }
-        v
-    });
-    let t2 = thread::spawn(move || {
-        let mut v = Vec::new();
-        if let Some(s) = se.as_mut() {
-            let _ = s.read_to_end(&mut v);
-        }
-        v
-    });
+        let _ = child.kill();
+    };
+    let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let out_buf = read_into(child.stdout.take().map(|s| Box::new(s) as Box<dyn Read + Send>), tx.clone());
+    let err_buf = read_into(child.stderr.take().map(|s| Box::new(s) as Box<dyn Read + Send>), tx);
     let start = Instant::now();
     let mut timed_out = false;
     let code = loop {
@@ -343,19 +420,54 @@ pub fn capture_env(argv: &[String], cwd: &Path, timeout: Duration, envs: &[(&str
         }
         if start.elapsed() > timeout {
             timed_out = true;
-            let _ = child.kill();
+            kill_tree(&mut child);
             let _ = child.wait();
             break -1;
         }
         thread::sleep(Duration::from_millis(15));
     };
-    let dec = |v: Vec<u8>| {
+    // чтение ждём не дольше срока и ещё двух секунд: внук, который держит трубу, не повесит Пульт
+    let deadline = start + timeout + Duration::from_secs(2);
+    for _ in 0..2 {
+        if rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).is_err() {
+            timed_out = true;
+            kill_tree(&mut child);
+            break;
+        }
+    }
+    let dec = |b: &Mutex<Vec<u8>>| {
+        // буфер забирается, а не копируется: вывод git log или справки - до сотен килобайт
+        let v = b.lock().map(|mut v| std::mem::take(&mut *v)).unwrap_or_default();
         let mut d = Decoder::new();
         let mut s = d.push(&v);
         s.push_str(&d.finish());
         s
     };
-    Ok(Captured { code, out: dec(t1.join().unwrap_or_default()), err: dec(t2.join().unwrap_or_default()), timed_out })
+    Ok(Captured { code, out: dec(&out_buf), err: dec(&err_buf), timed_out })
+}
+
+/// Читать поток в общий буфер; по концу потока - сигнал в `done`.
+/// Буфер общий, чтобы при обрыве по сроку взять то, что успело прийти.
+fn read_into(stream: Option<Box<dyn Read + Send>>, done: std::sync::mpsc::Sender<()>) -> Arc<Mutex<Vec<u8>>> {
+    let buf = Arc::new(Mutex::new(Vec::new()));
+    let b2 = buf.clone();
+    thread::spawn(move || {
+        if let Some(mut s) = stream {
+            let mut chunk = [0u8; 16 * 1024];
+            loop {
+                match s.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => {
+                        if let Ok(mut v) = b2.lock() {
+                            v.extend_from_slice(&chunk[..n]);
+                        }
+                    }
+                }
+            }
+        }
+        let _ = done.send(());
+    });
+    buf
 }
 
 /// Запуск с выводом прямо в терминал (для pult run). Возвращает код выхода.
@@ -420,8 +532,12 @@ pub fn open_in_editor(target: &Path, line: Option<u32>) -> io::Result<()> {
 pub fn open_terminal(dir: &Path) -> io::Result<()> {
     #[cfg(windows)]
     {
-        if let Some(wt) = which("wt") {
-            return Command::new(wt).arg("-d").arg(dir).spawn().map(|_| ());
+        // «;» для wt - разделитель подкоманд даже внутри -d: папка «a;b» запустила бы вторую команду.
+        // Экранирование «\;» ломается на пути вида «x\;y», поэтому такую папку открываем без wt
+        if !dir.to_string_lossy().contains(';') {
+            if let Some(wt) = which("wt") {
+                return Command::new(wt).arg("-d").arg(dir).spawn().map(|_| ());
+            }
         }
         let ps = which("pwsh").or_else(|| which("powershell")).unwrap_or_else(|| PathBuf::from("powershell.exe"));
         Command::new(ps).arg("-NoExit").current_dir(dir).creation_flags(0x0000_0010).spawn().map(|_| ())

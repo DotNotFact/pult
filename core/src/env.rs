@@ -36,13 +36,25 @@ pub fn docker(force: bool) -> Docker {
         Docker { state: "absent".into(), ..Default::default() }
     } else {
         let t0 = Instant::now();
-        let argv: Vec<String> = ["docker", "info", "--format", "{{.ServerVersion}}|{{.ContainersRunning}}"].iter().map(|s| s.to_string()).collect();
+        let argv: Vec<String> =
+            ["docker", "info", "--format", "{{.ServerVersion}}|{{.ContainersRunning}}"].iter().map(|s| s.to_string()).collect();
         match runner::capture(&argv, Path::new("."), Duration::from_secs(6)) {
             Ok(c) if c.code == 0 && !c.timed_out => {
                 let mut it = c.out.trim().split('|');
-                Docker { state: "up".into(), version: it.next().map(str::to_string), running: it.next().and_then(|x| x.parse().ok()), error: None, ms: t0.elapsed().as_millis() as u64 }
+                Docker {
+                    state: "up".into(),
+                    version: it.next().map(str::to_string),
+                    running: it.next().and_then(|x| x.parse().ok()),
+                    error: None,
+                    ms: t0.elapsed().as_millis() as u64,
+                }
             }
-            Ok(c) => Docker { state: "down".into(), error: Some(if c.timed_out { "не ответил за 6 с".into() } else { "демон не отвечает".into() }), ms: t0.elapsed().as_millis() as u64, ..Default::default() },
+            Ok(c) => Docker {
+                state: "down".into(),
+                error: Some(if c.timed_out { "не ответил за 6 с".into() } else { "демон не отвечает".into() }),
+                ms: t0.elapsed().as_millis() as u64,
+                ..Default::default()
+            },
             Err(e) => Docker { state: "down".into(), error: Some(e.to_string()), ..Default::default() },
         }
     };

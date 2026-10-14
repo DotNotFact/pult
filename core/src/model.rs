@@ -66,6 +66,10 @@ pub struct Info {
     /// откуда взято описание: kb | file | package | unknown
     #[serde(default)]
     pub source: String,
+    /// «только читает» поставлено по умолчанию: база не сказала, что делает команда
+    /// (`ng`, `tauri` без подкоманды). Этап по такому эффекту не угадывается.
+    #[serde(skip)]
+    pub fx_default: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -152,6 +156,18 @@ pub struct GitInfo {
     pub op: Option<String>,
     pub remotes: Vec<Remote>,
     pub commits: Vec<Commit>,
+    /// git не запускался: настройки репозитория опасны (`git::locate`), пользователь ещё не доверил
+    #[serde(default)]
+    pub untrusted: bool,
+    /// сетевой путь в настройках: не запускается даже после «Доверять»
+    #[serde(default)]
+    pub refused: bool,
+    /// код причины недоверия: unc, alternates, key, link, outside, parse, mismatch
+    #[serde(default)]
+    pub why: Option<String>,
+    /// ключ настройки, из-за которого не доверяем
+    #[serde(default)]
+    pub why_key: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
