@@ -14,9 +14,9 @@ path = "src/main.rs"
 pult-core.workspace = true
 serde_json.workspace = true
 shell-words.workspace = true
-ratatui = "0.29"
+ratatui = "0.30"
 
 # рантайм Visual C++ - внутрь exe: без него `pult` не запустится на машине без Visual C++ Redistributable
 # (окно Tauri делает так же). Только для этого бинаря - глобальный +crt-static ломает proc-macro крейты.
 [target.'cfg(windows)'.build-dependencies]
-static_vcruntime = "2"
+static_vcruntime = "3"

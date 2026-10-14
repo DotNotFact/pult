@@ -19,7 +19,7 @@ encoding_rs = "0.8"
 shell-words = "1"
 include_dir = "0.7"
 sha1_smol = "1"
-notify = "6"
+notify = "8"
 pult-core = { path = "core" }
 
 [profile.release]
