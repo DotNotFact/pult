@@ -11,11 +11,11 @@ serde.workspace = true
 # preserve_order: скрипты package.json показываются в порядке файла, а не по алфавиту
 serde_json = { workspace = true, features = ["preserve_order"] }
 regex.workspace = true
-fancy-regex = "0.14"
+fancy-regex = "0.19"
 encoding_rs.workspace = true
 shell-words.workspace = true
 include_dir.workspace = true
 sha1_smol.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_UI_Input_KeyboardAndMouse"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_UI_Input_KeyboardAndMouse"] }
