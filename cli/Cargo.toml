@@ -2,6 +2,9 @@
 name = "pult-cli"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "pult-cli"
@@ -12,3 +15,8 @@ pult-core.workspace = true
 serde_json.workspace = true
 shell-words.workspace = true
 ratatui = "0.29"
+
+# рантайм Visual C++ - внутрь exe: без него `pult` не запустится на машине без Visual C++ Redistributable
+# (окно Tauri делает так же). Только для этого бинаря - глобальный +crt-static ломает proc-macro крейты.
+[target.'cfg(windows)'.build-dependencies]
+static_vcruntime = "2"

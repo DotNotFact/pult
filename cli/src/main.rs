@@ -1,10 +1,11 @@
 //! Пульт в терминале: интерактивный экран и команды. Тот же движок и та же база знаний, что у окна.
+use paint::Paint;
 use pult_core::model::{Project, Script};
 use pult_core::util::display_argv;
 use pult_core::{ci, env, kb, runner, scan, store};
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
-use ratatui::crossterm::{execute, style::Stylize};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
@@ -52,13 +53,17 @@ fn ru(s: &str) -> &'static str {
     }
 }
 fn dur(ms: u64) -> String {
-    let s = ms as f64 / 1000.0;
-    if s < 10.0 {
+    if ms < 10_000 {
+        let s = ms as f64 / 1000.0;
         format!("{:.1} с", s).replace('.', ",")
-    } else if s < 60.0 {
-        format!("{} с", s.round())
     } else {
-        format!("{} м {:02} с", (s / 60.0).floor(), (s % 60.0).round())
+        // сначала округлить до целых секунд, потом делить на минуты: иначе 119,6 с - «1 м 60 с»
+        let secs = ms.saturating_add(500) / 1000;
+        if secs < 60 {
+            format!("{secs} с")
+        } else {
+            format!("{} м {:02} с", secs / 60, secs % 60)
+        }
     }
 }
 fn ago(ms: u64) -> String {
@@ -73,15 +78,29 @@ fn ago(ms: u64) -> String {
 fn parse_iso(s: &str) -> u64 {
     // «2026-10-13T19:51:21Z» -> мс; грубо, только для «сколько назад»
     let d: Vec<u64> = s.get(0..19).unwrap_or("").split(|c: char| !c.is_ascii_digit()).filter_map(|x| x.parse().ok()).collect();
-    if d.len() < 6 {
+    // дата приходит из вывода glab/gh: вне календаря - как нечитаемая, без переполнения ниже
+    let sane = [(1, 9999), (1, 12), (1, 31), (0, 23), (0, 59), (0, 60)];
+    if d.len() < 6 || d.iter().zip(sane).any(|(&v, (lo, hi))| v < lo || v > hi) {
         return 0;
     }
-    let (y, m, day) = (d[0] as i64, d[1] as i64, d[2] as i64);
+    let [y, m, day] = [d[0], d[1], d[2]].map(|v| v as i64);
     let a = (14 - m) / 12;
     let (yy, mm) = (y + 4800 - a, m + 12 * a - 3);
     let jdn = day + (153 * mm + 2) / 5 + 365 * yy + yy / 4 - yy / 100 + yy / 400 - 32045;
-    let days = (jdn - 2440588) as u64;
+    // до 1970 (нулевое время Go «0001-01-01T00:00:00Z» у незаполненного поля) - тоже 0: прежде
+    // отрицательное число дней становилось огромным u64 и переполняло умножение
+    let Ok(days) = u64::try_from(jdn - 2_440_588) else { return 0 };
     (days * 86400 + d[3] * 3600 + d[4] * 60 + d[5]) * 1000
+}
+
+/// Не больше `n` знаков; обрезанное кончается «…», чтобы было видно, что текст длиннее.
+fn clip(s: &str, n: usize) -> String {
+    if s.chars().count() <= n {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(n.saturating_sub(1)).collect();
+    out.push('…');
+    out
 }
 
 fn fail(msg: &str) -> ! {
@@ -91,7 +110,22 @@ fn fail(msg: &str) -> ! {
 
 // ---------- проект ----------
 fn looks_like_project(d: &Path) -> bool {
-    ["package.json", ".git", "Makefile", "Cargo.toml", "go.mod", "pyproject.toml", "composer.json", "pom.xml", "build.gradle", "docker-compose.yml", "compose.yaml", "justfile"].iter().any(|m| d.join(m).exists())
+    [
+        "package.json",
+        ".git",
+        "Makefile",
+        "Cargo.toml",
+        "go.mod",
+        "pyproject.toml",
+        "composer.json",
+        "pom.xml",
+        "build.gradle",
+        "docker-compose.yml",
+        "compose.yaml",
+        "justfile",
+    ]
+    .iter()
+    .any(|m| d.join(m).exists())
         || pult_core::util::ls(d).iter().any(|e| e.file_name().to_string_lossy().to_lowercase().ends_with(".sln"))
 }
 fn canon(p: &str) -> PathBuf {
@@ -141,7 +175,15 @@ fn find<'a>(p: &'a Project, q: &str) -> Result<&'a Script, String> {
     match near.len() {
         1 => Ok(near[0]),
         0 => Err(format!("Скрипт «{q}» не найден. Список: pult ls")),
-        _ => Err(format!("Подходит несколько - уточните: {}", near.iter().take(10).map(|s| if s.where_ == "." { s.name.clone() } else { format!("{}:{}", s.where_, s.name) }).collect::<Vec<_>>().join(", "))),
+        _ => Err(format!("Подходит несколько - уточните: {}", near.iter().take(10).map(|s| label(s)).collect::<Vec<_>>().join(", "))),
+    }
+}
+/// Имя скрипта, по которому его найдут explain и run: из подпапки - «папка:имя».
+fn label(s: &Script) -> String {
+    if s.where_ == "." {
+        s.name.clone()
+    } else {
+        format!("{}:{}", s.where_, s.name)
     }
 }
 fn effects() -> Value {
@@ -154,7 +196,10 @@ fn fx_line(s: &Script) -> Vec<Span<'static>> {
     fx.sort_by_key(|f| order.iter().position(|o| o == f).unwrap_or(99));
     let mut out: Vec<Span> = Vec::new();
     for f in fx {
-        out.push(Span::styled(format!("{} ", e[&f]["label"].as_str().unwrap_or(&f)), Style::default().fg(fx_color(e[&f]["level"].as_str().unwrap_or("info")))));
+        out.push(Span::styled(
+            format!("{} ", e[&f]["label"].as_str().unwrap_or(&f)),
+            Style::default().fg(fx_color(e[&f]["level"].as_str().unwrap_or("info"))),
+        ));
     }
     if s.info.long {
         out.push(Span::styled("долгий ", Style::default().fg(MUTE)));
@@ -182,18 +227,40 @@ fn help() {
 }
 
 fn cmd_info(p: &Project) {
-    println!("\n{} {}  {}", p.name.as_str().bold(), if p.version.is_empty() { String::new() } else { format!("v{}", p.version) }, p.path.as_str().dark_grey());
+    println!(
+        "\n{} {}  {}",
+        p.name.as_str().bold(),
+        if p.version.is_empty() { String::new() } else { format!("v{}", p.version) },
+        p.path.as_str().dark_grey()
+    );
     if !p.description.is_empty() {
-        println!("{}", p.description.chars().take(300).collect::<String>().dark_grey());
+        println!("{}", clip(&p.description, 300).dark_grey());
     }
     println!("{}\n", p.stacks.join(" · ").blue());
     if let Some(g) = &p.git {
-        println!("{} {} → {}   {}   ↑{} ↓{}{}", "Git".bold(), g.branch, g.upstream.clone().unwrap_or_else(|| "не связана с сервером".into()), if g.dirty > 0 { format!("{} не в коммите", g.dirty).yellow().to_string() } else { "чисто".green().to_string() }, g.ahead, g.behind, if g.stash > 0 { format!("   отложено: {}", g.stash) } else { String::new() });
+        println!(
+            "{} {} → {}   {}   ↑{} ↓{}{}",
+            "Git".bold(),
+            g.branch,
+            g.upstream.clone().unwrap_or_else(|| "не связана с сервером".into()),
+            if g.dirty > 0 { format!("{} не в коммите", g.dirty).yellow().to_string() } else { "чисто".green().to_string() },
+            g.ahead,
+            g.behind,
+            if g.stash > 0 { format!("   отложено: {}", g.stash) } else { String::new() }
+        );
     }
     let names: Vec<&str> = p.scripts.iter().filter_map(|s| s.tool.as_deref()).collect();
     let tools = env::tools(names);
     let miss: Vec<&String> = tools.iter().filter(|(_, v)| v.is_none()).map(|(k, _)| k).collect();
-    println!("{} {}", "Программы".bold(), if miss.is_empty() { "все на месте".green().to_string() } else { format!("нет: {}", miss.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")).red().to_string() });
+    println!(
+        "{} {}",
+        "Программы".bold(),
+        if miss.is_empty() {
+            "все на месте".green().to_string()
+        } else {
+            format!("нет: {}", miss.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")).red().to_string()
+        }
+    );
     let mut by: BTreeMap<String, usize> = BTreeMap::new();
     for s in &p.scripts {
         *by.entry(s.stage.clone()).or_default() += 1;
@@ -206,8 +273,23 @@ fn cmd_info(p: &Project) {
         }
     }
     for c in &p.ci {
-        println!("\n{} {}", if c.kind == "gitlab" { "GitLab CI".bold() } else { c.file.as_str().bold() }, c.file.as_str().dark_grey());
-        println!("  {}", c.stages.iter().map(|s| format!("{} ({})", s.name, s.jobs.len())).collect::<Vec<_>>().join(" → "));
+        let title = if c.kind == "gitlab" {
+            "GitLab CI"
+        } else if c.name.is_empty() {
+            "GitHub Actions"
+        } else {
+            c.name.as_str()
+        };
+        println!("\n{} {}", title.bold(), c.file.as_str().dark_grey());
+        // у GitLab - этапы с числом джоб; у GitHub Actions этапов нет - сразу джобы
+        let line = if c.kind == "gitlab" {
+            c.stages.iter().map(|s| format!("{} ({})", s.name, s.jobs.len())).collect::<Vec<_>>().join(" → ")
+        } else {
+            c.jobs.iter().map(|j| j.name.clone()).collect::<Vec<_>>().join(", ")
+        };
+        if !line.is_empty() {
+            println!("  {line}");
+        }
     }
     if !p.topics.is_empty() {
         println!("\n{} {}", "Уроки".bold(), p.topics.iter().map(|t| t.title.clone()).collect::<Vec<_>>().join(", "));
@@ -218,7 +300,14 @@ fn cmd_info(p: &Project) {
 
 fn cmd_ls(p: &Project, q: &str, stage: Option<&str>) {
     let low = q.to_lowercase();
-    let list: Vec<&Script> = p.scripts.iter().filter(|s| stage.is_none_or(|x| s.stage == x) && (low.is_empty() || format!("{} {} {} {}", s.name, s.info.summary, s.cmd, s.where_).to_lowercase().contains(&low))).collect();
+    let list: Vec<&Script> = p
+        .scripts
+        .iter()
+        .filter(|s| {
+            stage.is_none_or(|x| s.stage == x)
+                && (low.is_empty() || format!("{} {} {} {}", s.name, s.info.summary, s.cmd, s.where_).to_lowercase().contains(&low))
+        })
+        .collect();
     for st in &kb::get().stages {
         let rows: Vec<&&Script> = list.iter().filter(|s| s.stage == st.id).collect();
         if rows.is_empty() {
@@ -226,9 +315,10 @@ fn cmd_ls(p: &Project, q: &str, stage: Option<&str>) {
         }
         println!("\n{} {}", st.label.as_str().bold(), rows.len().to_string().dark_grey());
         for s in rows {
-            let name = if s.where_ == "." { s.name.clone() } else { format!("{}:{}", s.where_, s.name) };
+            let name = label(s);
             let fx: String = fx_line(s).iter().map(|x| x.content.to_string()).collect();
-            println!("  {:<34} {}  {}", name, s.info.summary.chars().take(80).collect::<String>(), fx.dark_grey());
+            // длинное имя не обрезается (по нему зовут explain и run), но от описания его отделяют два пробела
+            println!("  {:<34}  {}  {}", name, clip(&s.info.summary, 80), fx.dark_grey());
         }
     }
     println!("{}", format!("\n{} из {}. Подробнее: pult explain <имя> · запуск: pult run <имя>", list.len(), p.scripts.len()).dark_grey());
@@ -240,7 +330,12 @@ fn cmd_explain(p: &Project, q: &str) {
     let e = effects();
     let k = kb::get();
     let stage = k.stages.iter().find(|x| x.id == s.stage).map(|x| x.label.clone()).unwrap_or_default();
-    println!("\n{}  {} · {}", s.name.as_str().bold(), stage.dark_grey(), if s.where_ == "." { "корень".to_string() } else { s.where_.clone() }.dark_grey());
+    println!(
+        "\n{}  {} · {}",
+        s.name.as_str().bold(),
+        stage.dark_grey(),
+        if s.where_ == "." { "корень".to_string() } else { s.where_.clone() }.dark_grey()
+    );
     println!("\n{}\n  {}", "Что делает".bold(), i.summary);
     for x in &i.steps {
         println!("  · {}", x.as_str().dark_grey());
@@ -253,7 +348,7 @@ fn cmd_explain(p: &Project, q: &str) {
         let parts = &k.ui["parts"];
         for pt in &i.parts {
             let note = if pt.note.is_empty() { parts[&pt.kind].as_str().unwrap_or("").to_string() } else { pt.note.clone() };
-            println!("  {:<22} {}", pt.text.as_str().cyan(), note.dark_grey());
+            println!("  {}  {}", format!("{:<22}", pt.text).cyan(), note.dark_grey());
         }
     }
     if !i.how.is_empty() {
@@ -273,9 +368,14 @@ fn cmd_explain(p: &Project, q: &str) {
     if !flags.is_empty() {
         println!("\n{}", "Ключи".bold());
         for f in flags {
-            println!("  {:<22} {}{}", f.flag, f.text.as_str().dark_grey(), if f.used { " · уже в команде".green().to_string() } else { String::new() });
+            println!(
+                "  {:<22}  {}{}",
+                f.flag,
+                f.text.as_str().dark_grey(),
+                if f.used { " · уже в команде".green().to_string() } else { String::new() }
+            );
         }
-        println!("{}", format!("  пример: pult run {} -- {}", s.name, i.flags[0].flag).dark_grey());
+        println!("{}", format!("  пример: pult run {} -- {}", display_argv(&[label(s)]), i.flags[0].flag).dark_grey());
     }
     if !i.topics.is_empty() {
         println!("\n{} {}", "Уроки:".bold(), i.topics.join(", "));
@@ -311,7 +411,12 @@ fn run_in_terminal(p: &Project, s: &Script, args: &str) -> i32 {
         }
     }
     let cwd = Path::new(&p.path).join(if s.where_ == "." { "" } else { &s.where_ });
-    println!("\n{} {}  {}\n", "▶".blue(), display_argv(&argv).bold(), format!("в {}", if s.where_ == "." { "корне проекта" } else { &s.where_ }).dark_grey());
+    println!(
+        "\n{} {}  {}\n",
+        "▶".blue(),
+        display_argv(&argv).bold(),
+        format!("в {}", if s.where_ == "." { "корне проекта" } else { &s.where_ }).dark_grey()
+    );
     let t0 = Instant::now();
     let code = runner::run_inherit(&argv, &cwd).unwrap_or_else(|e| {
         eprintln!("{} {e}", "Не запустилось:".red());
@@ -341,7 +446,14 @@ fn cmd_run(p: &Project, q: &str, args: &str, yes: bool) -> i32 {
 }
 
 fn ci_remote(p: &Project) -> Option<pult_core::model::Remote> {
-    let mut r: Vec<_> = p.git.as_ref()?.remotes.iter().filter(|r| !r.dup && r.host.as_ref().is_some_and(|h| h.contains("gitlab") || h.contains("github"))).cloned().collect();
+    let mut r: Vec<_> = p
+        .git
+        .as_ref()?
+        .remotes
+        .iter()
+        .filter(|r| !r.dup && r.host.as_ref().is_some_and(|h| h.contains("gitlab") || h.contains("github")))
+        .cloned()
+        .collect();
     r.sort_by_key(|x| !x.host.as_deref().unwrap_or("").contains("gitlab"));
     r.into_iter().next()
 }
@@ -357,7 +469,19 @@ fn cmd_ci(p: &Project, rest: &[String]) {
         for st in ci::jobs(dir, &r, id).unwrap_or_else(|e| fail(&e)) {
             println!("\n  {}", st.name.as_str().bold());
             for j in st.jobs {
-                println!("    {} {:<34} {:<11} {}  #{}", "●".with(color_ct(match j.status.as_str() { "success" => "ok", "failed" => "bad", "running" => "info", _ => "warn" })), j.name, ru(&j.status), j.duration.map(|d| dur(d * 1000)).unwrap_or_default(), j.id);
+                println!(
+                    "    {} {:<34} {:<11} {}  #{}",
+                    "●".with(color_ct(match j.status.as_str() {
+                        "success" => "ok",
+                        "failed" => "bad",
+                        "running" => "info",
+                        _ => "warn",
+                    })),
+                    j.name,
+                    ru(&j.status),
+                    j.duration.map(|d| dur(d.saturating_mul(1000))).unwrap_or_default(),
+                    j.id
+                );
             }
         }
         println!("{}", "\nЖурнал джобы: pult ci log <номер>".dark_grey());
@@ -365,7 +489,19 @@ fn cmd_ci(p: &Project, rest: &[String]) {
     }
     println!("\n{}\n", format!("{} · {}", r.host.clone().unwrap_or_default(), r.slug.clone().unwrap_or_default()).bold());
     for x in ci::runs(dir, &r, None).unwrap_or_else(|e| fail(&e)).into_iter().take(15) {
-        println!("  {} #{:<12} {:<26} {:<11} {}", "●".with(color_ct(match x.status.as_str() { "success" => "ok", "failed" => "bad", "running" => "info", _ => "warn" })), x.id, x.r#ref.replace("refs/merge-requests/", "MR !").replace("/head", ""), ru(&x.status), ago(parse_iso(&x.created_at)));
+        println!(
+            "  {} #{:<12} {:<26} {:<11} {}",
+            "●".with(color_ct(match x.status.as_str() {
+                "success" => "ok",
+                "failed" => "bad",
+                "running" => "info",
+                _ => "warn",
+            })),
+            x.id,
+            x.r#ref.replace("refs/merge-requests/", "MR !").replace("/head", ""),
+            ru(&x.status),
+            ago(parse_iso(&x.created_at))
+        );
     }
     println!("{}", "\nЭтапы и джобы: pult ci <номер>".dark_grey());
 }
@@ -375,13 +511,28 @@ fn lesson_lines(t: &Value, width: usize) -> Vec<Line<'static>> {
     let mut out: Vec<Line> = Vec::new();
     let color = t["color"].as_str().and_then(hex).unwrap_or(ACCENT);
     let s = |v: &Value| v.as_str().unwrap_or("").to_string();
-    out.push(Line::from(Span::styled(format!(" {} ", s(&t["title"])), Style::default().fg(Color::Black).bg(color).add_modifier(Modifier::BOLD))));
+    out.push(Line::from(Span::styled(
+        format!(" {} ", s(&t["title"])),
+        Style::default().fg(Color::Black).bg(color).add_modifier(Modifier::BOLD),
+    )));
     out.push(Line::from(s(&t["summary"])));
     for sec in t["sections"].as_array().into_iter().flatten() {
         out.push(Line::from(""));
         let title = s(&sec["title"]);
         let ty = s(&sec["type"]);
-        let head = if title.is_empty() { match ty.as_str() { "terms" => "Слова, которые надо знать".into(), "mistakes" => "Что ломается и как чинить".into(), "cheatsheet" => "Шпаргалка".into(), "quiz" => "Проверьте себя".into(), _ => String::new() } } else { title };
+        let head = if title.is_empty() {
+            match ty.as_str() {
+                "terms" => "Слова, которые надо знать".into(),
+                "mistakes" => "Что ломается и как чинить".into(),
+                "cheatsheet" => "Шпаргалка".into(),
+                "rules" => "Как правильно".into(),
+                "practice" => "Попробуйте сами".into(),
+                "quiz" => "Проверьте себя".into(),
+                _ => String::new(),
+            }
+        } else {
+            title
+        };
         if !head.is_empty() && ty != "project" {
             out.push(Line::from(Span::styled(format!("▌ {head}"), Style::default().fg(color).add_modifier(Modifier::BOLD))));
         }
@@ -393,19 +544,30 @@ fn lesson_lines(t: &Value, width: usize) -> Vec<Line<'static>> {
                 }
             }
             "diagram" => {
-                let names: HashMap<String, String> = sec["nodes"].as_array().into_iter().flatten().map(|n| (s(&n["id"]), s(&n["label"]))).collect();
+                let names: HashMap<String, String> =
+                    sec["nodes"].as_array().into_iter().flatten().map(|n| (s(&n["id"]), s(&n["label"]))).collect();
                 for n in sec["nodes"].as_array().into_iter().flatten() {
-                    out.push(Line::from(vec![Span::styled(format!("  [{}] ", s(&n["label"])), Style::default().fg(color)), Span::styled(s(&n["note"]), Style::default().fg(MUTE))]));
+                    out.push(Line::from(vec![
+                        Span::styled(format!("  [{}] ", s(&n["label"])), Style::default().fg(color)),
+                        Span::styled(s(&n["note"]), Style::default().fg(MUTE)),
+                    ]));
                 }
                 for e in sec["edges"].as_array().into_iter().flatten() {
                     let a = names.get(&s(&e[0])).cloned().unwrap_or_default();
                     let b = names.get(&s(&e[1])).cloned().unwrap_or_default();
-                    out.push(Line::from(vec![Span::raw(format!("  {a} ")), Span::styled(format!("──{}──▶", s(&e[2])), Style::default().fg(MUTE)), Span::raw(format!(" {b}"))]));
+                    out.push(Line::from(vec![
+                        Span::raw(format!("  {a} ")),
+                        Span::styled(format!("──{}──▶", s(&e[2])), Style::default().fg(MUTE)),
+                        Span::raw(format!(" {b}")),
+                    ]));
                 }
             }
             "terms" => {
                 for x in sec["items"].as_array().into_iter().flatten() {
-                    out.push(Line::from(vec![Span::styled(format!("  {} ", s(&x["term"])), Style::default().add_modifier(Modifier::BOLD)), Span::styled(format!("- {}", s(&x["text"])), Style::default().fg(MUTE))]));
+                    out.push(Line::from(vec![
+                        Span::styled(format!("  {} ", s(&x["term"])), Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("- {}", s(&x["text"])), Style::default().fg(MUTE)),
+                    ]));
                 }
             }
             "steps" => {
@@ -415,14 +577,29 @@ fn lesson_lines(t: &Value, width: usize) -> Vec<Line<'static>> {
             }
             "anatomy" => {
                 for p in sec["parts"].as_array().into_iter().flatten() {
-                    out.push(Line::from(vec![Span::styled(format!("  {:<20}", s(&p["text"])), Style::default().fg(Color::Cyan)), Span::styled(s(&p["note"]), Style::default().fg(MUTE))]));
+                    out.push(Line::from(vec![
+                        Span::styled(format!("  {:<20}  ", s(&p["text"])), Style::default().fg(Color::Cyan)),
+                        Span::styled(s(&p["note"]), Style::default().fg(MUTE)),
+                    ]));
                 }
             }
             "example" => {
+                if !s(&sec["label"]).is_empty() {
+                    out.push(Line::from(Span::styled(
+                        format!("  {}", s(&sec["label"])),
+                        Style::default().fg(MUTE).add_modifier(Modifier::BOLD),
+                    )));
+                }
                 for l in s(&sec["code"]).lines() {
                     out.push(Line::from(Span::styled(format!("  │ {l}"), Style::default().fg(Color::Cyan))));
                 }
                 if !s(&sec["output"]).is_empty() {
+                    if !s(&sec["outputLabel"]).is_empty() {
+                        out.push(Line::from(Span::styled(
+                            format!("  {}", s(&sec["outputLabel"])),
+                            Style::default().fg(MUTE).add_modifier(Modifier::BOLD),
+                        )));
+                    }
                     for l in s(&sec["output"]).lines() {
                         out.push(Line::from(Span::styled(format!("  ⟶ {l}"), Style::default().fg(MUTE))));
                     }
@@ -431,13 +608,83 @@ fn lesson_lines(t: &Value, width: usize) -> Vec<Line<'static>> {
                     out.push(Line::from(Span::styled(format!("  {}", s(&sec["note"])), Style::default().fg(MUTE))));
                 }
             }
+            "codepair" => {
+                // в терминале два кода - один под другим
+                for side in ["left", "right"] {
+                    out.push(Line::from(Span::styled(
+                        format!("  {}", s(&sec[side]["label"])),
+                        Style::default().fg(MUTE).add_modifier(Modifier::BOLD),
+                    )));
+                    for l in s(&sec[side]["code"]).lines() {
+                        out.push(Line::from(Span::styled(format!("  │ {l}"), Style::default().fg(Color::Cyan))));
+                    }
+                }
+                if !s(&sec["note"]).is_empty() {
+                    out.push(Line::from(Span::styled(format!("  {}", s(&sec["note"])), Style::default().fg(MUTE))));
+                }
+            }
+            "practice" => {
+                out.push(Line::from(Span::raw(format!("  {}", s(&sec["task"])))));
+                for (n, x) in sec["steps"].as_array().into_iter().flatten().enumerate() {
+                    out.push(Line::from(vec![Span::styled(format!("  {}. ", n + 1), Style::default().fg(color)), Span::raw(s(x))]));
+                }
+                if !s(&sec["check"]).is_empty() {
+                    out.push(Line::from(Span::styled(
+                        format!("  Как понять, что получилось: {}", s(&sec["check"])),
+                        Style::default().fg(MUTE),
+                    )));
+                }
+                if !s(&sec["hint"]).is_empty() {
+                    out.push(Line::from(Span::styled(format!("  Подсказка: {}", s(&sec["hint"])), Style::default().fg(MUTE))));
+                }
+                if !s(&sec["solution"]).is_empty() {
+                    out.push(Line::from(Span::styled("  Решение:", Style::default().fg(MUTE).add_modifier(Modifier::BOLD))));
+                    for l in s(&sec["solution"]).lines() {
+                        out.push(Line::from(Span::styled(format!("  │ {l}"), Style::default().fg(Color::Cyan))));
+                    }
+                }
+            }
+            "rules" => {
+                for x in sec["items"].as_array().into_iter().flatten() {
+                    let (lv, word) = match s(&x["kind"]).as_str() {
+                        "do" => ("ok", "делайте"),
+                        "dont" => ("bad", "не делайте"),
+                        "when" => ("info", "когда"),
+                        _ => ("warn", "совет"),
+                    };
+                    let title = s(&x["title"]);
+                    out.push(Line::from(vec![
+                        Span::styled(format!("  {word:<11}"), Style::default().fg(fx_color(lv)).add_modifier(Modifier::BOLD)),
+                        Span::raw(if title.is_empty() { s(&x["text"]) } else { format!("{title}. {}", s(&x["text"])) }),
+                    ]));
+                }
+            }
             "compare" => {
                 let cols: Vec<String> = sec["cols"].as_array().into_iter().flatten().map(&s).collect();
                 let w = (width.saturating_sub(4) / cols.len().max(1)).clamp(8, 30);
-                let cell = |x: &str| format!("{:<w$}", x.chars().take(w - 1).collect::<String>());
-                out.push(Line::from(Span::styled(format!("  {}", cols.iter().map(|c| cell(c)).collect::<String>()), Style::default().add_modifier(Modifier::BOLD))));
-                for r in sec["rows"].as_array().into_iter().flatten() {
-                    out.push(Line::from(format!("  {}", r.as_array().into_iter().flatten().map(|c| cell(&s(c))).collect::<String>())));
+                let rows: Vec<Vec<String>> =
+                    sec["rows"].as_array().into_iter().flatten().map(|r| r.as_array().into_iter().flatten().map(&s).collect()).collect();
+                let fits = cols.iter().chain(rows.iter().flatten()).all(|x| x.chars().count() < w);
+                if fits {
+                    let cell = |x: &str| format!("{x:<w$}");
+                    out.push(Line::from(Span::styled(
+                        format!("  {}", cols.iter().map(|c| cell(c)).collect::<String>()),
+                        Style::default().add_modifier(Modifier::BOLD),
+                    )));
+                    for r in &rows {
+                        out.push(Line::from(format!("  {}", r.iter().map(|c| cell(c)).collect::<String>())));
+                    }
+                } else {
+                    // ячейки не влезают в колонки: строка таблицы - карточкой, текст целиком, без обрезки
+                    for r in &rows {
+                        out.push(Line::from(Span::styled(
+                            format!("  {}", r.first().cloned().unwrap_or_default()),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        )));
+                        for (c, v) in cols.iter().zip(r).skip(1) {
+                            out.push(Line::from(vec![Span::styled(format!("    {c}: "), Style::default().fg(MUTE)), Span::raw(v.clone())]));
+                        }
+                    }
                 }
             }
             "chart" => {
@@ -445,7 +692,11 @@ fn lesson_lines(t: &Value, width: usize) -> Vec<Line<'static>> {
                 let max = items.iter().filter_map(|x| x["value"].as_f64()).fold(1.0, f64::max);
                 for x in items {
                     let v = x["value"].as_f64().unwrap_or(0.0);
-                    out.push(Line::from(vec![Span::raw(format!("  {:<18} ", s(&x["label"]).chars().take(18).collect::<String>())), Span::styled("█".repeat(((v / max) * 30.0).round().max(1.0) as usize), Style::default().fg(color)), Span::raw(format!(" {v} {}", s(&sec["unit"])))]));
+                    out.push(Line::from(vec![
+                        Span::raw(format!("  {:<18} ", clip(&s(&x["label"]), 18))),
+                        Span::styled("█".repeat(((v / max) * 30.0).round().max(1.0) as usize), Style::default().fg(color)),
+                        Span::raw(format!(" {v} {}", s(&sec["unit"]))),
+                    ]));
                 }
                 if !s(&sec["note"]).is_empty() {
                     out.push(Line::from(Span::styled(format!("  {}", s(&sec["note"])), Style::default().fg(MUTE))));
@@ -454,12 +705,24 @@ fn lesson_lines(t: &Value, width: usize) -> Vec<Line<'static>> {
             "mistakes" => {
                 for x in sec["items"].as_array().into_iter().flatten() {
                     out.push(Line::from(vec![Span::styled("  ✗ ", Style::default().fg(fx_color("bad"))), Span::raw(s(&x["problem"]))]));
-                    out.push(Line::from(vec![Span::styled("  ✓ ", Style::default().fg(fx_color("ok"))), Span::styled(s(&x["fix"]), Style::default().fg(MUTE))]));
+                    out.push(Line::from(vec![
+                        Span::styled("  ✓ ", Style::default().fg(fx_color("ok"))),
+                        Span::styled(s(&x["fix"]), Style::default().fg(MUTE)),
+                    ]));
                 }
             }
             "cheatsheet" => {
+                let mut group = String::new();
                 for x in sec["items"].as_array().into_iter().flatten() {
-                    out.push(Line::from(vec![Span::styled(format!("  {:<28}", s(&x["cmd"])), Style::default().fg(Color::Cyan)), Span::styled(s(&x["text"]), Style::default().fg(MUTE))]));
+                    let g = s(&x["group"]);
+                    if !g.is_empty() && g != group {
+                        out.push(Line::from(Span::styled(format!("  {g}"), Style::default().fg(MUTE).add_modifier(Modifier::BOLD))));
+                        group = g;
+                    }
+                    out.push(Line::from(vec![
+                        Span::styled(format!("  {:<28}  ", s(&x["cmd"])), Style::default().fg(Color::Cyan)),
+                        Span::styled(s(&x["text"]), Style::default().fg(MUTE)),
+                    ]));
                 }
             }
             "quiz" => {
@@ -467,9 +730,15 @@ fn lesson_lines(t: &Value, width: usize) -> Vec<Line<'static>> {
                     out.push(Line::from(format!("  {}. {}", n + 1, s(&q["q"]))));
                     let ans = q["answer"].as_u64().unwrap_or(0) as usize;
                     for (k, o) in q["options"].as_array().into_iter().flatten().enumerate() {
-                        out.push(Line::from(Span::styled(format!("     {} {}", if k == ans { "▸" } else { "·" }, s(o)), Style::default().fg(if k == ans { MUTE } else { MUTE }))));
+                        out.push(Line::from(Span::styled(
+                            format!("     {} {}", if k == ans { "▸" } else { "·" }, s(o)),
+                            Style::default().fg(if k == ans { fx_color("ok") } else { MUTE }),
+                        )));
                     }
-                    out.push(Line::from(Span::styled(format!("     ответ: {}", s(&q["why"])), Style::default().fg(MUTE).add_modifier(Modifier::ITALIC))));
+                    out.push(Line::from(Span::styled(
+                        format!("     ответ: {}", s(&q["why"])),
+                        Style::default().fg(MUTE).add_modifier(Modifier::ITALIC),
+                    )));
                 }
             }
             _ => {}
@@ -491,23 +760,27 @@ fn cmd_learn(p: &Project, q: Option<&str>) {
         None => {
             println!("\n{}", "Уроки для этого проекта".bold());
             for t in &p.topics {
-                println!("  {:<18} {}  {}", t.id.as_str().cyan(), t.title, format!("({})", t.why).dark_grey());
+                println!("  {}  {}  {}", format!("{:<18}", t.id).cyan(), t.title, format!("({})", t.why).dark_grey());
             }
             println!("{}", "\nЧитать: pult learn <урок>   ·   все уроки: pult learn --all".dark_grey());
         }
         Some("--all") => {
             for t in &k.topics {
-                println!("  {:<18} {}", t["id"].as_str().unwrap_or("").cyan(), t["title"].as_str().unwrap_or(""));
+                println!("  {}  {}", format!("{:<18}", t["id"].as_str().unwrap_or("")).cyan(), t["title"].as_str().unwrap_or(""));
             }
         }
         Some(id) => {
-            let t = k.topics.iter().find(|t| t["id"] == id || t["title"].as_str().is_some_and(|x| x.eq_ignore_ascii_case(id))).unwrap_or_else(|| fail(&format!("Урока «{id}» нет. Список: pult learn --all")));
+            let t = k
+                .topics
+                .iter()
+                .find(|t| t["id"] == id || t["title"].as_str().is_some_and(|x| x.eq_ignore_ascii_case(id)))
+                .unwrap_or_else(|| fail(&format!("Урока «{id}» нет. Список: pult learn --all")));
             let w = ratatui::crossterm::terminal::size().map(|s| s.0 as usize).unwrap_or(100);
             for l in lesson_lines(t, w) {
                 // печать без ratatui: только текст, цвета - через crossterm
                 let mut line = String::new();
                 for sp in l.spans {
-                    let mut c = sp.content.to_string().stylize();
+                    let mut c = sp.content.to_string().sc();
                     if let Some(Color::Rgb(r, g, b)) = sp.style.fg {
                         c = c.with(ratatui::crossterm::style::Color::Rgb { r, g, b });
                     } else if sp.style.fg == Some(Color::Cyan) {
@@ -523,11 +796,13 @@ fn cmd_learn(p: &Project, q: Option<&str>) {
                 }
                 println!("{line}");
             }
-            let rows: Vec<&Script> = p.scripts.iter().filter(|s| s.info.topics.iter().any(|x| x == id)).take(12).collect();
+            // урок могли назвать заголовком («Docker»): скрипты ищутся по его id
+            let tid = t["id"].as_str().unwrap_or(id);
+            let rows: Vec<&Script> = p.scripts.iter().filter(|s| s.info.topics.iter().any(|x| x == tid)).take(12).collect();
             if !rows.is_empty() {
                 println!("\n{}", "▌ Где это в вашем проекте".bold());
                 for s in rows {
-                    println!("  {:<28} {}", s.name.as_str().cyan(), s.info.summary.as_str().dark_grey());
+                    println!("  {}  {}", format!("{:<28}", label(s)).cyan(), s.info.summary.as_str().dark_grey());
                 }
             }
         }
@@ -535,7 +810,10 @@ fn cmd_learn(p: &Project, q: Option<&str>) {
 }
 
 fn cmd_ui(root: Option<String>) {
-    let exe = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(if cfg!(windows) { "Pult.exe" } else { "Pult" }))).filter(|p| p.exists());
+    let exe = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|d| d.join(if cfg!(windows) { "Pult.exe" } else { "Pult" })))
+        .filter(|p| p.exists());
     match exe {
         Some(e) => {
             let mut c = std::process::Command::new(e);
@@ -560,7 +838,8 @@ enum View {
     Learn,
     Projects,
 }
-const VIEWS: [(View, &str); 5] = [(View::Overview, "Обзор"), (View::Scripts, "Скрипты"), (View::Ci, "CI"), (View::Learn, "Уроки"), (View::Projects, "Проекты")];
+const VIEWS: [(View, &str); 5] =
+    [(View::Overview, "Обзор"), (View::Scripts, "Скрипты"), (View::Ci, "CI"), (View::Learn, "Уроки"), (View::Projects, "Проекты")];
 
 struct Tui {
     p: Project,
@@ -601,11 +880,35 @@ impl Tui {
 }
 
 fn header(f: &mut Frame, area: Rect, t: &Tui) {
-    let g = t.p.git.as_ref().map(|g| format!("{}{}{}", g.branch, if g.dirty > 0 { format!(" ●{}", g.dirty) } else { " ✓".into() }, if g.behind > 0 { format!(" ↓{}", g.behind) } else { String::new() })).unwrap_or_else(|| "без git".into());
+    let g =
+        t.p.git
+            .as_ref()
+            .map(|g| {
+                format!(
+                    "{}{}{}",
+                    g.branch,
+                    if g.dirty > 0 { format!(" ●{}", g.dirty) } else { " ✓".into() },
+                    if g.behind > 0 { format!(" ↓{}", g.behind) } else { String::new() }
+                )
+            })
+            .unwrap_or_else(|| "без git".into());
     let [l, r] = Layout::horizontal([Constraint::Min(20), Constraint::Length(48)]).areas(area);
-    f.render_widget(Paragraph::new(Line::from(vec![Span::styled(" ▶ Пульт ", Style::default().fg(Color::Black).bg(ACCENT).add_modifier(Modifier::BOLD)), Span::raw(format!("  {}  ", t.p.name)), Span::styled(g, Style::default().fg(MUTE))])), l);
+    f.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(" ▶ Пульт ", Style::default().fg(Color::Black).bg(ACCENT).add_modifier(Modifier::BOLD)),
+            Span::raw(format!("  {}  ", t.p.name)),
+            Span::styled(g, Style::default().fg(MUTE)),
+        ])),
+        l,
+    );
     let idx = VIEWS.iter().position(|(v, _)| *v == t.view).unwrap_or(0);
-    f.render_widget(Tabs::new(VIEWS.iter().enumerate().map(|(i, (_, n))| format!("{} {n}", i + 1))).select(idx).highlight_style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)).divider(" "), r);
+    f.render_widget(
+        Tabs::new(VIEWS.iter().enumerate().map(|(i, (_, n))| format!("{} {n}", i + 1)))
+            .select(idx)
+            .highlight_style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD))
+            .divider(" "),
+        r,
+    );
 }
 
 fn draw(f: &mut Frame, t: &mut Tui) {
@@ -619,11 +922,36 @@ fn draw(f: &mut Frame, t: &mut Tui) {
         View::Projects => " Enter открыть · ↑↓ выбор · Tab экран · Esc выход",
         View::Overview => " Tab или 1-5 экраны · Ctrl+R перечитать · Esc выход",
     };
-    f.render_widget(Paragraph::new(Line::from(vec![Span::styled(hint, Style::default().fg(MUTE)), Span::styled(format!("  {}", t.msg), Style::default().fg(fx_color("warn")))])), foot);
+    f.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(hint, Style::default().fg(MUTE)),
+            Span::styled(format!("  {}", t.msg), Style::default().fg(fx_color("warn"))),
+        ])),
+        foot,
+    );
     if let Some((title, lines, top_line)) = &t.pager {
         let errs = lines.iter().filter(|l| l.to_lowercase().contains("error") || l.contains("ошибка")).count();
-        let text: Vec<Line> = lines.iter().skip(*top_line).take(body.height as usize).map(|l| if l.to_lowercase().contains("error") || l.to_lowercase().contains("failed") { Line::from(Span::styled(l.clone(), Style::default().fg(fx_color("bad")))) } else { Line::from(l.clone()) }).collect();
-        f.render_widget(Paragraph::new(text).block(Block::default().borders(Borders::TOP).title(format!(" {title} · строки {}-{} из {} · ошибок {errs} ", top_line + 1, (top_line + body.height as usize).min(lines.len()), lines.len()))), body);
+        let text: Vec<Line> = lines
+            .iter()
+            .skip(*top_line)
+            .take(body.height as usize)
+            .map(|l| {
+                if l.to_lowercase().contains("error") || l.to_lowercase().contains("failed") {
+                    Line::from(Span::styled(l.clone(), Style::default().fg(fx_color("bad"))))
+                } else {
+                    Line::from(l.clone())
+                }
+            })
+            .collect();
+        f.render_widget(
+            Paragraph::new(text).block(Block::default().borders(Borders::TOP).title(format!(
+                " {title} · строки {}-{} из {} · ошибок {errs} ",
+                top_line + 1,
+                (top_line + body.height as usize).min(lines.len()),
+                lines.len()
+            ))),
+            body,
+        );
         return;
     }
     match t.view {
@@ -638,25 +966,49 @@ fn draw(f: &mut Frame, t: &mut Tui) {
 fn draw_scripts(f: &mut Frame, area: Rect, t: &mut Tui) {
     let [search, list, detail] = Layout::vertical([Constraint::Length(1), Constraint::Min(3), Constraint::Length(6)]).areas(area);
     let k = kb::get();
-    let stage = t.stage.as_ref().and_then(|s| k.stages.iter().find(|x| &x.id == s)).map(|x| x.label.clone()).unwrap_or_else(|| "все этапы".into());
+    let stage =
+        t.stage.as_ref().and_then(|s| k.stages.iter().find(|x| &x.id == s)).map(|x| x.label.clone()).unwrap_or_else(|| "все этапы".into());
     let items: Vec<Script> = t.filtered().into_iter().cloned().collect();
-    f.render_widget(Paragraph::new(Line::from(vec![Span::styled(" Поиск: ", Style::default().add_modifier(Modifier::BOLD)), Span::raw(t.q.clone()), Span::styled("▏", Style::default().fg(ACCENT)), Span::styled(format!("   {} из {} · ←→ этап: ", items.len(), t.p.scripts.len()), Style::default().fg(MUTE)), Span::styled(stage, Style::default().fg(ACCENT))])), search);
+    f.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(" Поиск: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(t.q.clone()),
+            Span::styled("▏", Style::default().fg(ACCENT)),
+            Span::styled(format!("   {} из {} · ←→ этап: ", items.len(), t.p.scripts.len()), Style::default().fg(MUTE)),
+            Span::styled(stage, Style::default().fg(ACCENT)),
+        ])),
+        search,
+    );
     let name_w = (list.width as usize * 30 / 100).clamp(16, 38);
     let rows: Vec<ListItem> = items
         .iter()
         .map(|s| {
             let missing = s.tool.as_ref().is_some_and(|x| t.tools.get(x).is_some_and(|v| v.is_none()));
-            let name = if s.where_ == "." { s.name.clone() } else { format!("{}:{}", s.where_, s.name) };
-            let name: String = format!("{:<name_w$}", name.chars().take(name_w - 1).collect::<String>());
-            let style = if missing { Style::default().fg(MUTE) } else if s.danger { Style::default().fg(fx_color("warn")) } else { Style::default() };
+            let name = label(s);
+            let name: String = format!("{:<name_w$}", clip(&name, name_w - 1));
+            let style = if missing {
+                Style::default().fg(MUTE)
+            } else if s.danger {
+                Style::default().fg(fx_color("warn"))
+            } else {
+                Style::default()
+            };
             let stage = k.stages.iter().find(|x| x.id == s.stage).map(|x| x.label.chars().take(4).collect::<String>()).unwrap_or_default();
-            ListItem::new(Line::from(vec![Span::styled(format!("{stage:<5}"), Style::default().fg(MUTE)), Span::styled(name, style), Span::raw(s.info.summary.clone())]))
+            ListItem::new(Line::from(vec![
+                Span::styled(format!("{stage:<5}"), Style::default().fg(MUTE)),
+                Span::styled(name, style),
+                Span::raw(s.info.summary.clone()),
+            ]))
         })
         .collect();
     if t.sel.selected().is_none_or(|i| i >= rows.len()) {
         t.sel.select(if rows.is_empty() { None } else { Some(0) });
     }
-    f.render_stateful_widget(List::new(rows).highlight_style(Style::default().bg(Color::Rgb(40, 44, 60)).add_modifier(Modifier::BOLD)).highlight_symbol("› "), list, &mut t.sel);
+    f.render_stateful_widget(
+        List::new(rows).highlight_style(Style::default().bg(Color::Rgb(40, 44, 60)).add_modifier(Modifier::BOLD)).highlight_symbol("› "),
+        list,
+        &mut t.sel,
+    );
     let s = t.sel.selected().and_then(|i| items.get(i));
     let text = match s {
         Some(s) => {
@@ -665,8 +1017,14 @@ fn draw_scripts(f: &mut Frame, area: Rect, t: &mut Tui) {
             Text::from(vec![
                 Line::from(l1),
                 Line::from(format!(" {}", s.info.summary)),
-                Line::from(vec![Span::styled(" $ ", Style::default().fg(MUTE)), Span::styled(s.cmd.clone(), Style::default().fg(Color::Cyan))]),
-                Line::from(Span::styled(format!(" {}", s.info.how.first().cloned().unwrap_or_else(|| s.info.about.clone())), Style::default().fg(MUTE))),
+                Line::from(vec![
+                    Span::styled(" $ ", Style::default().fg(MUTE)),
+                    Span::styled(s.cmd.clone(), Style::default().fg(Color::Cyan)),
+                ]),
+                Line::from(Span::styled(
+                    format!(" {}", s.info.how.first().cloned().unwrap_or_else(|| s.info.about.clone())),
+                    Style::default().fg(MUTE),
+                )),
             ])
         }
         None => Text::from(" Ничего не найдено. Esc - очистить поиск."),
@@ -678,8 +1036,14 @@ fn draw_overview(f: &mut Frame, area: Rect, t: &Tui) {
     let p = &t.p;
     let k = kb::get();
     let mut lines: Vec<Line> = vec![
-        Line::from(Span::styled(format!(" {} {}", p.name, if p.version.is_empty() { String::new() } else { format!("v{}", p.version) }), Style::default().add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled(format!(" {}", p.description.chars().take(area.width as usize * 2).collect::<String>()), Style::default().fg(MUTE))),
+        Line::from(Span::styled(
+            format!(" {} {}", p.name, if p.version.is_empty() { String::new() } else { format!("v{}", p.version) }),
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            format!(" {}", p.description.chars().take(area.width as usize * 2).collect::<String>()),
+            Style::default().fg(MUTE),
+        )),
         Line::from(Span::styled(format!(" {}", p.stacks.join(" · ")), Style::default().fg(ACCENT))),
         Line::from(""),
         Line::from(Span::styled(" Путь разработки", Style::default().add_modifier(Modifier::BOLD))),
@@ -691,20 +1055,52 @@ fn draw_overview(f: &mut Frame, area: Rect, t: &Tui) {
     let max = by.values().copied().max().unwrap_or(1);
     for st in &k.stages {
         if let Some(n) = by.get(st.id.as_str()) {
-            lines.push(Line::from(vec![Span::raw(format!("   {:<14} ", st.label)), Span::styled("█".repeat((n * 36 / max).max(1)), Style::default().fg(ACCENT)), Span::raw(format!(" {n}"))]));
+            lines.push(Line::from(vec![
+                Span::raw(format!("   {:<14} ", st.label)),
+                Span::styled("█".repeat((n * 36 / max).max(1)), Style::default().fg(ACCENT)),
+                Span::raw(format!(" {n}")),
+            ]));
         }
     }
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(" Состояние", Style::default().add_modifier(Modifier::BOLD))));
     let dot = |lv: &str, text: String| Line::from(vec![Span::styled("   ● ", Style::default().fg(fx_color(lv))), Span::raw(text)]);
     if let Some(g) = &p.git {
-        lines.push(dot(if g.dirty > 0 { "warn" } else { "ok" }, format!("git: ветка {}, {}{}", g.branch, if g.dirty > 0 { format!("{} не в коммите", g.dirty) } else { "всё в коммитах".into() }, if g.behind > 0 { format!(", на сервере ещё {}", g.behind) } else { String::new() })));
+        lines.push(dot(
+            if g.dirty > 0 { "warn" } else { "ok" },
+            format!(
+                "git: ветка {}, {}{}",
+                g.branch,
+                if g.dirty > 0 { format!("{} не в коммите", g.dirty) } else { "всё в коммитах".into() },
+                if g.behind > 0 { format!(", на сервере ещё {}", g.behind) } else { String::new() }
+            ),
+        ));
     }
     if let Some(d) = &p.health.deps {
-        lines.push(dot(if d == "ok" { "ok" } else if d == "stale" { "warn" } else { "bad" }, format!("зависимости: {}", match d.as_str() { "ok" => "установлены", "stale" => "устарели", _ => "не установлены" })));
+        lines.push(dot(
+            if d == "ok" {
+                "ok"
+            } else if d == "stale" {
+                "warn"
+            } else {
+                "bad"
+            },
+            format!(
+                "зависимости: {}",
+                match d.as_str() {
+                    "ok" => "установлены",
+                    "stale" => "устарели",
+                    _ => "не установлены",
+                }
+            ),
+        ));
     }
     let miss: Vec<&String> = t.tools.iter().filter(|(_, v)| v.is_none()).map(|(k, _)| k).collect();
-    lines.push(if miss.is_empty() { dot("ok", "все нужные программы есть".into()) } else { dot("bad", format!("нет программ: {}", miss.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))) });
+    lines.push(if miss.is_empty() {
+        dot("ok", "все нужные программы есть".into())
+    } else {
+        dot("bad", format!("нет программ: {}", miss.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")))
+    });
     for c in &p.ci {
         lines.push(dot("info", format!("CI: {} - {} джоб", if c.kind == "gitlab" { "GitLab" } else { &c.file }, c.job_count)));
     }
@@ -724,45 +1120,112 @@ fn draw_ci(f: &mut Frame, area: Rect, t: &mut Tui) {
                 for st in stages {
                     items.push(ListItem::new(Line::from(Span::styled(format!(" {}", st.name.to_uppercase()), Style::default().fg(MUTE)))));
                     for j in &st.jobs {
-                        items.push(ListItem::new(Line::from(vec![Span::styled("  ● ", Style::default().fg(status_color(&j.status))), Span::raw(format!("{:<38}", j.name)), Span::styled(format!("{:<11}{}", ru(&j.status), j.duration.map(|d| dur(d * 1000)).unwrap_or_default()), Style::default().fg(MUTE))])));
+                        items.push(ListItem::new(Line::from(vec![
+                            Span::styled("  ● ", Style::default().fg(status_color(&j.status))),
+                            Span::raw(format!("{:<38}", j.name)),
+                            Span::styled(
+                                format!("{:<11}{}", ru(&j.status), j.duration.map(|d| dur(d.saturating_mul(1000))).unwrap_or_default()),
+                                Style::default().fg(MUTE),
+                            ),
+                        ])));
                     }
                 }
             }
             Err(e) => items.push(ListItem::new(Span::styled(format!(" {e}"), Style::default().fg(fx_color("bad"))))),
         }
-        f.render_stateful_widget(List::new(items).block(Block::default().title(format!(" Пайплайн #{id} ")).borders(Borders::TOP)).highlight_style(Style::default().bg(Color::Rgb(40, 44, 60))).highlight_symbol("› "), area, &mut t.ci_sel);
+        f.render_stateful_widget(
+            List::new(items)
+                .block(Block::default().title(format!(" Пайплайн #{id} ")).borders(Borders::TOP))
+                .highlight_style(Style::default().bg(Color::Rgb(40, 44, 60)))
+                .highlight_symbol("› "),
+            area,
+            &mut t.ci_sel,
+        );
         return;
     }
     let items: Vec<ListItem> = match &t.ci_runs {
         None => vec![ListItem::new(" Загружаю… (статус обновляется только по r - без опроса)")],
         Some(Err(e)) => vec![ListItem::new(Span::styled(format!(" {e}"), Style::default().fg(fx_color("bad"))))],
-        Some(Ok(runs)) => runs.iter().map(|r| ListItem::new(Line::from(vec![Span::styled(" ● ", Style::default().fg(status_color(&r.status))), Span::raw(format!("#{:<12} {:<28}", r.id, r.r#ref.replace("refs/merge-requests/", "MR !").replace("/head", ""))), Span::styled(format!("{:<11} {}", ru(&r.status), ago(parse_iso(&r.created_at))), Style::default().fg(MUTE))]))).collect(),
+        Some(Ok(runs)) => runs
+            .iter()
+            .map(|r| {
+                ListItem::new(Line::from(vec![
+                    Span::styled(" ● ", Style::default().fg(status_color(&r.status))),
+                    Span::raw(format!("#{:<12} {:<28}", r.id, r.r#ref.replace("refs/merge-requests/", "MR !").replace("/head", ""))),
+                    Span::styled(format!("{:<11} {}", ru(&r.status), ago(parse_iso(&r.created_at))), Style::default().fg(MUTE)),
+                ]))
+            })
+            .collect(),
     };
-    let title = ci_remote(&t.p).map(|r| format!(" {} · {} ", r.host.unwrap_or_default(), r.slug.unwrap_or_default())).unwrap_or_else(|| " CI ".into());
-    f.render_stateful_widget(List::new(items).block(Block::default().title(title).borders(Borders::TOP)).highlight_style(Style::default().bg(Color::Rgb(40, 44, 60))).highlight_symbol("› "), area, &mut t.ci_sel);
+    let title = ci_remote(&t.p)
+        .map(|r| format!(" {} · {} ", r.host.unwrap_or_default(), r.slug.unwrap_or_default()))
+        .unwrap_or_else(|| " CI ".into());
+    f.render_stateful_widget(
+        List::new(items)
+            .block(Block::default().title(title).borders(Borders::TOP))
+            .highlight_style(Style::default().bg(Color::Rgb(40, 44, 60)))
+            .highlight_symbol("› "),
+        area,
+        &mut t.ci_sel,
+    );
 }
 
 fn draw_learn(f: &mut Frame, area: Rect, t: &mut Tui) {
     let [list, body] = Layout::horizontal([Constraint::Length(26), Constraint::Min(20)]).areas(area);
     let k = kb::get();
     let ids: Vec<String> = t.p.topics.iter().map(|x| x.id.clone()).collect();
-    let items: Vec<ListItem> = t.p.topics.iter().map(|x| ListItem::new(Line::from(vec![Span::styled("■ ", Style::default().fg(hex(&x.color).unwrap_or(ACCENT))), Span::raw(x.title.clone())]))).collect();
+    let items: Vec<ListItem> =
+        t.p.topics
+            .iter()
+            .map(|x| {
+                ListItem::new(Line::from(vec![
+                    Span::styled("■ ", Style::default().fg(hex(&x.color).unwrap_or(ACCENT))),
+                    Span::raw(x.title.clone()),
+                ]))
+            })
+            .collect();
     if t.learn_sel.selected().is_none() && !items.is_empty() {
         t.learn_sel.select(Some(0));
     }
-    f.render_stateful_widget(List::new(items).block(Block::default().borders(Borders::RIGHT).title(" Уроки ")).highlight_style(Style::default().bg(Color::Rgb(40, 44, 60)).add_modifier(Modifier::BOLD)), list, &mut t.learn_sel);
+    f.render_stateful_widget(
+        List::new(items)
+            .block(Block::default().borders(Borders::RIGHT).title(" Уроки "))
+            .highlight_style(Style::default().bg(Color::Rgb(40, 44, 60)).add_modifier(Modifier::BOLD)),
+        list,
+        &mut t.learn_sel,
+    );
     let topic = t.learn_sel.selected().and_then(|i| ids.get(i)).and_then(|id| k.topic(id));
-    let text = topic.map(|tp| lesson_lines(tp, body.width as usize)).unwrap_or_else(|| vec![Line::from(" Для этого проекта уроков не нашлось.")]);
-    f.render_widget(Paragraph::new(text).wrap(Wrap { trim: false }).scroll((t.learn_scroll, 0)).block(Block::default().borders(Borders::NONE)), body.inner(ratatui::layout::Margin { horizontal: 1, vertical: 0 }));
+    let text =
+        topic.map(|tp| lesson_lines(tp, body.width as usize)).unwrap_or_else(|| vec![Line::from(" Для этого проекта уроков не нашлось.")]);
+    f.render_widget(
+        Paragraph::new(text).wrap(Wrap { trim: false }).scroll((t.learn_scroll, 0)).block(Block::default().borders(Borders::NONE)),
+        body.inner(ratatui::layout::Margin { horizontal: 1, vertical: 0 }),
+    );
 }
 
 fn draw_projects(f: &mut Frame, area: Rect, t: &mut Tui) {
     let rec = recent_sorted();
-    let items: Vec<ListItem> = rec.iter().map(|r| ListItem::new(Line::from(vec![Span::raw(if r.pinned { "★ " } else { "  " }), Span::styled(format!("{:<26}", r.name), if r.path == t.p.path { Style::default().fg(ACCENT) } else { Style::default() }), Span::styled(r.path.clone(), Style::default().fg(MUTE))]))).collect();
+    let items: Vec<ListItem> = rec
+        .iter()
+        .map(|r| {
+            ListItem::new(Line::from(vec![
+                Span::raw(if r.pinned { "★ " } else { "  " }),
+                Span::styled(format!("{:<26}", r.name), if r.path == t.p.path { Style::default().fg(ACCENT) } else { Style::default() }),
+                Span::styled(r.path.clone(), Style::default().fg(MUTE)),
+            ]))
+        })
+        .collect();
     if t.proj_sel.selected().is_none() && !items.is_empty() {
         t.proj_sel.select(Some(0));
     }
-    f.render_stateful_widget(List::new(items).block(Block::default().borders(Borders::TOP).title(" Недавние проекты - те же, что в окне ")).highlight_style(Style::default().bg(Color::Rgb(40, 44, 60))).highlight_symbol("› "), area, &mut t.proj_sel);
+    f.render_stateful_widget(
+        List::new(items)
+            .block(Block::default().borders(Borders::TOP).title(" Недавние проекты - те же, что в окне "))
+            .highlight_style(Style::default().bg(Color::Rgb(40, 44, 60)))
+            .highlight_symbol("› "),
+        area,
+        &mut t.proj_sel,
+    );
 }
 fn recent_sorted() -> Vec<store::Recent> {
     let mut r = store::config().recent;
@@ -802,9 +1265,26 @@ fn spawn_fresh(root: &Path) -> mpsc::Receiver<Project> {
 
 fn tui(root: PathBuf) -> io::Result<()> {
     let p = load(&root, false);
-    let fresh = p.cached.then(|| spawn_fresh(&root)).or_else(|| Some(spawn_fresh(&root)));
+    // свежий разбор в фоне - всегда: и поверх кэша, и после только что сделанного
+    let fresh = Some(spawn_fresh(&root));
     let tools = env::tools(p.scripts.iter().filter_map(|s| s.tool.as_deref()));
-    let mut t = Tui { p, view: View::Scripts, q: String::new(), stage: None, sel: ListState::default(), tools, msg: String::new(), ci_runs: None, ci_jobs: None, ci_sel: ListState::default(), learn_sel: ListState::default(), learn_scroll: 0, proj_sel: ListState::default(), pager: None, fresh };
+    let mut t = Tui {
+        p,
+        view: View::Scripts,
+        q: String::new(),
+        stage: None,
+        sel: ListState::default(),
+        tools,
+        msg: String::new(),
+        ci_runs: None,
+        ci_jobs: None,
+        ci_sel: ListState::default(),
+        learn_sel: ListState::default(),
+        learn_scroll: 0,
+        proj_sel: ListState::default(),
+        pager: None,
+        fresh,
+    };
     let mut term = ratatui::init();
     let _ = execute!(io::stdout(), EnterAlternateScreen);
     let res = (|| -> io::Result<()> {
@@ -859,7 +1339,13 @@ fn handle_key(t: &mut Tui, key: KeyEvent, term: &mut DefaultTerminal) -> io::Res
             KeyCode::Home => *top = 0,
             KeyCode::End => *top = lines.len().saturating_sub(page),
             KeyCode::Char('e') => {
-                if let Some(i) = lines.iter().enumerate().skip(*top + 1).find(|(_, l)| l.to_lowercase().contains("error") || l.to_lowercase().contains("failed")).map(|(i, _)| i) {
+                if let Some(i) = lines
+                    .iter()
+                    .enumerate()
+                    .skip(*top + 1)
+                    .find(|(_, l)| l.to_lowercase().contains("error") || l.to_lowercase().contains("failed"))
+                    .map(|(i, _)| i)
+                {
                     *top = i.saturating_sub(3);
                 }
             }
@@ -912,7 +1398,9 @@ fn handle_key(t: &mut Tui, key: KeyEvent, term: &mut DefaultTerminal) -> io::Res
                 KeyCode::End => t.sel.select(Some(n.saturating_sub(1))),
                 KeyCode::Left | KeyCode::Right => {
                     let k = kb::get();
-                    let ids: Vec<Option<String>> = std::iter::once(None).chain(k.stages.iter().filter(|s| t.p.scripts.iter().any(|x| x.stage == s.id)).map(|s| Some(s.id.clone()))).collect();
+                    let ids: Vec<Option<String>> = std::iter::once(None)
+                        .chain(k.stages.iter().filter(|s| t.p.scripts.iter().any(|x| x.stage == s.id)).map(|s| Some(s.id.clone())))
+                        .collect();
                     let i = ids.iter().position(|x| *x == t.stage).unwrap_or(0);
                     t.stage = ids[if key.code == KeyCode::Right { (i + 1) % ids.len() } else { (i + ids.len() - 1) % ids.len() }].clone();
                     t.sel.select(Some(0));
@@ -928,7 +1416,11 @@ fn handle_key(t: &mut Tui, key: KeyEvent, term: &mut DefaultTerminal) -> io::Res
                             t.msg = format!("нет программы {}", s.tool.clone().unwrap_or_default());
                         } else {
                             let code = suspend_and_run(term, t, &s)?;
-                            t.msg = match code { 0 => format!("✓ {} - готово", s.name), -2 => "отменено".into(), c => format!("✗ {} - код {c}", s.name) };
+                            t.msg = match code {
+                                0 => format!("✓ {} - готово", s.name),
+                                -2 => "отменено".into(),
+                                c => format!("✗ {} - код {c}", s.name),
+                            };
                         }
                     }
                 }
@@ -951,15 +1443,26 @@ fn handle_key(t: &mut Tui, key: KeyEvent, term: &mut DefaultTerminal) -> io::Res
                             t.ci_runs = Some(ci::runs(Path::new(&t.p.path), r, None));
                         }
                     }
-                    Some(r) => t.ci_runs = Some(Err(format!("Хост {} не в списке доверенных (настройки окна Пульта)", r.host.clone().unwrap_or_default()))),
+                    Some(r) => {
+                        t.ci_runs =
+                            Some(Err(format!("Хост {} не в списке доверенных (настройки окна Пульта)", r.host.clone().unwrap_or_default())))
+                    }
                     None => t.ci_runs = Some(Err("Нет адреса репозитория на GitLab или GitHub".into())),
                 }
                 if key.code == KeyCode::Char('r') {
                     return Ok(true);
                 }
             }
-            let jobs_flat: Option<Vec<ci::Job>> = t.ci_jobs.as_ref().and_then(|(_, r)| r.as_ref().ok()).map(|st| st.iter().flat_map(|s| std::iter::once(ci::Job { name: String::new(), ..Default::default() }).chain(s.jobs.iter().cloned())).collect());
-            let n = jobs_flat.as_ref().map(|v| v.len()).or_else(|| t.ci_runs.as_ref().and_then(|r| r.as_ref().ok()).map(|v| v.len())).unwrap_or(0);
+            let jobs_flat: Option<Vec<ci::Job>> = t.ci_jobs.as_ref().and_then(|(_, r)| r.as_ref().ok()).map(|st| {
+                st.iter()
+                    .flat_map(|s| std::iter::once(ci::Job { name: String::new(), ..Default::default() }).chain(s.jobs.iter().cloned()))
+                    .collect()
+            });
+            let n = jobs_flat
+                .as_ref()
+                .map(|v| v.len())
+                .or_else(|| t.ci_runs.as_ref().and_then(|r| r.as_ref().ok()).map(|v| v.len()))
+                .unwrap_or(0);
             match key.code {
                 KeyCode::Up => move_sel(&mut t.ci_sel, n, -1),
                 KeyCode::Down => move_sel(&mut t.ci_sel, n, 1),
@@ -973,14 +1476,21 @@ fn handle_key(t: &mut Tui, key: KeyEvent, term: &mut DefaultTerminal) -> io::Res
                         if let Some(j) = t.ci_sel.selected().and_then(|i| list.get(i)).filter(|j| !j.name.is_empty()) {
                             match ci::job_log(Path::new(&t.p.path), &r, j.id) {
                                 Ok(text) => {
-                                    let lines: Vec<String> = text.replace("\r\n", "\n").split('\n').map(|l| l.rsplit('\r').next().unwrap_or("").to_string()).map(|l| strip_ansi(&l)).collect();
+                                    let lines: Vec<String> = text
+                                        .replace("\r\n", "\n")
+                                        .split('\n')
+                                        .map(|l| l.rsplit('\r').next().unwrap_or("").to_string())
+                                        .map(|l| strip_ansi(&l))
+                                        .collect();
                                     let top = lines.len().saturating_sub(20);
                                     t.pager = Some((format!("Журнал · {}", j.name), lines, top));
                                 }
                                 Err(e) => t.msg = e,
                             }
                         }
-                    } else if let Some(run) = t.ci_sel.selected().and_then(|i| t.ci_runs.as_ref().and_then(|x| x.as_ref().ok()).and_then(|v| v.get(i)).cloned()) {
+                    } else if let Some(run) =
+                        t.ci_sel.selected().and_then(|i| t.ci_runs.as_ref().and_then(|x| x.as_ref().ok()).and_then(|v| v.get(i)).cloned())
+                    {
                         t.ci_jobs = Some((run.id, ci::jobs(Path::new(&t.p.path), &r, run.id)));
                         t.ci_sel.select(Some(1));
                     }
@@ -1048,10 +1558,92 @@ fn strip_ansi(s: &str) -> String {
     out
 }
 
+/// Цвет и жирный в обычном выводе (не в экране TUI). В терминал - как есть; в файл, в канал или при
+/// NO_COLOR - чистый текст: crossterm сам гасит только цвета, а коды жирного оставляет.
+mod paint {
+    use ratatui::crossterm::style::{style, Color, StyledContent, Stylize};
+    use std::fmt::Display;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    pub static PLAIN: AtomicBool = AtomicBool::new(false);
+    fn on() -> bool {
+        !PLAIN.load(Ordering::Relaxed)
+    }
+
+    macro_rules! paint_fn {
+        ($($n:ident),*) => {$(
+            fn $n(self) -> StyledContent<Self::D> {
+                let s = self.sc();
+                if on() { Stylize::$n(s) } else { s }
+            }
+        )*};
+    }
+
+    pub trait Paint: Sized {
+        type D: Display;
+        fn sc(self) -> StyledContent<Self::D>;
+        paint_fn!(bold, black, blue, cyan, dark_grey, green, red, yellow);
+        fn with(self, c: Color) -> StyledContent<Self::D> {
+            let s = self.sc();
+            if on() {
+                Stylize::with(s, c)
+            } else {
+                s
+            }
+        }
+        fn on(self, c: Color) -> StyledContent<Self::D> {
+            let s = self.sc();
+            if on() {
+                Stylize::on(s, c)
+            } else {
+                s
+            }
+        }
+    }
+    impl<D: Display> Paint for StyledContent<D> {
+        type D = D;
+        fn sc(self) -> StyledContent<D> {
+            self
+        }
+    }
+    impl<'a> Paint for &'a str {
+        type D = &'a str;
+        fn sc(self) -> StyledContent<&'a str> {
+            style(self)
+        }
+    }
+    impl Paint for String {
+        type D = String;
+        fn sc(self) -> StyledContent<String> {
+            style(self)
+        }
+    }
+}
+
 fn main() {
+    {
+        use std::io::IsTerminal;
+        let no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
+        paint::PLAIN.store(no_color || !std::io::stdout().is_terminal(), std::sync::atomic::Ordering::Relaxed);
+    }
+    // Вывод обрезали (`pult info | Select-Object -First 2`, `| head`): канал закрыт, println! паникует.
+    // Это не ошибка программы - выйти молча с кодом 0, как делают git и ls.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let p = info.payload();
+        let msg = p.downcast_ref::<String>().map(String::as_str).or_else(|| p.downcast_ref::<&str>().copied()).unwrap_or("");
+        if msg.contains("failed printing to stdout")
+            && (msg.contains("os error 232") || msg.contains("os error 109") || msg.contains("Broken pipe"))
+        {
+            std::process::exit(0);
+        }
+        default_hook(info);
+    }));
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let dd = argv.iter().position(|a| a == "--");
-    let pass = dd.map(|i| argv[i + 1..].iter().map(|a| if a.contains(' ') { format!("\"{a}\"") } else { a.clone() }).collect::<Vec<_>>().join(" ")).unwrap_or_default();
+    let pass = dd
+        .map(|i| argv[i + 1..].iter().map(|a| if a.contains(' ') { format!("\"{a}\"") } else { a.clone() }).collect::<Vec<_>>().join(" "))
+        .unwrap_or_default();
     let head = &argv[..dd.unwrap_or(argv.len())];
     let (mut root, mut yes, mut stage, mut fresh) = (None, false, None, false);
     let mut pos: Vec<String> = Vec::new();
@@ -1110,5 +1702,45 @@ fn main() {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{dur, parse_iso};
+
+    #[test]
+    fn dur_shows_tenths_under_ten_seconds() {
+        assert_eq!(dur(1_200), "1,2 с");
+    }
+
+    #[test]
+    fn dur_rounds_before_splitting_minutes() {
+        assert_eq!(dur(119_600), "2 м 00 с");
+    }
+
+    #[test]
+    fn dur_rounds_59_and_a_half_seconds_up_to_a_minute() {
+        assert_eq!(dur(59_600), "1 м 00 с");
+    }
+
+    #[test]
+    fn dur_keeps_seconds_with_leading_zero() {
+        assert_eq!(dur(65_000), "1 м 05 с");
+    }
+
+    #[test]
+    fn parse_iso_reads_utc_timestamp() {
+        assert_eq!(parse_iso("2026-10-13T19:51:21Z"), 1_791_921_081_000);
+    }
+
+    #[test]
+    fn parse_iso_gives_zero_for_go_zero_time() {
+        assert_eq!(parse_iso("0001-01-01T00:00:00Z"), 0);
+    }
+
+    #[test]
+    fn parse_iso_gives_zero_for_out_of_calendar_parts() {
+        assert_eq!(parse_iso("2026-13-40T99:99:99Z"), 0);
     }
 }
