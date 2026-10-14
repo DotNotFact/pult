@@ -14,7 +14,8 @@ const LS = {
 };
 
 const RU = { success: 'успех', ok: 'готово', failed: 'ошибка', fail: 'ошибка', running: 'идёт', pending: 'в очереди', canceled: 'отменён', stopped: 'остановлен', skipped: 'пропущен', manual: 'вручную' };
-const TABS = [['overview', 'Обзор'], ['scripts', 'Скрипты'], ['learn', 'Документация'], ['ci', 'Пайплайны'], ['git', 'Git'], ['history', 'История']];
+// третье - короткая подпись для нижней панели узкого окна: там на подпись 50 px
+const TABS = [['overview', 'Обзор', 'Обзор'], ['scripts', 'Скрипты', 'Скрипты'], ['learn', 'Документация', 'Уроки'], ['ci', 'Пайплайны', 'CI'], ['git', 'Git', 'Git'], ['history', 'История', 'История']];
 const FX_ORDER = ['danger', 'delete', 'admin', 'db', 'install', 'write', 'network', 'docker', 'read'];
 const URL_RE = /\bhttps?:\/\/[^\s"'<>`]+[^\s"'<>`.,;:!?)\]]/g;
 const LOCAL_URL = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|[\w.-]+\.(localhost|test))(:\d+)?/i;
@@ -28,11 +29,17 @@ const S = {
   f: null, collapsed: new Set(), detail: null, argDraft: {}, showAll: false, help: {}, helpQ: '',
   ci: { remote: null, scope: 'all', status: '', data: {} },
   hist: [], histIdx: new Map(), histFilter: { status: '', q: '' },
-  gitQ: '', pop: null, palette: null, topic: null, topics: new Map(), allTopics: false,
+  gitQ: '', hintOpen: new Set(), flagsAll: new Set(), pop: null, palette: null, topic: null, topics: new Map(), allTopics: false,
   errRe: null, noErrRe: null, warnRe: null,
 };
 const K = () => S.kb || {};
 const UI = () => K().ui || {};
+// подписи для чтения с экрана и клавиатуры: knowledge/ui.json, раздел a11y
+const A = (k, v) => tpl((UI().a11y || {})[k] || '', v);
+// точка статуса: цвет и форма (app.css) плюс имя для чтения с экрана - статус не только цветом
+const sdot = (st, cls = '') => `<span class="dot s-${esc(st)} ${cls}" role="img" aria-label="${esc(A('status', { s: RU[st] || st }))}"></span>`;
+// короткое объявление для чтения с экрана: запуск начался или закончился (index.html, #sr)
+function announce(text) { const el = $('#sr'); if (!el || !text) return; el.textContent = ''; requestAnimationFrame(() => { el.textContent = text; }); }
 const learning = () => !!S.settings.learn;
 const fxInfo = (f) => (K().effects || {})[f] || { label: f, say: '', level: 'info' };
 const stages = () => K().stages || [];
@@ -61,26 +68,161 @@ function dur(ms) {
 const clock = (ts) => new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 12 || h > 14) ? b : c; };
 
+// ---------- сколько ещё: оценка по прошлым успешным запускам ----------
+// Ничего не запрашивает и не придумывает: берёт историю запусков, уже загруженный список пайплайнов и
+// память длительностей джоб. Меньше двух прошлых запусков - оценки нет. Тексты - ui.json, раздел eta.
+const ET = () => UI().eta || {};
+const median = (a) => { const b = [...a].sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+const isoMs = (s) => { const t = Date.parse(s || ''); return Number.isFinite(t) ? t : null; };
+// скрипт: медиана последних 7 успешных запусков с теми же аргументами (если таких хотя бы два), иначе любых
+function scriptEta(scriptId, args = '', skip = null) {
+  if (!scriptId) return null;
+  const ok = S.hist.filter((h) => h.scriptId === scriptId && h.status === 'ok' && h.id !== skip && h.endedAt > h.startedAt).sort((a, b) => b.startedAt - a.startedAt);
+  const same = ok.filter((h) => (h.args || '') === (args || ''));
+  const pick = (same.length >= 2 ? same : ok).slice(0, 7);
+  return pick.length >= 2 ? median(pick.map((h) => h.endedAt - h.startedAt)) : null;
+}
+const runEta = (r) => (r && r.kind === 'script' && P() && r.project === P().path ? scriptEta(r.scriptId, r.args, r.id) : null);
+// пайплайн: медиана 10 последних успешных с тем же именем, лучше - на той же ветке
+function pipeSpan(y) { const a = isoMs(y.startedAt) ?? isoMs(y.createdAt), b = isoMs(y.updatedAt); return a != null && b != null && b > a ? b - a : null; }
+function pipeEta(runs, x) {
+  const ok = (runs || []).filter((y) => y.id !== x.id && y.status === 'success' && (y.name || '') === (x.name || '') && pipeSpan(y) != null);
+  const ref = ok.filter((y) => y.ref === x.ref);
+  const pick = (ref.length >= 2 ? ref : ok).slice(0, 10);
+  return pick.length >= 2 ? median(pick.map(pipeSpan)) : null;
+}
+// джоба: память «имя -> последние длительности» на проект, пополняется при каждой загрузке списка джоб
+const jobMemoKey = () => 'jobs:' + (P()?.path || '');
+function rememberJobs(groups) {
+  const memo = LS.get(jobMemoKey(), {});
+  let changed = false;
+  for (const j of (groups || []).flatMap((x) => x.jobs || [])) {
+    if (j.status !== 'success' || j.duration == null) continue;
+    const list = memo[j.name] || [];
+    if (list.some(([id]) => String(id) === String(j.id))) continue;
+    memo[j.name] = [[j.id, j.duration], ...list].slice(0, 10);
+    changed = true;
+  }
+  if (changed) LS.set(jobMemoKey(), memo);
+}
+function jobEta(j) { const list = (LS.get(jobMemoKey(), {})[j.name] || []).map(([, d]) => d * 1000); return list.length >= 2 ? median(list) : null; }
+function etaSpan(ms) { const s = Math.max(1, Math.round(ms / 1000)); return s < 60 ? tpl(ET().sec, { n: s }) : tpl(ET().min, { n: Math.round(s / 60) }); }
+function etaText(start, est) {
+  if (!est || start == null || !Number.isFinite(start)) return '';
+  const left = est - (Date.now() - start);
+  if (left >= 0) return tpl(ET().left, { t: etaSpan(left) });
+  return etaLate(start, est) ? tpl(ET().over, { t: etaSpan(-left) }) : ET().soon || tpl(ET().left, { t: etaSpan(0) });
+}
+// «дольше обычного» - только когда перебор заметен: не меньше 2 с и не меньше пятой части оценки.
+// Секунда сверху - разброс запуска, а не повод для тревоги
+const etaLate = (start, est) => Date.now() - start - est >= Math.max(2000, est * 0.2);
+const etaPct = (start, est) => Math.min(95, Math.max(2, ((Date.now() - start) / est) * 100));
+// подпись и полоска; секундный таймер ниже обновляет их по data-s (начало) и data-e (оценка), без перерисовки
+const etaOk = (start, est) => !!est && start != null && Number.isFinite(start);
+function etaLabel(start, est, cls = '') { return etaOk(start, est) ? `<span class="eta ${cls}" data-eta data-s="${start}" data-e="${Math.round(est)}">${esc(etaText(start, est))}</span>` : ''; }
+function etaBar(start, est, cls = '') {
+  if (!etaOk(start, est)) return '';
+  return `<span class="etabar ${cls} ${etaLate(start, est) ? 'over' : ''}" data-etab data-s="${start}" data-e="${Math.round(est)}" aria-hidden="true"><i style="width:${etaPct(start, est).toFixed(1)}%"></i></span>`;
+}
+// подсказка с оценкой: базовый текст в data-etat, строку «сколько ещё» дописывает таймер
+function etaTip(base, start, est) { return etaOk(start, est) ? `data-etat="${esc(base)}" data-s="${start}" data-e="${Math.round(est)}" title="${esc(base + '\n' + etaText(start, est))}"` : `title="${esc(base)}"`; }
+// подсказка счётчика «идут: N» в строке состояния: по строке на запуск, с оценкой, если она есть
+function etaRunsTip(base) {
+  const lines = [...S.runs.values()].filter((r) => r.status === 'running' && r.kind === 'script').map((r) => {
+    const e = etaText(r.startedAt, runEta(r));
+    return e ? tpl(ET().tip, { name: r.title, eta: e }) : r.title;
+  });
+  return [base, ...lines].join('\n');
+}
+function etaTick() {
+  for (const el of $$('[data-eta]')) { const t = etaText(+el.dataset.s, +el.dataset.e); if (el.textContent !== t) el.textContent = t; }
+  for (const el of $$('[data-etab]')) {
+    const s = +el.dataset.s, e = +el.dataset.e;
+    el.firstElementChild.style.width = etaPct(s, e).toFixed(1) + '%';
+    el.classList.toggle('over', etaLate(s, e));
+  }
+  for (const el of $$('[data-etat]')) el.title = el.dataset.etat + '\n' + etaText(+el.dataset.s, +el.dataset.e);
+  for (const el of $$('[data-eta-runs]')) el.title = etaRunsTip(el.dataset.etaRuns);
+}
+
+// ---------- движение ----------
+// Появление - анимацией CSS (app.css, раздел «движение»), уход - классом leaving: элемент живёт до
+// animationend, потом cb. Без движения (первая отрисовка, «уменьшить движение», нет анимации) - cb сразу.
+const motionOn = () => document.documentElement.classList.contains('anim-ready') && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+function closeWithAnim(el, cb) {
+  if (!el || !motionOn()) { cb(); return; }
+  el.classList.add('leaving');
+  const name = getComputedStyle(el).animationName;
+  if (!name || name === 'none') { el.classList.remove('leaving'); cb(); return; }
+  // ждём конца именно ухода: прерванное появление тоже шлёт animationcancel
+  const fin = (e) => {
+    if (e.target !== el || e.animationName !== name) return;
+    el.removeEventListener('animationend', fin); el.removeEventListener('animationcancel', fin);
+    el.classList.remove('leaving');
+    cb();
+  };
+  el.addEventListener('animationend', fin); el.addEventListener('animationcancel', fin);
+}
+// короткое появление куска, который остаётся на месте (вкладка, урок, раскрытая подсказка): Web Animations,
+// без перестройки раскладки; кривая и длительность - из токенов --ease и --t-med
+function enterAnim(el, dy = 4) {
+  if (!el || !motionOn() || !el.animate) return;
+  const cs = getComputedStyle(document.documentElement);
+  el.animate([{ opacity: 0, transform: `translateY(${dy}px)` }, { opacity: 1, transform: 'none' }],
+    { duration: parseFloat(cs.getPropertyValue('--t-med')) || 200, easing: cs.getPropertyValue('--ease').trim() || 'ease-out' });
+}
+
 // ---------- уведомления и диалоги ----------
 function toast(msg, kind = '', action = null, ms = 4200) {
   const el = document.createElement('div');
   el.className = 'toast ' + kind;
-  el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button>${esc(action.label)}</button>` : ''}`;
-  if (action) el.querySelector('button').onclick = () => { action.fn(); el.remove(); };
+  el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button type="button">${esc(action.label)}</button>` : ''}`;
+  const gone = () => { if (!el._gone) { el._gone = true; closeWithAnim(el, () => el.remove()); } };
+  if (action) el.querySelector('button').onclick = () => { action.fn(); gone(); };
   $('#toasts').append(el);
-  setTimeout(() => el.remove(), ms);
+  // сколько сообщение видно, а не длительность анимации; под мышью и в фокусе счёт стоит (WCAG 2.2.1):
+  // кнопку «Вывод» успевают нажать, а не ловят до исчезновения
+  let left = ms, t0 = Date.now(), timer = setTimeout(gone, ms), held = false;
+  const hold = () => { if (held) return; held = true; clearTimeout(timer); left -= Date.now() - t0; };
+  const go = () => { if (!held || el.matches(':hover') || el.contains(document.activeElement)) return; held = false; t0 = Date.now(); timer = setTimeout(gone, Math.max(1200, left)); };
+  el.addEventListener('mouseenter', hold); el.addEventListener('focusin', hold);
+  el.addEventListener('mouseleave', go); el.addEventListener('focusout', () => setTimeout(go, 0));
 }
 function overlay(html, onKey) {
   const o = $('#overlay');
+  // куда вернуть фокус после закрытия: то, что было в фокусе до окна (палитра, сменившаяся подтверждением, его не теряет)
+  const ae = document.activeElement;
+  if (ae && ae !== document.body && !o.contains(ae)) { o._ret = ae; o._retSel = retSel(ae); }
+  o._gen = (o._gen || 0) + 1; o._closing = false; o.classList.remove('leaving');
   o.innerHTML = html; o.hidden = false;
   o.onclick = (e) => { if (e.target === o) closeOverlay(); };
   S.overlayKey = onKey || null;
 }
-function closeOverlay() { const o = $('#overlay'); o.hidden = true; o.innerHTML = ''; S.palette = null; S.overlayKey = null; const r = S.confirmResolve; S.confirmResolve = null; r?.(false); }
+// как найти кнопку снова после перерисовки: по её id или первому data-* из списка, внутри ближайшего узла с id
+function retSel(el) {
+  if (el.id) return '#' + CSS.escape(el.id);
+  const k = ['data-act', 'data-run', 'data-run-args', 'data-c', 'data-crun', 'data-tab', 'data-detail', 'data-scact', 'data-wact'].find((x) => el.hasAttribute(x));
+  if (!k) return null;
+  const box = el.parentElement?.closest('[id]');
+  return `${box ? '#' + CSS.escape(box.id) + ' ' : ''}[${k}="${CSS.escape(el.getAttribute(k))}"]`;
+}
+// состояние сбрасывается сразу, окно уходит анимацией; новое окно, открытое за это время, не прячется
+function closeOverlay() {
+  const o = $('#overlay');
+  S.palette = null; S.overlayKey = null; const r = S.confirmResolve; S.confirmResolve = null; r?.(false);
+  if (o.hidden || o._closing) return;
+  const gen = o._gen;
+  o._closing = true;
+  // вернуть фокус туда, откуда открыли; кнопку могла заменить перерисовка (▶ стал ■) - тогда ищем её заново
+  const ret = o._ret?.isConnected ? o._ret : o._retSel && $(o._retSel); o._ret = null; o._retSel = null;
+  if (ret && (o.contains(document.activeElement) || document.activeElement === document.body)) ret.focus({ preventScroll: true });
+  closeWithAnim(o, () => { if (o._gen !== gen) return; o._closing = false; o.hidden = true; o.innerHTML = ''; });
+}
+const overlayOpen = () => { const o = $('#overlay'); return !o.hidden && !o._closing; };
 function confirmBox({ title, body, ok = 'Продолжить', alt = null, cancel = 'Отмена', danger = false }) {
   return new Promise((resolve) => {
     const done = (v) => { S.confirmResolve = null; closeOverlay(); resolve(v === 'cancel' ? false : v); };
-    overlay(`<div class="confirm" role="dialog" aria-modal="true"><h3>${esc(title)}</h3><div>${body}</div>
+    overlay(`<div class="confirm" role="dialog" aria-modal="true" aria-labelledby="cf-title" aria-describedby="cf-body"><h3 id="cf-title">${esc(title)}</h3><div id="cf-body">${body}</div>
       <div class="acts"><button class="btn" data-cf="cancel">${esc(cancel)}</button>${alt ? `<button class="btn" data-cf="alt">${esc(alt)}</button>` : ''}<button class="btn ${danger ? 'danger' : 'primary'}" data-cf="ok">${esc(ok)}</button></div></div>`,
     (e) => {
       // Enter жмёт ту кнопку, на которой фокус; без фокуса - главную
@@ -161,16 +303,69 @@ function fxBadges(s, compact = false) {
 function runBtn(s) {
   const r = lastOf(s.id);
   if (r?.status === 'running') return `<button class="run stop" data-run="${esc(s.id)}" title="Остановить" aria-label="Остановить ${esc(s.name)}">■</button>`;
-  if (isMissing(s)) return `<button class="run" disabled title="Не запустится: нет программы «${esc(s.tool)}»">▶</button>`;
+  if (isMissing(s)) return `<button class="run" disabled title="Не запустится: нет программы «${esc(s.tool)}»" aria-label="Не запустится: нет программы «${esc(s.tool)}»">▶</button>`;
   const danger = s.danger && S.settings.confirmDanger;
   return `<button class="run ${danger ? 'danger' : ''}" data-run="${esc(s.id)}" title="${danger ? 'Запустить - сначала спрошу подтверждение' : 'Запустить: ' + esc(s.cmd)}" aria-label="Запустить ${esc(s.name)}">▶</button>`;
 }
 function lastHtml(r) {
   if (!r) return '';
   const t = r.status === 'running' ? 'идёт' : dur((r.endedAt || Date.now()) - r.startedAt);
-  return `<span class="dot s-${esc(r.status)}" title="${esc(RU[r.status] || r.status)} · ${esc(ago(r.endedAt || r.startedAt))}"></span><span>${esc(t)}</span>`;
+  return `<span class="dot s-${esc(r.status)}" role="img" aria-label="${esc(A('status', { s: RU[r.status] || r.status }))}" title="${esc(RU[r.status] || r.status)} · ${esc(ago(r.endedAt || r.startedAt))}"></span><span>${esc(t)}</span>`;
 }
-const info = (text) => `<span class="info" title="${esc(text)}">i</span>`;
+// значок «i» с пояснением из базы: knowledge/ui.json, раздел infos; для чтения с экрана - картинка с этим текстом
+const info = (key) => { const t = (UI().infos || {})[key]; return t ? `<span class="info" role="img" aria-label="${esc(t)}" title="${esc(t)}">i</span>` : ''; };
+
+// ---------- перерисовка без лишней замены DOM ----------
+// Та же разметка - DOM не трогаем; другая - меняются только отличающиеся узлы. Иначе событие git или
+// project, пришедшее между нажатием и отпусканием кнопки мыши, заменяет кнопку, и клик теряется;
+// поле ввода теряет фокус. Узел с data-own наполняет свой отрисовщик (список скриптов, урок): его
+// содержимое здесь не сравнивается.
+function patch(el, html) {
+  if (!el || el._html === html) return false;
+  if (!el.firstChild) el.innerHTML = html;
+  else { const t = document.createElement('template'); t.innerHTML = html; morph(el, t.content); }
+  el._html = html;
+  return true;
+}
+function sameAttrs(a, b) {
+  const skip = (n) => (a.tagName === 'INPUT' && n === 'value') || (a.tagName === 'DETAILS' && n === 'open');
+  const an = [...a.attributes].filter((x) => !skip(x.name)), bn = [...b.attributes].filter((x) => !skip(x.name));
+  return an.length === bn.length && an.every((x) => b.getAttribute(x.name) === x.value);
+}
+function morph(cur, next) {
+  cur._html = null;
+  const a = [...cur.childNodes], b = [...next.childNodes];
+  if (a.length !== b.length) { cur.replaceChildren(...b); return; }
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i], y = b[i];
+    if (x.isEqualNode(y)) continue;
+    if (x.nodeType === 3 && y.nodeType === 3) { x.nodeValue = y.nodeValue; continue; }
+    // узел на пути к фокусу (сама кнопка или её предок) с другими атрибутами (on, aria-pressed, closed) правится
+    // на месте, а не заменяется: замена роняла фокус клавиатуры на body, и следующий Tab начинал с начала окна.
+    // Остальные узлы по-прежнему заменяются: классы, которые ставит скрипт (narrow у схемы), так не теряются
+    if (x.nodeType === 1 && x.nodeName === y.nodeName && x.contains(document.activeElement) && !/^(INPUT|SELECT|TEXTAREA|OPTION|DETAILS)$/.test(x.tagName) && !sameAttrs(x, y)) {
+      syncAttrs(x, y);
+      if (!x.hasAttribute('data-own')) morph(x, y);
+      continue;
+    }
+    if (x.nodeType !== 1 || x.nodeName !== y.nodeName || !sameAttrs(x, y)) { x.replaceWith(y); continue; }
+    if (x.tagName === 'INPUT') {
+      // поле, в котором сейчас печатают, не трогаем: его значение и так уже в состоянии
+      const v = y.getAttribute('value') ?? '';
+      if (x.getAttribute('value') !== v) x.setAttribute('value', v);
+      if (document.activeElement !== x && x.value !== v) x.value = v;
+      continue;
+    }
+    if (x.hasAttribute('data-own')) continue;
+    morph(x, y);
+  }
+}
+function syncAttrs(x, y) {
+  for (const a of [...x.attributes]) if (!y.hasAttribute(a.name)) x.removeAttribute(a.name);
+  for (const a of [...y.attributes]) if (x.getAttribute(a.name) !== a.value) x.setAttribute(a.name, a.value);
+}
+// DOM поменяли руками (строка выделена, плитка обновлена) - у предков нет больше права на «та же разметка»
+function dirty(node) { for (let p = node; p; p = p.parentElement) p._html = null; }
 
 // =====================================================================
 // ОТРИСОВКА
@@ -184,146 +379,247 @@ function updateTitle() {
 // островок слева: проект, разделы, что идёт сейчас, поиск и настройки
 const NAV_ICON = { overview: 'grid', scripts: 'play', learn: 'learn', ci: 'pipeline', git: 'git', history: 'history' };
 const narrow = () => window.innerWidth <= 760;
-function sideMini() { const v = LS.get('side.mini', null); return v == null ? window.innerWidth < 1100 : v; }
+// Свёрнут ли островок, если человек сам не выбирал. Порог с запасом (1080 и 1120), а не одна черта 1100:
+// окно, которое тянут возле черты, не дёргает панель туда-обратно на каждом пикселе.
+let autoMini = window.innerWidth < 1100;
+function sideMini() { const v = LS.get('side.mini', null); return v == null ? autoMini : v; }
 function renderTop() {
   const p = P(), side = $('#side');
+  window.TitleBar?.setTitle(p?.name);
+  document.documentElement.classList.toggle('ui-min', !!S.settings?.minimal);
   const mini = !narrow() && sideMini();
   side.classList.toggle('mini', mini);
-  document.documentElement.style.setProperty('--sidew', narrow() ? '0px' : mini ? '64px' : '236px');
   const runs = [...S.runs.values()].filter((r) => r.status === 'running' && r.kind === 'script');
   const failed = [...S.runs.values()].filter((r) => r.kind === 'script' && r.status === 'fail').length;
   const ciLast = p ? ciLastStatus() : null;
   const cnt = {
     scripts: runs.length ? `<span class="cnt run">${runs.length} ▶</span>` : p ? `<span class="cnt">${p.scripts.length}</span>` : '',
     learn: p?.topics?.length ? `<span class="cnt">${p.topics.length}</span>` : '',
-    ci: ciLast ? `<span class="dot s-${esc(ciLast)}" title="Последний пайплайн: ${esc(RU[ciLast] || ciLast)}"></span>` : '',
+    ci: ciLast ? `<span class="dot s-${esc(ciLast)}" role="img" aria-label="Последний пайплайн: ${esc(RU[ciLast] || ciLast)}" title="Последний пайплайн: ${esc(RU[ciLast] || ciLast)}"></span>` : '',
     git: p?.git?.dirty ? `<span class="cnt">${p.git.dirty}</span>` : '',
     history: failed ? `<span class="cnt bad">${failed} ✗</span>` : '',
   };
   const mark = { scripts: runs.length > 0, history: failed > 0, git: !!p?.git?.dirty };
-  side.innerHTML = `
+  const html = `
     <div class="sb-head"><button class="sb-logo" data-act="home" title="Все проекты" aria-label="Все проекты"></button><span class="sb-title">Пульт</span>
       <button class="btn ghost icon sm" data-act="side-toggle" title="${mini ? 'Развернуть панель' : 'Свернуть панель'}" aria-label="${mini ? 'Развернуть панель' : 'Свернуть панель'}">${mini ? '»' : '«'}</button></div>
-    ${p ? `<button class="sb-proj" data-act="projects" title="${esc(p.path)}&#10;Сменить проект (Ctrl+O)"><span class="av">${esc((p.name[0] || '?').toUpperCase())}</span><span class="tx"><b>${esc(p.name)}</b><small>${esc(p.path)}</small></span><span class="car">▾</span></button>`
+    ${p ? `<button class="sb-proj" data-act="projects" aria-haspopup="dialog" aria-expanded="${S.pop === 'projects'}" title="${esc(p.path)}&#10;Сменить проект (Ctrl+O)"><span class="av" aria-hidden="true">${esc((p.name[0] || '?').toUpperCase())}</span><span class="tx"><b>${esc(p.name)}</b><small>${esc(p.path)}</small></span><span class="car" aria-hidden="true">▾</span></button>`
       : '<button class="sb-proj" data-act="pick" title="Открыть папку проекта (Ctrl+O)"><span class="av">+</span><span class="tx"><b>Открыть проект</b><small>или перетащите папку в окно</small></span></button>'}
-    <div class="sb-nav" role="tablist">${TABS.map(([id, label], i) => `<button class="sb-item ${p && S.tab === id ? 'on' : ''}" data-tab="${id}" ${p ? '' : 'disabled'} role="tab" aria-selected="${p && S.tab === id}" title="${label} (${i + 1})">${Learn.icon(NAV_ICON[id], 18)}<span class="lbl">${label}</span>${cnt[id] || ''}<span class="sb-mark ${mark[id] ? 'on' : ''}"></span></button>`).join('')}</div>
-    ${runs.length ? `<div class="sb-sec">Идут сейчас</div><div class="sb-runs">${runs.map((r) => `<button class="sb-run" data-crun="${esc(r.id)}" title="${esc(r.cmd)}"><span class="dot s-running"></span><span class="t">${esc(r.title)}</span><span class="el" data-el="${esc(r.id)}">${esc(dur(Date.now() - r.startedAt))}</span></button>`).join('')}</div>` : ''}
+    <div class="sb-nav">${TABS.map(([id, label, short], i) => `<button class="sb-item ${p && S.tab === id ? 'on' : ''}" data-tab="${id}" ${p ? '' : 'disabled'} ${p && S.tab === id ? 'aria-current="page"' : ''} aria-label="${label}" title="${label}${i < 9 ? ` (${i + 1})` : ''}"><span class="ic">${Learn.icon(NAV_ICON[id], 18)}<span class="sb-mark ${mark[id] ? 'on' : ''}"></span></span><span class="lbl">${label}</span><span class="lbs">${short || label}</span>${cnt[id] || ''}</button>`).join('')}
+      <button class="sb-item sb-more ${S.pop === 'more' ? 'on' : ''}" data-act="more" aria-haspopup="dialog" aria-expanded="${S.pop === 'more'}" aria-label="Ещё: проект, поиск, настройки, справка" title="Проект, поиск, настройки, справка"><span class="ic">${Learn.icon('gear', 18)}<span class="sb-mark ${learning() ? 'on' : ''}"></span></span><span class="lbs">Ещё</span></button></div>
+    ${runs.length ? `<div class="sb-sec">Идут сейчас</div><div class="sb-runs">${runs.map((r) => `<button class="sb-run" data-crun="${esc(r.id)}" ${etaTip(r.cmd, r.startedAt, runEta(r))}>${sdot('running')}<span class="t">${esc(r.title)}</span><span class="el" data-el="${esc(r.id)}">${esc(dur(Date.now() - r.startedAt))}</span>${etaBar(r.startedAt, runEta(r), 'under')}</button>`).join('')}</div>` : ''}
     <div class="sb-foot">
       <button class="sb-search" data-act="palette" title="Найти и запустить что угодно (Ctrl+K)">${Learn.icon('search', 16)}<span>Поиск</span><kbd>Ctrl K</kbd></button>
       ${p ? `<button class="sb-item" data-act="rescan" title="Перечитать проект с диска (F5)">${S.refreshing ? '<span class="spin"></span>' : Learn.icon('refresh', 18)}<span class="lbl">${S.refreshing ? 'Обновляю…' : 'Перечитать'}</span></button>` : ''}
-      <button class="sb-item ${learning() ? 'on' : ''}" data-act="toggle-learn" title="${esc((UI().learnMode || {}).text || 'Режим обучения')}">${Learn.icon('book', 18)}<span class="lbl">Обучение</span><span class="cnt">${learning() ? 'вкл' : 'выкл'}</span></button>
-      <button class="sb-item" data-act="settings" title="Настройки">${Learn.icon('gear', 18)}<span class="lbl">Настройки</span></button>
+      <button class="sb-item ${learning() ? 'on' : ''}" data-act="toggle-learn" aria-pressed="${learning()}" title="${esc((UI().learnMode || {}).text || 'Режим обучения')}">${Learn.icon('book', 18)}<span class="lbl">Обучение</span><span class="cnt">${learning() ? 'вкл' : 'выкл'}</span></button>
+      ${window.Widget?.sideItem() || ''}
+      <button class="sb-item" data-act="settings" aria-haspopup="dialog" aria-expanded="${S.pop === 'settings'}" title="Настройки">${Learn.icon('gear', 18)}<span class="lbl">Настройки</span></button>
       <button class="sb-item" data-act="help" title="Справка и горячие клавиши (?)">${Learn.icon('help', 18)}<span class="lbl">Справка</span></button>
     </div>`;
-  $('#pops').innerHTML = (S.pop === 'projects' ? projectsPop() : '') + (S.pop === 'settings' ? settingsPop() : '');
+  if (S.pop === 'more' && !narrow()) S.pop = null;
+  // та же разметка - DOM не трогаем: иначе клик, попавший между нажатием и отпусканием кнопки мыши, теряется
+  patch(side, html);
+  const skip = $('#skip'), skipT = A('skip') || 'К содержимому';
+  if (skip && skip.textContent !== skipT) skip.textContent = skipT;
+  setPops();
+  window.Widget?.sync(); window.StatusBar?.render(); // ui/widget.js, ui/statusbar.js
   if (S.pop === 'projects') setTimeout(() => $('#pq')?.focus(), 0);
 }
-let resizeT;
-window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(renderTop, 80); });
+// Ширину островка и нижнюю панель выбирает CSS (медиазапросы), сразу и без задержки. Здесь только класс
+// mini: меняется синхронно с размером окна, а не через отложенную перерисовку. Раньше перерисовка ждала
+// 80 мс тишины, а ширину задавала переменная из прошлого размера - пока окно тянут, островок схлопывался
+// до 0 и потом раскрывался анимацией: «панель сама открывается и закрывается».
+window.addEventListener('resize', () => {
+  const w = window.innerWidth;
+  if (w < 1080) autoMini = true; else if (w > 1120) autoMini = false;
+  const mini = !narrow() && sideMini();
+  if ($('#side').classList.contains('mini') !== mini || (S.pop === 'more' && !narrow())) renderTop();
+});
+// всплывающее окно у островка: новое появляется анимацией CSS, закрытое уходит своей (closeWithAnim)
+const popsHtml = () => (S.pop === 'projects' ? projectsPop() : '') + (S.pop === 'settings' ? settingsPop() : '') + (S.pop === 'more' ? morePop() : '');
+// Фокус: открытое окно забирает его на первое поле или кнопку (у проектов - поле поиска, renderTop),
+// закрытое (Esc, выбор пункта) возвращает туда, откуда открыли. Щелчок мышью мимо окна фокус не трогает.
+function setPops() {
+  const host = $('#pops'), cur = host.firstElementChild, html = popsHtml();
+  if (!html && cur && !cur.classList.contains('leaving')) {
+    // кнопку, открывшую окно, перерисовка могла заменить (aria-expanded) - тогда она ищется заново (retSel)
+    const back = host._ret?.isConnected ? host._ret : host._retSel && $(host._retSel);
+    host._ret = null; host._retSel = null; host._pop = null;
+    if (back && (cur.contains(document.activeElement) || document.activeElement === document.body)) back.focus({ preventScroll: true });
+    closeWithAnim(cur, () => patch(host, popsHtml()));
+    return;
+  }
+  if (!html && cur) return; // уже уходит
+  patch(host, html);
+  if (S.pop && S.pop !== host._pop) {
+    const ae = document.activeElement;
+    if (ae && ae !== document.body && !host.contains(ae)) { host._ret = ae; host._retSel = retSel(ae); }
+    if (S.pop !== 'projects') setTimeout(() => $('#pops .pop')?.querySelector('button:not([disabled]), input, select')?.focus(), 0);
+  }
+  host._pop = S.pop;
+}
 function sortedRecent() { return [...S.recent].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.at - a.at); }
 function popList() { const q = (S.popQ || '').toLowerCase(); return sortedRecent().filter((r) => !q || `${r.name} ${r.path}`.toLowerCase().includes(q)); }
 function projectsPop() {
   const list = popList();
-  return `<div class="pop pop-projects" role="dialog">
-    <div class="ph"><input type="search" id="pq" placeholder="Найти проект или вставить путь…" value="${esc(S.popQ || '')}" autocomplete="off"><button class="btn primary" data-act="pick">Открыть папку…</button></div>
-    <div class="pl">${list.length ? list.map((r, i) => `<div class="pitem ${r.exists === false ? 'missing' : ''} ${i === (S.popSel || 0) ? 'sel' : ''}" data-open="${esc(r.path)}" title="${r.exists === false ? 'Папки больше нет' : esc(r.path)}">
-      ${r.pinned ? '<span class="pin" title="Закреплён">★</span>' : ''}<span class="nm">${esc(r.name)}</span><span class="pt">${esc(r.path)}</span>
-      <button class="x" data-recent-pin="${esc(r.path)}" title="${r.pinned ? 'Открепить' : 'Закрепить сверху'}">${r.pinned ? '☆' : '★'}</button>
-      <button class="x" data-recent-rm="${esc(r.path)}" title="Убрать из списка">✕</button></div>`).join('')
+  const sel = Math.min(S.popSel || 0, list.length - 1);
+  // поле - комбобокс: стрелки двигают выбор по списку, чтение с экрана слышит выбранный проект
+  return `<div class="pop pop-projects" role="dialog" aria-label="${esc(A('projectQ'))}">
+    <div class="ph"><input type="search" id="pq" role="combobox" aria-expanded="${list.length > 0}" aria-controls="pl" aria-autocomplete="list" ${list.length ? `aria-activedescendant="pi-p${sel}"` : ''} aria-label="${esc(A('projectQ'))}" placeholder="Найти проект или вставить путь…" value="${esc(S.popQ || '')}" autocomplete="off"><button class="btn primary" data-act="pick">Открыть папку…</button></div>
+    <div class="pl" id="pl" role="listbox" aria-label="${esc(A('results'))}">${list.length ? list.map((r, i) => `<div class="pitem ${r.exists === false ? 'missing' : ''} ${i === sel ? 'sel' : ''}" data-open="${esc(r.path)}" title="${r.exists === false ? 'Папки больше нет' : esc(r.path)}">
+      <span class="po" id="pi-p${i}" role="option" aria-selected="${i === sel}">${r.pinned ? '<span class="pin" title="Закреплён">★</span>' : ''}<span class="nm">${esc(r.name)}</span><span class="pt">${esc(r.path)}</span></span>
+      <button class="x" data-recent-pin="${esc(r.path)}" title="${r.pinned ? 'Открепить' : 'Закрепить сверху'}" aria-label="${r.pinned ? 'Открепить' : 'Закрепить сверху'}: ${esc(r.name)}">${r.pinned ? '☆' : '★'}</button>
+      <button class="x" data-recent-rm="${esc(r.path)}" title="Убрать из списка" aria-label="Убрать из списка: ${esc(r.name)}">✕</button></div>`).join('')
       : `<div class="note" style="padding:14px">${S.popQ ? 'Не нашлось. Enter - открыть как путь.' : 'Недавних проектов пока нет.'}</div>`}</div>
     <div class="pf"><span>↑↓ выбор · Enter открыть · Esc закрыть · можно перетащить папку в окно</span><span>${S.recent.length}</span></div></div>`;
+}
+// узкое окно: всё, что у широкого островка внизу и вверху, - одним меню над нижней панелью
+function morePop() {
+  const p = P();
+  const it = (act, icon, label, sub = '') => `<button class="sb-item" data-act="${act}">${Learn.icon(icon, 18)}<span class="lbl">${esc(label)}</span>${sub ? `<span class="cnt">${esc(sub)}</span>` : ''}</button>`;
+  return `<div class="pop pop-more" role="dialog" aria-label="Ещё">
+    ${p ? `<button class="sb-proj" data-act="projects" title="${esc(p.path)}"><span class="av">${esc((p.name[0] || '?').toUpperCase())}</span><span class="tx"><b>${esc(p.name)}</b><small>${esc(p.path)}</small></span><span class="car">▾</span></button>`
+      : '<button class="sb-proj" data-act="pick"><span class="av">+</span><span class="tx"><b>Открыть проект</b><small>или перетащите папку в окно</small></span></button>'}
+    ${it('palette', 'search', 'Поиск', 'Ctrl K')}
+    ${p ? it('rescan', 'refresh', 'Перечитать проект', 'F5') : ''}
+    ${it('toggle-learn', 'book', 'Обучение', learning() ? 'вкл' : 'выкл')}
+    ${window.Widget?.sideItem() || ''}
+    ${it('settings', 'gear', 'Настройки')}
+    ${it('help', 'help', 'Справка', '?')}
+    ${p ? it('home', 'grid', 'Все проекты') : ''}
+  </div>`;
 }
 function settingsPop() {
   const s = S.settings;
   const tog = (k, title, sub) => `<label class="set"><input type="checkbox" data-set="${k}" ${s[k] ? 'checked' : ''}><span>${esc(title)}<small>${esc(sub)}</small></span></label>`;
   const theme = LS.get('theme', 'auto'), fs = LS.get('termSize', 12.5);
   const lm = UI().learnMode || {};
-  return `<div class="pop pop-settings" role="dialog">
+  return `<div class="pop pop-settings" role="dialog" aria-label="Настройки">
     <h4>Обучение</h4>
     ${tog('learn', lm.title || 'Режим обучения', lm.text || '')}
+    ${tog('minimal', (UI().minimalMode || {}).title || 'Минимальный интерфейс', (UI().minimalMode || {}).text || '')}
     <h4 style="margin-top:12px">Поведение</h4>
     ${tog('confirmDanger', 'Подтверждать опасные запуски', 'выкладка, публикация, удаление, prod - спрошу перед запуском')}
     ${tog('autoRefresh', 'Следить за файлами проекта', 'правка package.json или смена ветки обновит экран сама')}
     ${tog('ciAutoload', 'Загружать статус CI при открытии вкладки', 'один запрос; дальше - только по кнопке')}
     ${tog('colors', 'Цвета в выводе', 'просить программы печатать в цвете (FORCE_COLOR)')}
     ${tog('notify', 'Уведомлять о завершении', 'всплывающее уведомление Windows, если окно не в фокусе')}
-    <div class="set-row"><span>Доверенные серверы CI<small class="note" style="display:block">кроме gitlab.com и github.com, через запятую</small></span><input type="text" id="cihosts" value="${esc((s.ciHosts || []).join(', '))}" style="width:140px"></div>
+    <div class="set-row"><span>Доверенные серверы CI<small class="note" style="display:block">кроме gitlab.com и github.com, через запятую</small></span><input type="text" id="cihosts" aria-label="${esc(A('ciHosts'))}" spellcheck="false" value="${esc((s.ciHosts || []).join(', '))}" style="width:140px"></div>
     <h4 style="margin-top:12px">Вид</h4>
-    <div class="set-row"><span>Тема</span><div class="seg">${[['auto', 'Авто'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([k, l]) => `<button class="${theme === k ? 'on' : ''}" data-theme-set="${k}">${l}</button>`).join('')}</div></div>
-    <div class="set-row"><span>Шрифт консоли</span><div class="seg">${[11.5, 12.5, 13.5, 15].map((n) => `<button class="${fs === n ? 'on' : ''}" data-term-size="${n}">${String(n).replace('.', ',')}</button>`).join('')}</div></div>
+    <div class="set-row"><span>Тема</span><div class="seg">${[['auto', 'Авто'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([k, l]) => `<button class="${theme === k ? 'on' : ''}" aria-pressed="${theme === k}" data-theme-set="${k}">${l}</button>`).join('')}</div></div>
+    <div class="set-row"><span>Шрифт консоли</span><div class="seg">${[11.5, 12.5, 13.5, 15].map((n) => `<button class="${fs === n ? 'on' : ''}" aria-pressed="${fs === n}" data-term-size="${n}">${String(n).replace('.', ',')}</button>`).join('')}</div></div>
     <div class="set-row"><span>Подсказки</span><button class="btn sm" data-act="reset-hints">Показать снова</button></div>
     <div class="set-row"><span>База знаний<small class="note" style="display:block">${K().fromDisk ? 'читается из папки knowledge' : 'встроенная копия'}</small></span><button class="btn sm" data-act="kb-reload">Перечитать</button></div>
+    ${window.Widget?.settingsHtml() || ''}
   </div>`;
 }
 
 function renderMain() {
   const m = $('#main');
-  if (S.scanning) { m.innerHTML = `<div class="wrap"><div class="note" style="margin:30px 0 10px"><span class="spin"></span> Разбираю проект…</div>${'<div class="skel"></div>'.repeat(6)}</div>`; return; }
+  // идёт разбор - область занята: чтение с экрана не зачитывает заглушки-скелеты
+  if (S.scanning) m.setAttribute('aria-busy', 'true'); else m.removeAttribute('aria-busy');
+  if (S.scanning) { patch(m, `<div class="wrap"><div class="note" style="margin:30px 0 10px"><span class="spin"></span> Разбираю проект…</div>${'<div class="skel"></div>'.repeat(6)}</div>`); return; }
   if (S.error && !P()) {
-    m.innerHTML = `<div class="empty"><h1>Не открылось</h1><p class="lead">${esc(S.error.msg)}<br><span class="faint">${esc(S.error.path || '')}</span></p>
-      <button class="btn primary" data-act="pick">Выбрать другую папку…</button> ${S.error.path ? `<button class="btn" data-open="${esc(S.error.path)}">Попробовать снова</button>` : ''}</div>`;
+    patch(m, `<div class="empty"><h1>Не открылось</h1><p class="lead">${esc(S.error.msg)}<br><span class="faint">${esc(S.error.path || '')}</span></p>
+      <button class="btn primary" data-act="pick">Выбрать другую папку…</button> ${S.error.path ? `<button class="btn" data-open="${esc(S.error.path)}">Попробовать снова</button>` : ''}</div>`);
     return;
   }
   if (!P()) return renderEmpty();
   const keep = m.scrollTop;
-  const p = P();
-  const label = (TABS.find(([id]) => id === S.tab) || [])[1] || '';
-  const full = S.tab === 'overview';
-  m.innerHTML = `<div class="wrap">
-    <div class="pagehead">
-      <div class="ttl"><div class="crumb">${esc(label)}</div>
-        <h1><button class="h1btn" data-act="projects" title="Сменить проект (Ctrl+O)">${esc(p.name)}</button>${p.version ? `<span class="ver">v${esc(p.version)}</span>` : ''}${p.git ? `<span class="ver">· ${esc(p.git.branch)}</span>` : ''}</h1>
-        ${full && p.description ? `<p class="desc" data-act="desc" title="Нажмите, чтобы развернуть">${esc(p.description)}</p>` : ''}
-        ${full ? `<div class="chips">${p.stacks.map((s) => `<span class="chip">${esc(s)}</span>`).join('')}</div>` : ''}
-      </div>
-      <div class="headact">
-        <div class="hero-actions">
-          <button class="btn sm" data-open-what="explorer" title="Открыть папку проекта в проводнике">Проводник</button>
-          <button class="btn sm" data-open-what="terminal" title="Открыть терминал в папке проекта">Терминал</button>
-          <button class="btn sm" data-open-what="code" title="Открыть проект в VS Code">VS Code</button>
-        </div>
-        <div class="freshness" title="Пульт помнит прошлый разбор и показывает его сразу, а свежий подкладывает фоном">${p.cached ? 'из кэша · ' : ''}разобрано ${esc(ago(p.scannedAt))}${p.scanMs ? ` за ${p.scanMs} мс` : ''}</div>
-      </div>
-    </div>
-    <div id="tabbody"></div>
-  </div>`;
+  // каркас страницы ставится один раз; дальше шапка и вкладка сверяются каждая со своей прошлой разметкой
+  if (!$('#pagehead') || !m.contains($('#pagehead'))) { m.innerHTML = '<div class="wrap"><header class="pagehead" id="pagehead"></header><div id="tabbody"></div></div>'; m._html = null; }
+  renderHead();
   renderTab();
   m.scrollTop = keep;
+}
+// Шапка страницы - сетка (layout.css): строка 1 - проект и кнопки на одной средней линии; строка 2 - раздел,
+// версия, ветка, свежесть разбора (справа - «Блоки» на «Обзоре»); строка 3 - описание в две строки с «ещё»;
+// строка 4 - стек. Ничего не стоит на своей базовой линии: каждая строка выравнивает детей по центру.
+function renderHead() {
+  const head = $('#pagehead'), p = P();
+  if (!head || !p) return;
+  const label = (TABS.find(([id]) => id === S.tab) || [])[1] || (S.tab === 'scenarios' ? (UI().scenarios || {}).tab || '' : '');
+  const full = S.tab === 'overview', PH = UI().pagehead || {}, open = !!S.descOpen;
+  patch(head, `
+      <h1 class="ph-title"><button class="h1btn" data-act="projects" title="Сменить проект (Ctrl+O)">${esc(p.name)}</button></h1>
+      <div class="ph-acts hero-actions">
+        <button class="btn sm" data-open-what="explorer" title="Открыть папку проекта в проводнике">Проводник</button>
+        <button class="btn sm" data-open-what="terminal" title="Открыть терминал в папке проекта">Терминал</button>
+        <button class="btn sm" data-open-what="code" title="Открыть проект в VS Code">VS Code</button>
+      </div>
+      <div class="ph-meta"><span class="crumb">${esc(label)}</span>${p.version ? `<span class="ph-m">v${esc(p.version)}</span>` : ''}${p.git ? `<span class="ph-m ph-branch" title="Ветка git">${Learn.icon('branch', 13)}${esc(p.git.branch)}</span>` : ''}<span class="ph-m freshness" title="${esc((UI().infos || {}).fresh || '')}">${p.cached ? 'из кэша · ' : ''}разобрано ${esc(ago(p.scannedAt))}${p.scanMs ? ` за ${p.scanMs} мс` : ''}</span></div>
+      ${full ? `<div class="ph-tools">${Blocks.listButton('overview')}</div>` : ''}
+      ${full && p.description ? `<div class="ph-desc"><p class="desc${open ? ' open' : ''}" id="ph-desc">${esc(p.description)}</p><button type="button" class="tlink ph-more" data-act="desc" aria-controls="ph-desc" aria-expanded="${open}" aria-label="${esc(open ? PH.lessLabel : PH.moreLabel)}"${open || S.descClamp ? '' : ' hidden'}>${esc(open ? PH.less : PH.more)}</button></div>` : ''}
+      ${full && p.stacks.length ? `<div class="chips ph-chips">${p.stacks.map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : ''}`);
+  watchDesc();
+}
+// «ещё» у описания - только когда две строки правда обрезали текст: замер после раскладки (ResizeObserver),
+// а не чтением размеров посреди отрисовки
+let descEl = null;
+const descRO = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+  const el = $('#ph-desc');
+  if (!el || S.descOpen) return;
+  const over = el.scrollHeight > el.clientHeight + 1;
+  if (over !== !!S.descClamp) { S.descClamp = over; renderHead(); }
+}) : null;
+function watchDesc() {
+  const el = $('#ph-desc');
+  if (el === descEl || !descRO) return;
+  if (descEl) descRO.unobserve(descEl);
+  descEl = el;
+  if (el) descRO.observe(el);
 }
 function renderTab() {
   const el = $('#tabbody');
   if (!el || !P()) return;
-  if (S.tab === 'overview') el.innerHTML = viewOverview();
-  else if (S.tab === 'scripts') { el.innerHTML = viewScripts(); renderChips(); renderList(); }
-  else if (S.tab === 'learn') { el.innerHTML = viewLearn(); ensureTopic(); }
-  else if (S.tab === 'ci') { el.innerHTML = viewCI(); ensureCI(); }
-  else if (S.tab === 'git') el.innerHTML = viewGit();
-  else if (S.tab === 'history') el.innerHTML = viewHistory();
+  // блок тянут - страница не перерисовывается под указателем; перерисовка догонит после отпускания
+  if (S.tab === 'overview') { if (Blocks.busy()) { Blocks.defer(); return; } patch(el, viewOverview()); Blocks.mount(el); trackArrows(el); }
+  else if (S.tab === 'scripts') { patch(el, viewScripts()); renderChips(); renderList(); }
+  else if (S.tab === 'learn') { patch(el, viewLearn()); ensureTopic(); }
+  else if (S.tab === 'ci') { patch(el, viewCI()); ensureCI(); }
+  else if (S.tab === 'git') patch(el, viewGit());
+  else if (S.tab === 'history') patch(el, viewHistory());
+  else if (S.tab === 'scenarios') { el._html = null; window.Scen?.renderTab(el); } // ui/scenarios.js рисует сам
 }
 function setTab(t) {
+  const moved = t !== S.tab;
   S.tab = t;
   S.pop = null;
   if (P()) LS.set('tab:' + P().path, t);
+  if (moved) closeTransient();
+  window.Scen?.onTab(t); // ui/scenarios.js: открытый редактор закрывается, черновик остаётся в памяти
   renderTop();
   renderMain();
   $('#main').scrollTop = 0;
+  if (moved) enterAnim($('#tabbody')); // новая вкладка проявляется, старая уходит сразу: быстрый обход не ждёт
+}
+// переход на другую вкладку закрывает всё временное: панель подробностей, палитру и справку, поиск в выводе,
+// подсказку к термину. Консоль остаётся открытой - в ней идут запуски.
+function closeTransient() {
+  if (!$('#overlay').hidden) closeOverlay();
+  Blocks.close(false);
+  if (S.detail) { S.detail = null; renderDrawer(); }
+  if (S.console.findOpen) { S.console.findOpen = false; S.console.find = ''; S.console.hit = -1; renderConsole(); }
+  $('#tip').hidden = true;
 }
 function hintBox(key) {
   const h = (UI().hints || {})[key];
   if (!h || (!learning() && LS.get('hint.' + key))) return '';
-  return `<div class="hint-box"><div><b>${esc(h.title)}</b><ul>${(h.items || []).map((x) => `<li>${g(x)}</li>`).join('')}</ul></div>${learning() ? '' : `<button class="btn sm" data-hint="${esc(key)}">Понятно</button>`}</div>`;
+  const open = S.hintOpen.has(key);
+  return `<div class="hint-box ${open ? 'open' : ''}"><button class="hint-chip" data-hint-x="${esc(key)}" aria-expanded="${open}"><span class="q" aria-hidden="true">?</span><span class="ht">${esc(h.title)}</span></button><div><b>${esc(h.title)}</b><ul>${(h.items || []).map((x) => `<li>${g(x)}</li>`).join('')}</ul></div>${learning() ? '<span class="btn sm slot" aria-hidden="true">Понятно</span>' : `<button class="btn sm" data-hint="${esc(key)}">Понятно</button>`}</div>`;
 }
 
 function renderEmpty() {
   const rec = sortedRecent();
-  $('#main').innerHTML = `<div class="empty">
+  patch($('#main'), `<div class="empty">
+    <img class="empty-art" src="img/empty.png" alt="" width="240" height="225">
     <h1><i></i>Пульт</h1>
     <p class="lead">Откройте папку любого проекта. Пульт найдёт, что в нём можно запустить,<br>объяснит каждую команду и покажет уроки по технологиям проекта.<br><span class="faint">Ничего не меняет, пока вы сами не нажмёте ▶.</span></p>
     <button class="btn primary" data-act="pick" style="padding:10px 22px;font-size:15px">Открыть папку… <span class="k">Ctrl O</span></button>
-    <div class="pathbox"><input type="text" id="pathin" placeholder="или вставьте путь: D:\\Projects\\мой-проект" autocomplete="off"><button class="btn" data-act="openpath">Открыть</button></div>
+    <div class="pathbox"><input type="text" id="pathin" aria-label="${esc(A('path'))}" spellcheck="false" placeholder="или вставьте путь: D:\\Projects\\мой-проект" autocomplete="off"><button class="btn" data-act="openpath">Открыть</button></div>
     <p class="note">Ещё можно просто перетащить папку в это окно.</p>
-    ${rec.length ? `<div class="recent"><h4>Недавние</h4>${rec.map((r) => `<div class="rcard ${r.exists === false ? 'missing' : ''}" data-open="${esc(r.path)}" title="${r.exists === false ? 'Папки больше нет' : ''}"><b>${r.pinned ? '★ ' : ''}${esc(r.name)}</b><span class="pt">${esc(r.path)}</span></div>`).join('')}</div>` : ''}
-  </div>`;
+    ${rec.length ? `<div class="recent"><h4>Недавние</h4>${rec.map((r) => `<div class="rcard ${r.exists === false ? 'missing' : ''}" role="button" tabindex="0" data-open="${esc(r.path)}" title="${r.exists === false ? 'Папки больше нет' : ''}"><b>${r.pinned ? '★ ' : ''}${esc(r.name)}</b><span class="pt">${esc(r.path)}</span></div>`).join('')}</div>` : ''}
+  </div>`);
 }
 
 // ---------- Обзор ----------
@@ -339,11 +635,32 @@ function quickList() {
   return out.slice(0, 8);
 }
 function qtile(s) {
-  return `<div class="qtile" data-detail="${esc(s.id)}" data-sid="${esc(s.id)}" title="${esc(s.info?.summary)}">${runBtn(s)}<div class="t"><b>${isFav(s.id) ? '★ ' : ''}${esc(s.name)}</b><span>${esc(s.info?.summary)}</span></div>${lastHtml(lastOf(s.id))}</div>`;
+  return `<div class="qtile" tabindex="0" data-detail="${esc(s.id)}" data-sid="${esc(s.id)}" title="${esc(s.info?.summary)}">${runBtn(s)}<div class="t"><b>${isFav(s.id) ? '★ ' : ''}${esc(s.name)}</b><span>${esc(s.info?.summary)}</span></div>${lastHtml(lastOf(s.id))}</div>`;
 }
-function viewOverview() {
-  const p = P();
-  const by = {}, ciBy = {}, runBy = {}, failBy = {};
+// Обзор - сетка блоков (ui/blocks.js). Каждый раздел - запись в реестре: заголовок, ссылка в шапке и
+// пустое состояние - knowledge/ui.json, раздел blocks; порядок, ширину, свёртку и скрытие выбирает человек.
+// Стрелка между этапами нужна, только если следующий этап на той же строке: при переносе она висела
+// в конце строки. Пересчёт - после отрисовки и когда меняется ширина цепочки.
+const trackRO = window.ResizeObserver ? new ResizeObserver((es) => es.forEach((e) => hideStrayArrows(e.target))) : null;
+function hideStrayArrows(track) {
+  // этап и его стрелка - один сегмент .tseg; стрелка видна, если следующий сегмент на той же строке
+  const segs = [...track.children].filter((x) => x.classList.contains('tseg'));
+  segs.forEach((s, i) => {
+    const a = s.querySelector('.tarrow'), next = segs[i + 1];
+    if (a) a.style.visibility = next && Math.abs(s.offsetTop - next.offsetTop) < 4 ? '' : 'hidden';
+  });
+}
+function trackArrows(root) {
+  for (const tr of root.querySelectorAll('.track')) { hideStrayArrows(tr); if (trackRO && !tr._ro) { trackRO.observe(tr); tr._ro = 1; } }
+}
+function viewOverview() { return hintBox('overview') + Blocks.grid('overview'); }
+const BT = () => UI().blocks || {};
+const blkEmpty = (k) => `<p class="blk-empty">${esc((BT().empty || {})[k] || '')}</p>`;
+const blkAside = (k, tab) => `<button class="tlink" data-tab="${tab}">${esc((BT().asides || {})[k] || '')}</button>`;
+// путь разработки - цепочка этапов: точка состояния, этап, число скриптов, сколько джоб CI; без номеров.
+// Стрелка - хвост этапа, а не начало следующего: при переносе строки она не повисает в начале новой
+function flowHtml() {
+  const p = P(), by = {}, ciBy = {}, runBy = {}, failBy = {};
   for (const s of p.scripts) {
     by[s.stage] = (by[s.stage] || 0) + 1;
     const r = lastOf(s.id);
@@ -351,35 +668,49 @@ function viewOverview() {
     if (r?.status === 'fail') failBy[s.stage] = 1;
   }
   for (const c of p.ci) { for (const st of c.stages || []) ciBy[st.sid] = (ciBy[st.sid] || 0) + st.jobs.length; for (const j of c.jobs || []) ciBy[j.sid] = (ciBy[j.sid] || 0) + 1; }
-  const steps = stages().filter((s) => s.id !== 'other' || by.other).map((s, i) => {
+  const FL = UI().flow || {};
+  const list = stages().filter((s) => s.id !== 'other' || by.other);
+  return `<div class="track">${list.map((s, i) => {
     const n = by[s.id] || 0, c = ciBy[s.id] || 0;
-    const mark = runBy[s.id] ? '<span class="dot s-running st" title="Есть запущенный скрипт"></span>' : failBy[s.id] ? '<span class="dot d-bad st" title="Последний запуск одного из скриптов упал"></span>' : '';
-    return `<button class="step ${n || c ? '' : 'zero'}" data-stage="${esc(s.id)}" title="${esc(s.hint)}">${mark}<small><span>${i + 1}</span></small><b>${esc(s.label)}</b>
-      <div class="big">${n}</div><div class="sub">${plural(n, 'скрипт', 'скрипта', 'скриптов')}${c ? ` · ${c} в CI` : ''}</div>${learning() && s.learn ? `<div class="sub" style="margin-top:4px">${g(s.learn)}</div>` : ''}</button>`;
-  }).join('');
-  const quick = quickList();
-  const hist = recentRuns(6);
-  const topics = (p.topics || []).slice(0, 8);
-  return `${hintBox('overview')}
-    <h2>Быстрый запуск ${info('Избранные (★) и самые частые: разработка, тесты, сборка. Отметьте звёздочкой любой скрипт, чтобы он попал сюда.')}<span class="aside"><a data-tab="scripts" href="#">все скрипты →</a></span></h2>
-    ${quick.length ? `<div class="quick">${quick.map(qtile).join('')}</div>` : '<div class="empty-card">Скриптов не нашлось - смотрите «Состояние» ниже.</div>'}
-    <h2>Путь разработки ${info('Скрипты разложены по этапам жизни проекта. Этап определяется по имени и по тому, что скрипт делает. «В CI» - сколько джоб пайплайна относятся к этапу.')}</h2>
-    <div class="flow">${steps}</div>
-    <h2>Состояние ${info('Зелёный - в порядке, жёлтый - стоит посмотреть, красный - мешает работе, синий - для сведения.')}</h2>
-    <div class="health">${healthItems().map(healthCard).join('')}</div>
-    ${topics.length ? `<h2>Технологии проекта ${info('Уроки по тому, что нашлось в проекте. Откройте любой - там схемы, примеры и вопросы.')}<span class="aside"><a data-tab="learn" href="#">вся документация →</a></span></h2>
-      <div class="quick">${topics.map((t) => `<div class="qtile" data-topic="${esc(t.id)}" title="${esc(t.summary)}"><span class="tico" style="background:${esc(t.color)}">${Learn.icon(t.icon, 18, '#fff')}</span><div class="t"><b style="font-family:inherit">${esc(t.title)}</b><span>${esc(t.why)}</span></div></div>`).join('')}</div>` : ''}
-    <div class="cols">
-      <div><h2>Последние запуски <span class="aside"><a data-tab="history" href="#">вся история →</a></span></h2>${hist.length ? `<div class="list">${hist.map(histLi).join('')}</div>` : '<div class="empty-card">Запусков ещё не было. Нажмите ▶ у любого скрипта.</div>'}</div>
-      <div><h2>Документы проекта</h2>${p.docs.length ? `<div class="list">${p.docs.map((d) => `<div class="li click" data-doc="${esc(d.rel)}"><span class="t">${esc(d.name)}<span class="sub">${esc(d.hint || '')}</span></span>${d.kind === 'dir' ? `<span class="d">${d.count} ${plural(d.count, 'файл', 'файла', 'файлов')}</span>` : `<button class="btn ghost sm" data-edit="${esc(d.rel)}" title="Открыть в редакторе">✎</button>`}</div>`).join('')}</div>` : '<div class="empty-card">Документов в корне нет.</div>'}</div>
-    </div>`;
+    const st = runBy[s.id] ? 'run' : failBy[s.id] ? 'fail' : '';
+    const why = st === 'run' ? FL.running : st === 'fail' ? FL.failed : '';
+    const tip = [s.hint, why, learning() ? s.learn : ''].filter(Boolean).join(' · ');
+    return `<span class="tseg"><button class="tstep ${n || c ? '' : 'zero'}" data-stage="${esc(s.id)}" title="${esc(tip)}"><span class="tdot ${st}"></span><b>${esc(s.label)}</b><span class="tn">${n}</span>${c ? `<span class="tci">${esc(tpl(FL.ci || 'CI {n}', { n: c }))}</span>` : ''}</button>${i < list.length - 1 ? '<span class="tarrow" aria-hidden="true"></span>' : ''}</span>`;
+  }).join('')}</div>`;
 }
+function topicTile(t) {
+  return `<div class="qtile" role="button" tabindex="0" data-topic="${esc(t.id)}" title="${esc(t.summary)}"><span class="tico" style="background:${esc(t.color)}">${Learn.icon(t.icon, 18, Learn.ink(t.color))}</span><div class="t"><b class="plain">${esc(t.title)}</b><span>${esc(t.why)}</span></div></div>`;
+}
+function docLi(d) {
+  return `<div class="li click" tabindex="0" ${d.kind === 'dir' ? 'role="button"' : ''} data-doc="${esc(d.rel)}"><span class="t">${esc(d.name)}<span class="sub">${esc(d.hint || '')}</span></span>${d.kind === 'dir' ? `<span class="d">${d.count} ${plural(d.count, 'файл', 'файла', 'файлов')}</span>` : `<button class="btn ghost sm" data-edit="${esc(d.rel)}" title="Открыть в редакторе" aria-label="Открыть в редакторе: ${esc(d.name)}">✎</button>`}</div>`;
+}
+Blocks.register({ id: 'quick', info: 'quick', aside: () => blkAside('quick', 'scripts'),
+  render: () => { const q = quickList(); return q.length ? `<div class="quick">${q.map(qtile).join('')}</div>` : blkEmpty('quick'); } });
+Blocks.register({ id: 'flow', info: 'flow', render: flowHtml });
+Blocks.register({ id: 'health', info: 'health', flush: true, render: () => `<div class="hlist">${healthItems().map(healthRow).join('')}</div>` });
+Blocks.register({ id: 'topics', info: 'topics', when: () => !!(P()?.topics || []).length, aside: () => blkAside('topics', 'learn'),
+  render: () => `<div class="quick">${(P().topics || []).slice(0, 8).map(topicTile).join('')}</div>` });
+Blocks.register({ id: 'runs', span: 'half', flush: () => recentRuns(6).length > 0, aside: () => blkAside('runs', 'history'),
+  render: () => { const h = recentRuns(6); return h.length ? `<div class="list">${h.map(histLi).join('')}</div>` : blkEmpty('runs'); } });
+Blocks.init({
+  texts: () => UI().blocks,
+  rerender: () => { if (P() && S.tab === 'overview') renderMain(); },
+  announce, dirty, info,
+  icon: (n, size, sw) => Learn.icon(n, size, 'currentColor', sw),
+});
+Blocks.register({ id: 'docs', span: 'half', flush: () => P().docs.length > 0,
+  render: () => (P().docs.length ? `<div class="list">${P().docs.map(docLi).join('')}</div>` : blkEmpty('docs')) });
 function H(key, vars) { const h = (UI().health || {})[key] || { t: key, d: '' }; return { t: tpl(h.t, vars), d: tpl(h.d, vars), btn: h.btn ? tpl(h.btn, vars) : null }; }
 function healthItems() {
   const p = P(), gi = p.git, h = p.health || {}, items = [];
   const add = (lv, key, vars = {}, extra = {}) => items.push({ lv, ...H(key, vars), ...extra });
   if (!gi) add('info', 'notGit');
-  else {
+  else if (gi.untrusted) {
+    // git не запускался: настройки чужого репозитория опасны (ядро, git::locate)
+    const why = tpl((UI().health?.gitWhy || {})[gi.why] || '', { key: gi.whyKey || '' });
+    if (gi.refused) add('bad', 'gitRefused', { why });
+    else add('warn', 'gitUntrusted', { why }, { act: 'git-trust' });
+  } else {
     if (gi.op) add('bad', gi.op, {}, { tab: 'git' });
     if (gi.dirty) add('warn', 'dirty', { n: `${gi.dirty} ${plural(gi.dirty, 'изменение', 'изменения', 'изменений')}`, branch: gi.branch }, { tab: 'git' });
     else add('ok', 'clean', { branch: gi.branch });
@@ -421,12 +752,14 @@ function healthItems() {
   const rank = { bad: 0, warn: 1, ok: 2, info: 3 };
   return items.sort((a, b) => rank[a.lv] - rank[b.lv]);
 }
-function healthCard(x) {
+function healthRow(x) {
   const act = [];
   if (x.run && scriptOf(x.run)) act.push(`<button class="btn sm" data-run="${esc(x.run)}">▶ ${esc(x.btn || 'Запустить')}</button><button class="btn ghost sm" data-detail="${esc(x.run)}">что это?</button>`);
   else if (x.tab) act.push(`<button class="btn sm" data-tab="${esc(x.tab)}">${esc(x.btn || 'Открыть')}</button>`);
+  if (x.act === 'git-trust') act.push(`<button class="btn sm" data-act="git-trust">${esc(x.btn || '')}</button>`);
   if (x.act === 'docker-recheck') act.push(`<button class="btn sm" data-act="docker-recheck">${esc(x.btn || 'Проверить ещё раз')}</button>`);
-  return `<div class="hcard lv-${esc(x.lv)}"><b><span class="dot d-${x.lv === 'info' ? 'info' : esc(x.lv)}"></span>${esc(x.t)}</b>${x.d ? `<span>${g(x.d)}</span>` : ''}${act.length ? `<div class="act">${act.join('')}</div>` : ''}</div>`;
+  // строка списка: точка (цвет и форма) на линии заголовка, под ним пояснение, справа - чем исправить
+  return `<div class="hrow lv-${esc(x.lv)}"><div class="tx"><b><span aria-hidden="true" class="dot d-${x.lv === 'info' ? 'info' : esc(x.lv)}"></span>${esc(x.t)}</b>${x.d ? `<span class="hd">${g(x.d)}</span>` : ''}</div>${act.length ? `<div class="act">${act.join('')}</div>` : ''}</div>`;
 }
 function recentRuns(n) {
   const cur = [...S.runs.values()].filter((r) => r.kind === 'script' && r.project === P().path);
@@ -434,7 +767,7 @@ function recentRuns(n) {
   return [...cur, ...S.hist.filter((h) => !ids.has(h.id))].sort((a, b) => b.startedAt - a.startedAt).slice(0, n);
 }
 function histLi(r) {
-  return `<div class="li click" data-log="${esc(r.id)}" title="Показать вывод"><span class="dot s-${esc(r.status)}"></span><span class="t"><span class="mono">${esc(r.title)}</span>${r.args ? ` <span class="faint">${esc(r.args)}</span>` : ''}</span><span class="d">${r.status === 'running' ? 'идёт' : esc(dur((r.endedAt || Date.now()) - r.startedAt))} · ${esc(ago(r.startedAt))}</span></div>`;
+  return `<div class="li click" role="button" tabindex="0" data-log="${esc(r.id)}" title="Показать вывод">${sdot(r.status)}<span class="t"><span class="mono">${esc(r.title)}</span>${r.args ? ` <span class="faint">${esc(r.args)}</span>` : ''}</span><span class="d">${r.status === 'running' ? 'идёт' : esc(dur((r.endedAt || Date.now()) - r.startedAt))} · ${esc(ago(r.startedAt))}</span></div>`;
 }
 
 // ---------- Скрипты ----------
@@ -442,11 +775,11 @@ function viewScripts() {
   return `${hintBox('scripts')}
     <div class="toolbar">
       <div class="search"><input type="search" id="q" placeholder="Поиск по имени, описанию, команде…" value="${esc(S.f.q)}" autocomplete="off" aria-label="Поиск скриптов"><button class="clear" data-act="clearq" ${S.f.q ? '' : 'hidden'} aria-label="Очистить">×</button></div>
-      <div class="seg" title="Как группировать">${[['stage', 'По этапам'], ['where', 'По папкам'], ['source', 'По источнику']].map(([k, l]) => `<button class="${S.f.group === k ? 'on' : ''}" data-group="${k}">${l}</button>`).join('')}</div>
+      <div class="seg" title="Как группировать">${[['stage', 'По этапам'], ['where', 'По папкам'], ['source', 'По источнику']].map(([k, l]) => `<button class="${S.f.group === k ? 'on' : ''}" aria-pressed="${S.f.group === k}" data-group="${k}">${l}</button>`).join('')}</div>
       <span class="cnt" id="cnt"></span>
     </div>
-    <div class="fchips" id="fchips"></div>
-    <div id="list"></div>`;
+    <div class="fchips" id="fchips" data-own></div>
+    <div id="list" data-own></div>`;
 }
 function renderChips() {
   const p = P(), f = S.f, el = $('#fchips');
@@ -454,16 +787,19 @@ function renderChips() {
   const cnt = (pred, except) => p.scripts.filter((s) => matches(s, except) && pred(s)).length;
   const chip = (attr, val, label, on, n, title = '') => `<button class="fchip ${on ? 'on' : ''} ${n === 0 && !on ? 'zero' : ''}" ${attr}="${esc(val)}" title="${esc(title)}" aria-pressed="${on}">${esc(label)}${n != null ? `<span class="n">${n}</span>` : ''}</button>`;
   const st = stages().map((s) => { const n = cnt((x) => x.stage === s.id, 'stage'); return n || f.stages.includes(s.id) ? chip('data-fstage', s.id, s.label, f.stages.includes(s.id), n, s.hint) : ''; }).join('');
-  const only = [['fav', '★ Избранные', 'Отмеченные звёздочкой'], ['safe', 'Только безопасные', 'Скрипты, которые только читают и проверяют'], ['running', '▶ Запущены', 'Работают сейчас'], ['failed', '✗ Упали', 'Последний запуск закончился ошибкой']]
-    .map(([k, l, t]) => chip('data-fonly', k, l, f.only === k, cnt(onlyTests[k], 'only'), t)).join('');
+  // подписи - knowledge/ui.json (filters): этап, показать, где
+  const L = UI().filters || {};
+  const only = ['fav', 'safe', 'running', 'failed']
+    .map((k) => chip('data-fonly', k, (L.only?.[k] || {}).label || k, f.only === k, cnt(onlyTests[k], 'only'), (L.only?.[k] || {}).title || '')).join('');
   const wheres = [...new Set(p.scripts.map((s) => s.where))];
   const sources = [...new Set(p.scripts.map(srcKind))];
   const active = f.stages.length + (f.only ? 1 : 0) + (f.where ? 1 : 0) + (f.source ? 1 : 0) + (f.hideHooks ? 1 : 0) + (f.q ? 1 : 0);
-  el.innerHTML = `${st}<span class="fsep"></span>${only}<span class="fsep"></span>
-    ${wheres.length > 1 ? `<select data-fwhere title="Папка, где объявлен скрипт"><option value="">Все папки</option>${wheres.map((w) => `<option value="${esc(w)}" ${f.where === w ? 'selected' : ''}>${esc(w === '.' ? 'корень' : w)} (${cnt((s) => s.where === w, 'where')})</option>`).join('')}</select>` : ''}
-    ${sources.length > 1 ? `<select data-fsource title="Откуда скрипт"><option value="">Все источники</option>${sources.map((w) => `<option value="${esc(w)}" ${f.source === w ? 'selected' : ''}>${esc(w)} (${cnt((s) => srcKind(s) === w, 'source')})</option>`).join('')}</select>` : ''}
-    ${p.scripts.some((s) => s.info?.hook) ? chip('data-fhooks', '1', 'Скрыть хуки', f.hideHooks, null, 'Хуки pre/post запускаются сами вместе с основным скриптом') : ''}
-    ${active ? `<button class="btn ghost sm" data-act="reset-filters">Сбросить (${active})</button>` : ''}`;
+  const row = (label, body) => (body.trim() ? `<div class="frow"><span class="flab">${esc(label)}</span><div class="fset">${body}</div></div>` : '');
+  const hooks = p.scripts.some((s) => s.info?.hook) ? chip('data-fhooks', '1', L.hideHooks || 'Скрыть хуки', f.hideHooks, null, L.hideHooksHint || '') : '';
+  patch(el, `${row(L.stage || 'Этап', st)}${row(L.show || 'Показать', only + hooks)}${row(L.where || 'Где', `
+    ${wheres.length > 1 ? `<select data-fwhere aria-label="${esc(A('where'))}" title="${esc(L.whereHint || '')}"><option value="">${esc(L.allFolders || 'Все папки')}</option>${wheres.map((w) => `<option value="${esc(w)}" ${f.where === w ? 'selected' : ''}>${esc(w === '.' ? 'корень' : w)} (${cnt((s) => s.where === w, 'where')})</option>`).join('')}</select>` : ''}
+    ${sources.length > 1 ? `<select data-fsource aria-label="${esc(A('source'))}" title="${esc(L.sourceHint || '')}"><option value="">${esc(L.allSources || 'Все источники')}</option>${sources.map((w) => `<option value="${esc(w)}" ${f.source === w ? 'selected' : ''}>${esc(w)} (${cnt((s) => srcKind(s) === w, 'source')})</option>`).join('')}</select>` : ''}
+    ${active ? `<button class="btn ghost sm freset" data-act="reset-filters">${esc(L.reset || 'Сбросить')} (${active})</button>` : ''}`)}`);
 }
 const groupKey = (s) => (S.f.group === 'where' ? s.where : S.f.group === 'source' ? srcKind(s) : s.stage);
 function renderList() {
@@ -486,36 +822,58 @@ function renderList() {
     const closed = S.collapsed.has(fold) && !S.f.q;
     const part = rows.slice(0, Math.max(0, LIMIT - shown));
     shown += part.length;
-    html += `<section class="group ${closed ? 'closed' : ''}"><h3 data-fold="${esc(fold)}"><span class="car">▼</span>${esc(label)}<span class="n">${rows.length}</span>${hint ? `<span class="gh">- ${esc(hint)}</span>` : ''}</h3><div class="rows">${part.map(rowHtml).join('')}</div></section>`;
+    // заголовок группы - кнопка внутри h3: сворачивается и мышью, и с клавиатуры, а заголовок остаётся заголовком
+    html += `<section class="group ${closed ? 'closed' : ''}"><h3><button type="button" class="fold" data-fold="${esc(fold)}" aria-expanded="${!closed}"><span class="car" aria-hidden="true">▼</span>${esc(label)}<span class="n">${rows.length}</span>${hint ? `<span class="gh">- ${esc(hint)}</span>` : ''}</button></h3><div class="rows">${part.map(rowHtml).join('')}</div></section>`;
     if (shown >= LIMIT) break;
   }
   if (items.length > shown) html += `<button class="btn more" data-act="showall">Показать все (${items.length})</button>`;
-  list.innerHTML = html || (p.scripts.length
-    ? '<div class="nothing"><b>Ничего не подходит под фильтры</b>Измените поиск или <a href="#" data-act="reset-filters">сбросьте фильтры</a>.</div>'
-    : '<div class="nothing"><b>Скриптов не нашлось</b>Пульт ищет package.json, Makefile, justfile, Taskfile, Cargo, Go, dotnet, Python, Maven/Gradle, Docker Compose и файлы .ps1/.sh/.bat в папках scripts и tools.</div>');
+  patch(list, html || (p.scripts.length
+    ? '<div class="nothing"><b>Ничего не подходит под фильтры</b>Измените поиск или <button class="tlink inl" data-act="reset-filters">сбросьте фильтры</button>.</div>'
+    : '<div class="nothing"><b>Скриптов не нашлось</b>Пульт ищет package.json, Makefile, justfile, Taskfile, Cargo, Go, dotnet, Python, Maven/Gradle, Docker Compose и файлы .ps1/.sh/.bat в папках scripts и tools.</div>'));
 }
 function rowHtml(s) {
   const r = lastOf(s.id), fav = isFav(s.id);
-  return `<div class="row ${S.detail === s.id ? 'sel' : ''}" data-detail="${esc(s.id)}" data-sid="${esc(s.id)}">${runBtn(s)}
+  return `<div class="row ${S.detail === s.id ? 'sel' : ''}" tabindex="0" data-detail="${esc(s.id)}" data-sid="${esc(s.id)}">${runBtn(s)}
     <div class="rmain"><div class="rname"><span class="nm">${hl(s.name)}</span>${fxBadges(s, true)}${s.where !== '.' && S.f?.group !== 'where' ? `<span class="tag" title="Папка: ${esc(s.where)}">${esc(s.where)}</span>` : ''}${s.info?.hook ? `<span class="tag" title="Запускается сам ${esc(s.info.hook)}">хук</span>` : ''}</div>
     <div class="rdesc">${hl(s.info?.summary || s.cmd)}</div></div>
-    <div class="rside">${lastHtml(r)}<button class="star ${fav ? 'on' : ''}" data-fav="${esc(s.id)}" title="${fav ? 'Убрать из быстрого запуска' : 'В быстрый запуск на «Обзоре»'}" aria-label="Избранное">★</button></div></div>`;
+    <div class="rside">${lastHtml(r)}<button class="star ${fav ? 'on' : ''}" data-fav="${esc(s.id)}" title="${fav ? 'Убрать из быстрого запуска' : 'В быстрый запуск на «Обзоре»'}" aria-label="Избранное: ${esc(s.name)}" aria-pressed="${fav}">★</button></div></div>`;
 }
 function refreshScript(id) {
   const s = scriptOf(id); if (!s) return;
   for (const el of $$(`[data-sid="${CSS.escape(id)}"]`)) {
     const t = document.createElement('div');
     t.innerHTML = el.classList.contains('qtile') ? qtile(s) : rowHtml(s);
+    dirty(el.parentElement);
     el.replaceWith(t.firstElementChild);
   }
   if (S.detail === id) renderDrawer();
 }
 
 // ---------- панель подробностей ----------
+const FLAGS_SHOWN = 10;
+// шапка файла написана под ширину редактора: перенос посреди фразы (следующая строка с маленькой буквы
+// или прошлая кончилась запятой) - пробел; пустая строка - новый абзац; пункт списка («- », «1. ») и
+// строка с большой буквы остаются с новой строки - это новая мысль, а не продолжение
+function reflow(text) {
+  return String(text || '').replace(/\r/g, '').split(/\n[ \t]*\n+/).map((p) => p.split('\n').reduce((acc, l) => {
+    const t = l.trim();
+    if (!acc) return t;
+    if (!t) return acc;
+    const cont = !/^([-*•]|\d+[.)])\s/.test(t) && (/^[a-zа-яё0-9(«"'`]/.test(t) || /[,(]$/.test(acc));
+    return acc + (cont ? ' ' : '\n') + t;
+  }, '')).filter(Boolean).join('\n\n');
+}
 function renderDrawer() {
   const d = $('#drawer');
   const s = S.detail && P() ? scriptOf(S.detail) : null;
-  if (!s) { d.hidden = true; d.innerHTML = ''; return; }
+  if (!s) {
+    if (d._top) d._top.hidden = true;
+    // панель уезжает анимацией; открыли другую за это время - она остаётся
+    const hide = () => { if (S.detail && P() && scriptOf(S.detail)) return; d.hidden = true; patch(d, ''); };
+    if (!d.hidden && !d.classList.contains('leaving')) closeWithAnim(d, hide); else if (d.hidden) hide();
+    return;
+  }
+  d.classList.remove('leaving');
   d.hidden = false;
   const i = s.info || {}, r = lastOf(s.id), running = r?.status === 'running', miss = isMissing(s);
   const W = UI().will || {}, PARTS = UI().parts || {};
@@ -535,61 +893,90 @@ function renderDrawer() {
   const helpFlags = help?.flags?.filter((f) => !S.helpQ || `${f.flag} ${f.text}`.toLowerCase().includes(S.helpQ.toLowerCase())) || [];
   const tps = (i.topics || []).filter(topicMeta);
   const howOpen = learning() ? 'open' : '';
-  d.innerHTML = `<div class="dh"><div class="top"><h3>${esc(s.name)}</h3><button class="star ${isFav(s.id) ? 'on' : ''}" data-fav="${esc(s.id)}" title="Быстрый запуск">★</button><button class="btn ghost icon" data-act="closedrawer" title="Закрыть (Esc)" aria-label="Закрыть">✕</button></div>
+  // длинный список ключей не прокручивается внутри панели: видны первые, остальные - по кнопке
+  const all = (k) => S.flagsAll.has(s.id + ':' + k) || (k === 'help' && S.helpQ);
+  const cut = (list, k) => (all(k) ? list : list.slice(0, FLAGS_SHOWN));
+  const more = (list, k) => (!all(k) && list.length > FLAGS_SHOWN ? `<button class="btn ghost sm flmore" data-flags-all="${k}">${esc(tpl((UI().drawer || {}).flagsAll, { n: list.length }))}</button>` : '');
+  patch(d, `<div class="dh"><div class="top"><h3 id="dh-title" tabindex="-1"><span class="sr">${esc(A('drawer'))}: </span>${esc(s.name)}</h3><button class="star ${isFav(s.id) ? 'on' : ''}" data-fav="${esc(s.id)}" title="Быстрый запуск" aria-label="Быстрый запуск: ${esc(s.name)}" aria-pressed="${isFav(s.id)}">★</button><button class="btn ghost icon" data-act="closedrawer" title="Закрыть (Esc)" aria-label="Закрыть">✕</button></div>
     <div class="meta"><span class="chip" title="${esc(stageOf(s.stage).hint)}">${esc(stageOf(s.stage).label)}</span><span class="chip">${esc(srcKind(s))}</span>${s.where !== '.' ? `<span class="chip">${esc(s.where)}</span>` : ''}${fxBadges(s)}</div></div>
     <div class="db">
       <section><h4>Что делает</h4><p class="lead2">${g(i.summary)}</p>${i.steps?.length ? `<ol class="steps">${i.steps.map((x) => `<li>${g(x)}</li>`).join('')}</ol>` : ''}${i.hook ? `<p class="note" style="margin-top:6px">${esc(tpl(W.hook, { hook: i.hook }))}</p>` : ''}
         ${i.about ? `<p class="note" style="margin-top:6px"><b>Программа:</b> ${g(i.about)}</p>` : ''}<p class="srcnote">${esc((UI().sources || {})[i.source || ''] || '')}</p></section>
-      ${i.header && (i.header.split('\n')[0] !== i.summary || i.header.includes('\n')) ? `<section><h4>Описание от автора ${info('Текст из комментария в начале файла скрипта')}</h4><div class="quote">${esc(i.header)}<small>из ${esc(i.file || 'файла скрипта')}</small></div></section>` : ''}
-      ${parts ? `<section><h4>Команда по частям ${info('Из чего состоит команда и что значит каждая часть')}</h4><div class="anat">${parts}</div></section>` : ''}
+      ${i.header && (i.header.split('\n')[0] !== i.summary || i.header.includes('\n')) ? `<section><h4>Описание от автора ${info('author')}</h4><div class="quote">${esc(reflow(i.header))}<small>из ${esc(i.file || 'файла скрипта')}</small></div></section>` : ''}
+      ${parts ? `<section><h4>Команда по частям ${info('parts')}</h4><div class="anat">${parts}</div></section>` : ''}
       ${i.how?.length ? `<section><details ${howOpen}><summary><h4 style="display:inline">Что происходит внутри</h4></summary><ol class="how" style="margin-top:8px">${i.how.map((x) => `<li>${g(x)}</li>`).join('')}</ol></details></section>` : ''}
       <section><h4>Что произойдёт при запуске</h4><ul class="will">${will.map(([lv, t, l]) => `<li><span class="dot d-${esc(lv)}"></span><span>${g(t)}${l ? `<div class="learnbox">${g(l)}</div>` : ''}</span></li>`).join('')}</ul></section>
       <section><h4>Команда</h4><div class="cmdbox"><code>${esc(s.cmd)}</code><button data-copy="${esc(s.cmd)}" title="Скопировать в буфер">Копировать</button></div>
         ${s.source === 'package.json' && s.desc ? `<p class="note" style="margin-top:6px">В package.json записано: <code>${esc(s.desc)}</code></p>` : ''}</section>
-      <section><h4>Запуск ${info('Аргументы допишутся в конец команды. Для npm-скриптов Пульт сам поставит «--».')}</h4>
-        <div class="argrow"><input type="text" id="args" data-args="${esc(s.id)}" placeholder="доп. аргументы, например --fast" value="${esc(S.argDraft[s.id] || '')}" autocomplete="off"><button class="btn ${running ? '' : 'primary'}" data-run-args="${esc(s.id)}" ${miss ? 'disabled' : ''}>${running ? 'Перезапустить' : '▶ Запустить'}</button></div>
+      <section><h4>Запуск ${info('args')}</h4>
+        <div class="argrow"><input type="text" id="args" data-args="${esc(s.id)}" aria-label="${esc(A('args'))}" spellcheck="false" placeholder="доп. аргументы, например --fast" value="${esc(S.argDraft[s.id] || '')}" autocomplete="off"><button class="btn ${running ? '' : 'primary'}" data-run-args="${esc(s.id)}" ${miss ? 'disabled' : ''}>${running ? 'Перезапустить' : '▶ Запустить'}</button></div>
         ${running ? `<div class="drow" style="margin-top:8px"><button class="btn sm danger" data-stop="${esc(r.id)}">■ Остановить</button><button class="btn sm" data-log="${esc(r.id)}">Показать вывод</button></div>` : ''}</section>
-      <section><h4>Ключи ${info('Нажмите на ключ - он добавится в аргументы. «Спросить у программы» запускает её справку (--help) и разбирает все ключи.')}</h4>
-        ${flags.length ? `<div class="flaglist">${flags.map((f) => `<div class="fl ${f.used ? 'used' : ''}"><code>${esc(f.flag)}</code><span>${g(f.text || (f.from === 'file' ? 'ключ из кода скрипта' : ''))}${f.used ? ' · уже в команде' : ''}</span><button class="btn ghost" data-flag="${esc(f.flag.split(/[ ,=|]/)[0])}" title="Добавить в аргументы">+</button></div>`).join('')}</div>` : '<p class="note">Ключей в базе нет.</p>'}
+      <section><h4>Ключи ${info('flags')}</h4>
+        ${flags.length ? `<div class="flaglist">${cut(flags, 'kb').map((f) => `<div class="fl ${f.used ? 'used' : ''}"><code>${esc(f.flag)}</code><span>${g(f.text || (f.from === 'file' ? 'ключ из кода скрипта' : ''))}${f.used ? ' · уже в команде' : ''}</span><button class="btn ghost" data-flag="${esc(f.flag.split(/[ ,=|]/)[0])}" title="Добавить в аргументы" aria-label="${esc(A('addFlag', { flag: f.flag.split(/[ ,=|]/)[0] }))}">+</button></div>`).join('')}</div>${more(flags, 'kb')}` : '<p class="note">Ключей в базе нет.</p>'}
         <div class="drow" style="margin-top:8px"><button class="btn sm" data-ask="${esc(s.id)}" ${help === 'loading' ? 'disabled' : ''}>${help === 'loading' ? '<span class="spin"></span> Спрашиваю…' : 'Спросить у программы (--help)'}</button></div>
         ${help && help !== 'loading' ? (help.error ? `<p class="err" style="margin-top:8px">${esc(help.error)}</p>` : `<p class="note" style="margin-top:8px">${esc(help.program)}: найдено ключей - ${help.flags.length}${help.about ? `. ${esc(help.about)}` : ''}</p>
-          ${help.flags.length > 8 ? `<input type="search" id="helpq" placeholder="найти ключ…" value="${esc(S.helpQ)}" style="width:100%;margin:6px 0">` : ''}
-          <div class="flaglist">${helpFlags.slice(0, 200).map((f) => `<div class="fl"><code>${esc(f.flag)}</code><span>${esc(f.text)}</span><button class="btn ghost" data-flag="${esc(f.flag.replace(/^-\w,\s*/, '').split(/[ ,=|<[]/)[0])}" title="Добавить в аргументы">+</button></div>`).join('') || '<div class="fl"><span>ничего</span></div>'}</div>
+          ${help.flags.length > 8 ? `<input type="search" id="helpq" aria-label="${esc(A('helpQ'))}" spellcheck="false" placeholder="найти ключ…" value="${esc(S.helpQ)}" style="width:100%;margin:6px 0">` : ''}
+          <div class="flaglist">${cut(helpFlags.slice(0, 200), 'help').map((f) => `<div class="fl"><code>${esc(f.flag)}</code><span>${esc(f.text)}</span><button class="btn ghost" data-flag="${esc(f.flag.replace(/^-\w,\s*/, '').split(/[ ,=|<[]/)[0])}" title="Добавить в аргументы" aria-label="${esc(A('addFlag', { flag: f.flag.replace(/^-\w,\s*/, '').split(/[ ,=|<[]/)[0] }))}">+</button></div>`).join('') || '<div class="fl"><span>ничего</span></div>'}</div>${more(helpFlags.slice(0, 200), 'help')}
           <details><summary class="note">вся справка программы</summary><pre class="helptext">${esc(help.text)}</pre></details>`) : ''}</section>
-      ${tps.length ? `<section><h4>Чему научиться ${info('Уроки на вкладке «Документация» про программы этой команды')}</h4><div class="topiclinks">${tps.map((t) => `<button class="chip linkchip" data-topic="${esc(t)}">${esc(topicMeta(t).title)}</button>`).join('')}</div></section>` : ''}
+      ${tps.length ? `<section><h4>Чему научиться ${info('learnLinks')}</h4><div class="topiclinks">${tps.map((t) => `<button class="chip linkchip" data-topic="${esc(t)}">${esc(topicMeta(t).title)}</button>`).join('')}</div></section>` : ''}
       <section><h4>Где объявлен</h4><p style="font-size:13px">${src}</p>
         <div class="drow" style="margin-top:8px">${editRel ? `<button class="btn sm" data-edit="${esc(editRel)}" ${s.line ? `data-line="${s.line}"` : ''}>Открыть в редакторе</button><button class="btn sm" data-reveal="${esc(editRel)}">Показать в проводнике</button>` : ''}${i.file && i.file !== s.fileRel ? `<button class="btn sm" data-edit="${esc(i.file)}">Открыть ${esc(i.file.split('/').pop())}</button>` : ''}</div></section>
       <section><h4>Запуски этого скрипта</h4>${scriptRuns(s.id).length ? `<div class="list">${scriptRuns(s.id).map(histLi).join('')}</div>` : '<p class="note">Ещё не запускался.</p>'}</section>
-    </div>`;
+    </div>`);
 }
 function scriptRuns(id) {
   const cur = [...S.runs.values()].filter((r) => r.scriptId === id && r.kind === 'script');
   const ids = new Set(cur.map((r) => r.id));
   return [...cur, ...S.hist.filter((h) => h.scriptId === id && !ids.has(h.id))].sort((a, b) => b.startedAt - a.startedAt).slice(0, 6);
 }
-function openDetail(id) {
+// kbd - открыли с клавиатуры (Enter на строке): фокус уходит в панель на её заголовок, закрытие вернёт его на строку
+function openDetail(id, kbd = false) {
   const prev = S.detail;
   S.detail = id; S.helpQ = '';
-  $$('.row.sel').forEach((el) => el.classList.remove('sel'));
-  $$(`.row[data-sid="${CSS.escape(id)}"]`).forEach((el) => el.classList.add('sel'));
+  if (prev !== id) S.flagsAll.clear();
+  $$('.row.sel').forEach((el) => { el.classList.remove('sel'); dirty(el); });
+  $$(`.row[data-sid="${CSS.escape(id)}"]`).forEach((el) => { el.classList.add('sel'); dirty(el); });
   renderDrawer();
   if (prev !== id) $('#drawer').scrollTop = 0;
+  if (kbd) $('#dh-title')?.focus({ preventScroll: true });
 }
-async function askHelp(id) {
+function closeDetail() {
+  const id = S.detail, d = $('#drawer'), inside = d.contains(document.activeElement) || document.activeElement === document.body;
+  S.detail = null;
+  $$('.row.sel').forEach((x) => { x.classList.remove('sel'); dirty(x); });
+  renderDrawer();
+  if (id && inside) $(`#main [data-sid="${CSS.escape(id)}"]`)?.focus({ preventScroll: false });
+}
+// программу из папки проекта ядро без согласия не запускает: возвращает её путь в confirm
+async function askHelp(id, confirmed = null) {
   S.help[id] = 'loading'; renderDrawer();
-  try { S.help[id] = await call('help', { scriptId: id }); } catch (e) { S.help[id] = { error: String(e) }; }
+  try { S.help[id] = await call('help', { scriptId: id, confirmed }); } catch (e) { S.help[id] = { error: String(e) }; }
+  const h = S.help[id];
+  if (h?.confirm) {
+    const a = UI().askHelp || {};
+    const ok = await confirmBox({ title: a.title, danger: true, ok: a.ok,
+      body: `<p style="margin:0 0 8px">${esc(tpl(a.body, { path: h.confirm }))}</p><p class="note">${esc(a.note || '')}</p>` });
+    if (ok) return askHelp(id, h.confirm);
+    delete S.help[id];
+  }
   if (S.detail === id) renderDrawer();
+}
+async function trustRepo() {
+  try { const git = await call('trust_repo', { path: P().path }); P().git = git; renderMain(); } catch (e) { toast(String(e), 'bad'); }
 }
 
 // ---------- запуск ----------
+// опасный скрипт (выкладка, удаление) спрашивает согласия при каждом пути запуска: ▶, «Повторить»,
+// история и «Перезапустить» в панели подробностей
+async function askDanger(s, args) {
+  if (!s.danger || !S.settings.confirmDanger) return true;
+  return !!(await confirmBox({ title: `Запустить «${s.name}»?`, danger: true, ok: 'Запустить',
+    body: `<p style="margin:0 0 8px">${esc(s.info?.summary || '')}</p><div class="cmdbox"><code>${esc(s.cmd)}${args ? ' ' + esc(args) : ''}</code></div><p class="note" style="margin-top:8px">${esc(fxInfo('danger').say)}.</p>` }));
+}
 async function runScript(id, { args, force } = {}) {
   const s = scriptOf(id); if (!s) return;
   if (isMissing(s)) { toast(`Нет программы «${s.tool}» - скрипт не запустится`, 'bad'); return; }
-  if (s.danger && S.settings.confirmDanger && !force) {
-    const ok = await confirmBox({ title: `Запустить «${s.name}»?`, danger: true, ok: 'Запустить',
-      body: `<p style="margin:0 0 8px">${esc(s.info?.summary || '')}</p><div class="cmdbox"><code>${esc(s.cmd)}${args ? ' ' + esc(args) : ''}</code></div><p class="note" style="margin-top:8px">${esc(fxInfo('danger').say)}.</p>` });
-    if (!ok) return;
-  }
+  if (!force && !(await askDanger(s, args))) return;
   try {
     const run = await call('run', { scriptId: id, args: args || '', force: !!force });
     addRun(run, true);
@@ -604,6 +991,20 @@ async function runScript(id, { args, force } = {}) {
   }
 }
 async function stopRun(runId) { try { await call('stop', { runId }); } catch (e) { toast(String(e), 'bad'); } }
+// крестик вкладки: завершённую закрывает сразу, идущую - после согласия останавливает всё дерево процессов.
+// Вкладка уходит сразу; итог запуска (событие run) всё равно попадает в историю - см. onRun, closedRuns
+const closedRuns = new Map();
+async function closeRunTab(id) {
+  const r = S.runs.get(id); if (!r) return;
+  if (r.status === 'running' && r.kind === 'script') {
+    const T = UI().run || {};
+    if (!(await confirmBox({ title: tpl(T.closeTitle, { name: r.title }), body: `<p>${esc(T.closeBody)}</p><div class="cmdbox"><code>${esc(r.cmd)}</code></div>`, ok: T.closeOk, danger: true }))) return;
+    if (S.runs.get(id)?.status === 'running') { closedRuns.set(id, r); S.runs.delete(id); renderConsole(); await stopRun(id); return; }
+  }
+  S.runs.delete(id);
+  if (!id.includes(':')) call('forget', { runId: id }).catch(() => {});
+  renderConsole();
+}
 // кнопка ▶ в строке: идёт - остановить, иначе запустить
 function toggleRun(id) { const r = lastOf(id); if (r?.status === 'running') stopRun(r.id); else runScript(id); }
 
@@ -614,20 +1015,23 @@ function viewLearn() {
   const all = Object.values(K().topics || {});
   const others = all.filter((t) => !ids.has(t.id));
   if (!S.topic || (!ids.has(S.topic) && !S.allTopics && !others.some((t) => t.id === S.topic))) S.topic = found[0]?.id || all[0]?.id || null;
-  const card = (t, why) => `<button class="tcard ${S.topic === t.id ? 'on' : ''} ${why ? '' : 'off'}" data-topic="${esc(t.id)}"><span class="tico" style="background:${esc(t.color)}">${Learn.icon(t.icon, 17, '#fff')}</span><span class="tx"><b>${esc(t.title)}</b><small>${esc(why || t.summary)}</small></span></button>`;
+  const card = (t, why) => `<button class="tcard ${S.topic === t.id ? 'on' : ''} ${why ? '' : 'off'}" ${S.topic === t.id ? 'aria-current="true"' : ''} data-topic="${esc(t.id)}"><span class="tico" aria-hidden="true" style="background:${esc(t.color)}">${Learn.icon(t.icon, 17, Learn.ink(t.color))}</span><span class="tx"><b>${esc(t.title)}</b><small>${esc(why || t.summary)}</small></span></button>`;
   return `${hintBox('learn')}<div class="learn">
     <nav class="tlist" aria-label="Уроки"><h4>В этом проекте · ${found.length}</h4>${found.map((t) => card(t, t.why)).join('') || '<p class="note">Ничего не определилось.</p>'}
-      ${others.length ? `<h4><a href="#" data-act="all-topics">${S.allTopics ? 'скрыть' : 'показать'} остальные уроки · ${others.length}</a></h4>${S.allTopics ? others.map((t) => card(t, '')).join('') : ''}` : ''}</nav>
-    <div id="lessonbody"><div class="note"><span class="spin"></span> Открываю урок…</div></div></div>`;
+      ${others.length ? `<button class="tlink tmore" data-act="all-topics" aria-expanded="${S.allTopics}">${S.allTopics ? 'Скрыть' : 'Показать'} остальные уроки · ${others.length}</button>${S.allTopics ? others.map((t) => card(t, '')).join('') : ''}` : ''}</nav>
+    <div id="lessonbody" data-own><div class="note"><span class="spin"></span> Открываю урок…</div></div></div>`;
 }
 async function ensureTopic() {
   const id = S.topic, el = $('#lessonbody');
   if (!id || !el) return;
   let t = S.topics.get(id);
-  if (!t) { try { t = await call('topic', { id }); S.topics.set(id, t); } catch (e) { el.innerHTML = `<p class="err">${esc(String(e))}</p>`; return; } }
+  if (!t) { try { t = await call('topic', { id }); S.topics.set(id, t); } catch (e) { patch(el, `<p class="err">${esc(String(e))}</p>`); return; } }
   if (S.topic !== id || !$('#lessonbody')) return;
   const why = (P().topics || []).find((x) => x.id === id)?.why;
-  $('#lessonbody').innerHTML = Learn.topicHtml(t, { learn: learning(), why, topicTitle: (r) => topicMeta(r)?.title, projectRows: (tid) => projectRowsFor(tid) });
+  const lb = $('#lessonbody'), switched = lb._topic && lb._topic !== id;
+  lb._topic = id;
+  patch(lb, Learn.topicHtml(t, { learn: learning(), why, topicTitle: (r) => topicMeta(r)?.title, projectRows: (tid) => projectRowsFor(tid) }));
+  if (switched) enterAnim(lb.firstElementChild, 6);
 }
 function projectRowsFor(tid) {
   const rows = P().scripts.filter((s) => (s.info?.topics || []).includes(tid)).slice(0, 30);
@@ -650,71 +1054,76 @@ const refLabel = (r) => String(r || '').replace(/^refs\/merge-requests\/(\d+)\/h
 const FINAL = ['success', 'failed', 'canceled', 'skipped'];
 function viewCI() {
   const p = P(), rem = remotesForCI();
-  let html = hintBox('ci');
-  if (!rem.length) html += '<div class="empty-card">У репозитория нет адреса на GitLab или GitHub - живой статус показывать неоткуда. Настройка из файлов - ниже.</div>';
+  let html = hintBox('ci') + '<div class="blk-stack">';
+  if (!rem.length) html += Blocks.card({ title: SEC('ciLive'), body: '<p class="blk-empty">У репозитория нет адреса на GitLab или GitHub - живой статус показывать неоткуда. Настройка из файлов - ниже.</p>' });
   else {
     const cur = rem.find((r) => r.name === S.ci.remote) || rem[0];
     S.ci.remote = cur.name;
     const st = S.ci.data[remoteKey(cur)] || {};
     const label = (r) => (/gitlab/i.test(r.host) ? 'GitLab' : 'GitHub');
-    html += `<div class="ci-bar">
-      ${rem.length > 1 ? `<div class="seg">${rem.map((r) => `<button class="${r.name === cur.name ? 'on' : ''}" data-ci-remote="${esc(r.name)}" title="${esc(r.url)}">${label(r)} · ${esc(r.slug)}</button>`).join('')}</div>` : `<b>${label(cur)} · <span class="mono">${esc(cur.slug)}</span></b>`}
-      ${p.git?.branch ? `<div class="seg"><button class="${S.ci.scope === 'all' ? 'on' : ''}" data-ci-scope="all">Все ветки</button><button class="${S.ci.scope === 'branch' ? 'on' : ''}" data-ci-scope="branch">Ветка ${esc(p.git.branch)}</button></div>` : ''}
-      <div class="seg">${[['', 'Все'], ['running', 'Идут'], ['failed', 'Ошибки'], ['success', 'Успешные']].map(([k, l]) => `<button class="${S.ci.status === k ? 'on' : ''}" data-ci-status="${k}">${l}</button>`).join('')}</div>
+    const bar = `<div class="ci-bar blk-tools">
+      ${rem.length > 1 ? `<div class="seg">${rem.map((r) => `<button class="${r.name === cur.name ? 'on' : ''}" aria-pressed="${r.name === cur.name}" data-ci-remote="${esc(r.name)}" title="${esc(r.url)}">${label(r)} · ${esc(r.slug)}</button>`).join('')}</div>` : `<b>${label(cur)} · <span class="mono">${esc(cur.slug)}</span></b>`}
+      ${p.git?.branch ? `<div class="seg"><button class="${S.ci.scope === 'all' ? 'on' : ''}" aria-pressed="${S.ci.scope === 'all'}" data-ci-scope="all">Все ветки</button><button class="${S.ci.scope === 'branch' ? 'on' : ''}" aria-pressed="${S.ci.scope === 'branch'}" data-ci-scope="branch">Ветка ${esc(p.git.branch)}</button></div>` : ''}
+      <div class="seg">${[['', 'Все'], ['running', 'Идут'], ['failed', 'Ошибки'], ['success', 'Успешные']].map(([k, l]) => `<button class="${S.ci.status === k ? 'on' : ''}" aria-pressed="${S.ci.status === k}" data-ci-status="${k}">${l}</button>`).join('')}</div>
       <span class="grow"></span><span class="note">${st.at ? `${st.cached ? 'из кэша · ' : ''}данные на ${clock(st.at)}` : ''}</span>
       <button class="btn sm" data-act="ciload" ${st.loading ? 'disabled' : ''}>↻ Обновить</button></div>`;
-    html += cur.trusted ? liveBody(st) : `<div class="err">Сервер «${esc(cur.host)}» не в списке доверенных: Пульт не отправит ему запросы с вашим токеном. Если это ваш сервер CI - добавьте его в настройках (⚙).</div>`;
+    const live = cur.trusted ? liveBody(st) : { list: `<div class="blk-in-pad"><div class="err">Сервер «${esc(cur.host)}» не в списке доверенных: Пульт не отправит ему запросы с вашим токеном. Если это ваш сервер CI - добавьте его в настройках (⚙).</div></div>`, pipe: '' };
+    html += Blocks.card({ title: SEC('ciLive'), flush: true, body: bar + live.list });
+    html += live.pipe;
   }
-  html += `<h2>Настройка в репозитории ${info('Читается из файлов проекта. Пунктир - джоба запускается вручную. Подписи - комментарии из файла.')}</h2>`;
-  html += p.ci.length ? p.ci.map(ciConfigHtml).join('') : '<div class="empty-card">Файлов CI не найдено (.gitlab-ci.yml, .github/workflows, Jenkinsfile…).</div>';
-  return html;
+  html += Blocks.card({ title: SEC('ciConfig'), info: info('ciConfig'), flush: p.ci.length > 0, body: p.ci.length ? p.ci.map(ciConfigHtml).join('') : '<p class="blk-empty">Файлов CI не найдено (.gitlab-ci.yml, .github/workflows, Jenkinsfile…).</p>' });
+  return html + '</div>';
 }
+const live = (x) => x.status === 'running' || x.status === 'pending';
+const runStart = (x) => isoMs(x.startedAt) ?? isoMs(x.createdAt);
+// живой статус: list - содержимое карточки «Пайплайны на сервере» (во всю её ширину), pipe - карточка выбранного
+// пайплайна. Ошибки и пустые состояния - с полем карточки (.blk-in-pad), список - без своей рамки
 function liveBody(st) {
-  if (st.loading && !st.runs) return `<div class="runs">${'<div class="pr"><span class="skel" style="grid-column:1/-1;margin:2px 0"></span></div>'.repeat(4)}</div>`;
-  let out = '';
+  const pad = (x) => `<div class="blk-in-pad">${x}</div>`;
+  if (st.loading && !st.runs) return { list: `<div class="runs">${'<div class="pr"><span class="skel" style="grid-column:1/-1;margin:2px 0"></span></div>'.repeat(4)}</div>`, pipe: '' };
+  let out = '', pipe = '';
   if (st.error) {
     const tool = /glab/.test(st.error) ? 'glab' : /gh/.test(st.error) ? 'gh' : null;
-    out += `<div class="err">${esc(st.error)}${tool && /auth login/.test(st.error) ? `<div class="cmdbox" style="margin-top:8px"><code>${tool} auth login</code><button data-copy="${tool} auth login">Копировать</button></div>` : ''}</div>`;
-    if (st.runs) out += `<p class="warnline">Показаны прежние данные - от ${clock(st.at)}.</p>`;
+    out += pad(`<div class="err">${esc(st.error)}${tool && /auth login/.test(st.error) ? `<div class="cmdbox" style="margin-top:8px"><code>${tool} auth login</code><button data-copy="${tool} auth login">Копировать</button></div>` : ''}</div>${st.runs ? `<p class="warnline">Показаны прежние данные - от ${clock(st.at)}.</p>` : ''}`);
   }
-  if (!st.runs) return out || '<div class="empty-card">Статус ещё не загружен. <button class="btn sm" data-act="ciload">Загрузить</button></div>';
-  if (!st.runs.length) return out + `<div class="empty-card">Пайплайнов ${S.ci.scope === 'branch' ? 'по этой ветке ' : ''}пока нет.</div>`;
+  if (!st.runs) return { list: out || '<p class="blk-empty">Статус ещё не загружен. <button class="btn sm" data-act="ciload">Загрузить</button></p>', pipe };
+  if (!st.runs.length) return { list: out + `<p class="blk-empty">Пайплайнов ${S.ci.scope === 'branch' ? 'по этой ветке ' : ''}пока нет.</p>`, pipe };
   const runs = st.runs.filter((x) => !S.ci.status || x.status === S.ci.status || (S.ci.status === 'running' && x.status === 'pending'));
-  out += runs.length ? `<div class="runs">${runs.map((x) => `<div class="pr ${st.sel === x.id ? 'sel' : ''}" data-pipe="${esc(x.id)}" title="${esc(x.title || '')}">
-      <span class="dot s-${esc(x.status)}" title="${esc(RU[x.status] || x.status)}"></span><span class="id">#${esc(x.id)}</span>
-      <span class="rf">${esc(x.name ? x.name + ' · ' : '')}<b>${esc(refLabel(x.ref))}</b> <span class="mono faint">${esc(x.sha)}</span> ${x.title ? `<span class="faint">${esc(x.title)}</span>` : ''}</span>
-      <span class="meta">${esc(RU[x.status] || x.status)} · ${esc(ago(x.createdAt))} <button class="btn ghost sm" data-url="${esc(x.url)}" title="Открыть в браузере">↗</button></span></div>`).join('')}</div>`
-    : `<div class="empty-card">Под фильтр «${esc(S.ci.status)}» ничего не попало.</div>`;
+  out += runs.length ? `<div class="runs">${runs.map((x) => `<div class="pr ${st.sel === x.id ? 'sel' : ''}" tabindex="0" aria-current="${st.sel === x.id}" data-pipe="${esc(x.id)}" title="${esc(x.title || '')}">
+      <span class="dot s-${esc(x.status)}" role="img" aria-label="${esc(A('status', { s: RU[x.status] || x.status }))}" title="${esc(RU[x.status] || x.status)}"></span><span class="id">#${esc(x.id)}</span>
+      ${live(x) ? etaBar(runStart(x), pipeEta(st.runs, x), 'under narrow-only') : ''}<span class="rf">${esc(x.name ? x.name + ' · ' : '')}<b>${esc(refLabel(x.ref))}</b> <span class="mono faint">${esc(x.sha)}</span> ${x.title ? `<span class="faint">${esc(x.title)}</span>` : ''}</span>
+      <span class="meta">${live(x) ? etaLabel(runStart(x), pipeEta(st.runs, x)) + etaBar(runStart(x), pipeEta(st.runs, x), 'inl') + ' · ' : ''}${esc(RU[x.status] || x.status)} · ${esc(ago(x.createdAt))} <button class="btn ghost sm" data-url="${esc(x.url)}" title="Открыть в браузере" aria-label="Открыть пайплайн #${esc(x.id)} в браузере">↗</button></span></div>`).join('')}</div>`
+    : `<p class="blk-empty">Под фильтр «${esc(S.ci.status)}» ничего не попало.</p>`;
   if (st.sel) {
     const sel = st.runs.find((x) => x.id === st.sel);
-    if (st.jobsLoading && !st.jobs) out += `<div class="card"><span class="spin"></span> Загружаю этапы пайплайна #${esc(st.sel)}…</div>`;
-    else if (st.jobsError) out += `<div class="err">${esc(st.jobsError)}</div>`;
+    const title = SEC('ciPipe', { id: st.sel });
+    if (st.jobsLoading && !st.jobs) pipe = Blocks.card({ title, body: `<p class="note"><span class="spin"></span> Загружаю этапы пайплайна #${esc(st.sel)}…</p>` });
+    else if (st.jobsError) pipe = Blocks.card({ title, body: `<div class="err">${esc(st.jobsError)}</div>` });
     else if (st.jobs) {
       const all = st.jobs.flatMap((x) => x.jobs);
       const done = all.filter((j) => FINAL.includes(j.status)).length;
       const failed = all.filter((j) => j.status === 'failed' && !j.allowFailure);
       const now = st.jobs.find((x) => x.jobs.some((j) => j.status === 'running' || j.status === 'pending'));
-      out += `<div class="card"><h4>Пайплайн #${esc(st.sel)} <small>${esc(refLabel(sel?.ref))} · ${esc(RU[sel?.status] || '')}</small>${st.jobsLoading ? '<span class="spin"></span>' : ''}</h4>
-        <div class="summary-line">${now ? `<span>Сейчас: этап <b>${esc(now.name)}</b></span>` : ''}<span>Готово <b>${done}</b> из ${all.length}</span>${failed.length ? `<span style="color:var(--bad)">Упали: <b>${failed.map((j) => esc(j.name)).join(', ')}</b></span>` : ''}<span class="faint">Клик по джобе - её журнал в консоли</span></div>
-        <div class="pipe">${st.jobs.map((x) => `<div class="scol ${now === x ? 'now' : ''}"><div class="sh">${esc(x.name)}</div>${x.jobs.map((j) => `<button class="job ${j.status === 'manual' ? 'man' : ''}" data-job="${esc(j.id)}" data-jname="${esc(j.name)}" data-jstatus="${esc(j.status)}" data-jurl="${esc(j.url || '')}" title="${esc(RU[j.status] || j.status)}${j.step ? ' · шаг: ' + esc(j.step) : ''}${j.failedStep ? ' · упал шаг: ' + esc(j.failedStep) : ''}${j.failureReason ? ' · причина: ' + esc(j.failureReason) : ''}${j.allowFailure ? ' · падение допустимо' : ''}${j.runner ? ' · раннер: ' + esc(j.runner) : ''}"><span class="dot s-${esc(j.status)}"></span><span class="jn">${esc(j.name)}</span><span class="dur">${j.duration != null ? esc(dur(j.duration * 1000)) : ''}</span></button>`).join('')}</div>`).join('')}</div></div>`;
+      pipe = Blocks.card({ title, aside: `<span class="note">${esc(refLabel(sel?.ref))} · ${esc(RU[sel?.status] || '')}</span>${st.jobsLoading ? '<span class="spin"></span>' : ''}`, body: `<div class="summary-line">${now ? `<span>Сейчас: этап <b>${esc(now.name)}</b></span>` : ''}<span>Готово <b>${done}</b> из ${all.length}</span>${failed.length ? `<span style="color:var(--bad)">Упали: <b>${failed.map((j) => esc(j.name)).join(', ')}</b></span>` : ''}<span class="faint">Клик по джобе - её журнал в консоли</span></div>
+        <div class="pipe">${st.jobs.map((x) => `<div class="scol ${now === x ? 'now' : ''}"><div class="sh">${esc(x.name)}</div>${x.jobs.map((j) => `<button class="job ${j.status === 'manual' ? 'man' : ''}" data-job="${esc(j.id)}" data-jname="${esc(j.name)}" data-jstatus="${esc(j.status)}" data-jurl="${esc(j.url || '')}" title="${esc(RU[j.status] || j.status)}${j.step ? ' · шаг: ' + esc(j.step) : ''}${j.failedStep ? ' · упал шаг: ' + esc(j.failedStep) : ''}${j.failureReason ? ' · причина: ' + esc(j.failureReason) : ''}${j.allowFailure ? ' · падение допустимо' : ''}${j.runner ? ' · раннер: ' + esc(j.runner) : ''}">${sdot(j.status)}<span class="jn">${esc(j.name)}</span><span class="dur">${j.duration != null ? esc(dur(j.duration * 1000)) : j.status === 'running' ? etaLabel(isoMs(j.startedAt), jobEta(j)) : ''}</span>${j.status === 'running' ? etaBar(isoMs(j.startedAt), jobEta(j), 'under') : ''}</button>`).join('')}</div>`).join('')}</div>` });
     }
   }
-  return out;
+  return { list: out, pipe };
 }
 function ciConfigHtml(c) {
   if (c.kind === 'gitlab' || c.kind === 'jenkins') {
     const cols = (c.stages || []).map((st) => `<div class="scol"><div class="sh">${esc(st.name)} <span class="sid">${esc(stageOf(st.sid).label.toLowerCase())}</span></div>${st.jobs.length ? st.jobs.map((j) => {
       const tags = [j.manual && 'вручную', j.allowFailure && 'может упасть', j.onlyMain && 'только main', j.onlyMr && 'в MR', j.needs?.length && `после ${j.needs.length}`].filter(Boolean);
-      return `<div class="job cfg ${j.manual ? 'man' : ''}"><span class="jn">${esc(j.name)}</span>${tags.length ? `<span class="jtags">${tags.map((t) => `<span class="jtag">${esc(t)}</span>`).join('')}</span>` : ''}${j.desc ? `<span class="jd">${esc(j.desc)}</span>` : ''}</div>`;
+      return `<div class="job cfg ${j.manual ? 'man' : ''}"><span class="jn">${esc(j.name)}</span>${tags.length ? `<span class="jtags">${tags.map((t) => `<span class="jtag">${esc(t)}</span>`).join('')}</span>` : ''}${j.desc ? `<span class="jd" data-ext>${esc(j.desc)}</span>` : ''}</div>`;
     }).join('') : '<div class="note">- пусто</div>'}</div>`).join('');
-    return `<div class="card"><h4>${c.kind === 'gitlab' ? 'GitLab CI' : 'Jenkins'} <small>${esc(c.file)} · ${c.jobCount} ${plural(c.jobCount, 'джоба', 'джобы', 'джоб')}${c.includes?.length ? ` · подключает ${c.includes.length} ${plural(c.includes.length, 'файл', 'файла', 'файлов')}` : ''}</small><button class="btn ghost sm" data-edit="${esc(c.file)}">✎</button></h4><div class="pipe">${cols || '<span class="note">Этапы не распознаны</span>'}</div></div>`;
+    return `<section class="cfgsec"><h4>${c.kind === 'gitlab' ? 'GitLab CI' : 'Jenkins'} <small>${esc(c.file)} · ${c.jobCount} ${plural(c.jobCount, 'джоба', 'джобы', 'джоб')}${c.includes?.length ? ` · подключает ${c.includes.length} ${plural(c.includes.length, 'файл', 'файла', 'файлов')}` : ''}</small><button class="btn ghost sm" data-edit="${esc(c.file)}" title="Открыть в редакторе" aria-label="Открыть в редакторе: ${esc(c.file)}">✎</button></h4><div class="pipe">${cols || '<span class="note">Этапы не распознаны</span>'}</div></section>`;
   }
   if (c.kind === 'github') {
-    return `<div class="card"><h4>${esc(c.name)} <small>${esc(c.file)}</small><button class="btn ghost sm" data-edit="${esc(c.file)}">✎</button></h4>
+    return `<section class="cfgsec"><h4>${esc(c.name)} <small>${esc(c.file)}</small><button class="btn ghost sm" data-edit="${esc(c.file)}" title="Открыть в редакторе" aria-label="Открыть в редакторе: ${esc(c.file)}">✎</button></h4>
       <p class="note" style="margin:-4px 0 8px">Запускается: ${(c.triggers || []).map((t) => `<span class="jtag">${esc(t)}</span>`).join(' ') || '-'}</p>
-      <div class="pipe"><div class="scol" style="max-width:none;flex:1">${(c.jobs || []).map((j) => `<div class="job cfg"><span class="jn">${esc(j.name)}</span>${j.needs.length ? `<span class="jtags"><span class="jtag">после ${esc(j.needs.join(', '))}</span></span>` : ''}</div>`).join('') || '<span class="note">Джоб нет</span>'}</div></div></div>`;
+      <div class="pipe"><div class="scol" style="max-width:none;flex:1">${(c.jobs || []).map((j) => `<div class="job cfg"><span class="jn">${esc(j.name)}</span>${j.needs.length ? `<span class="jtags"><span class="jtag">после ${esc(j.needs.join(', '))}</span></span>` : ''}</div>`).join('') || '<span class="note">Джоб нет</span>'}</div></div></section>`;
   }
-  return `<div class="card"><h4>${esc(c.file)} <small>найден, подробный разбор пока не поддерживается</small><button class="btn ghost sm" data-edit="${esc(c.file)}">✎</button></h4></div>`;
+  return `<section class="cfgsec"><h4>${esc(c.file)} <small>найден, подробный разбор пока не поддерживается</small><button class="btn ghost sm" data-edit="${esc(c.file)}" title="Открыть в редакторе" aria-label="Открыть в редакторе: ${esc(c.file)}">✎</button></h4></section>`;
 }
 function ensureCI() {
   if (!S.settings.ciAutoload) return;
@@ -748,7 +1157,7 @@ async function loadJobs(r, id, force = false) {
   try { res = await call('ci_jobs', { path, remote: r.name, id, done: FINAL.includes(run?.status), force }); } catch (e) { res = { error: String(e) }; }
   if (P()?.path !== path || st.sel !== id) return;
   st.jobsLoading = false;
-  if (res.data) st.jobs = res.data;
+  if (res.data) { st.jobs = res.data; rememberJobs(res.data); }
   st.jobsError = res.error && !res.data ? res.error : null;
   if (S.tab === 'ci') renderTab();
 }
@@ -769,6 +1178,8 @@ async function openCiLog(r, job) {
 }
 
 // ---------- Git ----------
+// заголовок раздела вкладки - knowledge/ui.json, раздел sections
+const SEC = (k, v) => tpl((UI().sections || {})[k] || k, v);
 function viewGit() {
   const gi = P().git;
   if (!gi) return '<div class="empty-card">Эта папка не в git-репозитории.</div>';
@@ -777,22 +1188,36 @@ function viewGit() {
   const groups = {};
   for (const f of files) (groups[f.label] ||= []).push(f);
   const actions = P().scripts.filter((s) => s.source === 'git');
+  // недоверенный репозиторий: git не запускался - счётчики, файлы и коммиты неизвестны, а не нулевые
+  const GT = UI().gitTab || {}, off = !!gi.untrusted;
+  const why = off ? tpl((UI().health?.gitWhy || {})[gi.why] || '', { key: gi.whyKey || '' }) : '';
+  const unk = `<b class="faint stat-unk">${esc(GT.unknown || '-')}</b>`;
+  const stat = (label, val, title = '') => `<div class="stat"${title ? ` title="${esc(title)}"` : ''}><small>${esc(label)}</small>${val}</div>`;
+  const notRun = `<div class="blk-state"><b>${esc(gi.refused ? tpl(GT.refused, { why }) : GT.notRun)}</b>${gi.refused ? '' : `<p>${esc(tpl(GT.notRunText, { why }))}</p><button class="btn sm" data-act="git-trust">${esc(GT.trust)}</button>`}</div>`;
+  const fileList = gi.files.length
+    ? Object.entries(groups).map(([label, list]) => `<div class="list">${list.slice(0, 300).map((f) => `<div class="li click" tabindex="0" data-edit="${esc(f.path)}" title="Открыть в редакторе"><span class="gcode g-${esc(f.code)}">${esc(f.code === '?' ? '+' : f.code)}</span><span class="t mono" style="font-size:12.5px">${esc(f.path)}</span><span class="d">${esc(label)}${f.staged ? ' · в индексе' : ''}</span><button class="btn ghost sm" data-reveal="${esc(f.path)}" title="Показать в проводнике" aria-label="Показать в проводнике: ${esc(f.path)}">⌕</button></div>`).join('')}</div>`).join('') || `<p class="blk-empty">${esc(A('gitNoMatch'))}</p>`
+    : '<p class="blk-empty">Всё закоммичено.</p>';
+  const commits = `<div class="list">${gi.commits.map((c) => `<div class="li"><span class="h">${esc(c.hash)}</span><span class="t" title="${esc(c.subject)}">${esc(c.subject)} ${c.refs.map((r) => `<span class="ref">${esc(r)}</span>`).join(' ')}</span><span class="d">${esc(c.author)} · ${esc(ago(c.date))}</span></div>`).join('') || '<div class="li note">Коммитов нет</div>'}</div>`;
+  const remotes = `<div class="list">${gi.remotes.map((r) => `<div class="li"><b class="mono" style="font-size:12.5px">${esc(r.name)}</b><span class="t mono faint" style="font-size:12px">${esc(r.url)}</span>${r.dup ? '<span class="d">дубль</span>' : ''}${r.trusted ? '' : '<span class="d" title="CI-запросы к этому серверу не отправляются">не доверенный</span>'}</div>`).join('') || '<div class="li note">Нет адресов - репозиторий только локальный</div>'}</div>`;
   return `${hintBox('git')}
     <div class="stats">
-      <div class="stat"><small>Ветка</small><b>${esc(gi.branch)}</b></div>
-      <div class="stat" title="Ветка на сервере, с которой сравнивается ваша"><small>На сервере</small><b>${esc(gi.upstream || '-')}</b></div>
-      <div class="stat"><small>Не отправлено / не забрано</small><b>↑${gi.ahead} ↓${gi.behind}</b></div>
-      <div class="stat"><small>Изменено файлов</small><b>${gi.dirty}</b></div>
-      <div class="stat" title="git stash"><small>Отложено</small><b>${gi.stash}</b></div>
-      <div class="stat"><small>Последний fetch</small><b style="font-size:14px">${esc(gi.fetchedAt ? ago(gi.fetchedAt) : 'никогда')}</b></div>
-      ${gi.tag ? `<div class="stat"><small>Последний тег</small><b>${esc(gi.tag)}</b></div>` : ''}
+      ${stat('Ветка', `<b>${esc(gi.branch)}</b>`)}
+      ${stat('На сервере', off ? unk : `<b>${esc(gi.upstream || '-')}</b>`, 'Ветка на сервере, с которой сравнивается ваша')}
+      ${stat('Не отправлено / не забрано', off ? unk : `<b>↑${gi.ahead} ↓${gi.behind}</b>`)}
+      ${stat('Изменено файлов', off ? unk : `<b>${gi.dirty}</b>`)}
+      ${stat('Отложено', off ? unk : `<b>${gi.stash}</b>`, 'git stash')}
+      ${stat('Последний fetch', `<b style="font-size:14px">${esc(gi.fetchedAt ? ago(gi.fetchedAt) : 'никогда')}</b>`)}
+      ${gi.tag ? stat('Последний тег', `<b>${esc(gi.tag)}</b>`) : ''}
     </div>
-    <h2>Действия</h2><div class="rows">${actions.map(rowHtml).join('')}</div>
-    <h2>Изменённые файлы <span class="aside">${gi.files.length > 8 ? `<input type="search" id="gq" placeholder="фильтр…" value="${esc(S.gitQ)}" style="width:200px">` : ''}</span></h2>
-    ${gi.files.length ? Object.entries(groups).map(([label, list]) => `<div class="list" style="margin-bottom:8px">${list.slice(0, 300).map((f) => `<div class="li click" data-edit="${esc(f.path)}" title="Открыть в редакторе"><span class="gcode g-${esc(f.code)}">${esc(f.code === '?' ? '+' : f.code)}</span><span class="t mono" style="font-size:12.5px">${esc(f.path)}</span><span class="d">${esc(label)}${f.staged ? ' · в индексе' : ''}</span><button class="btn ghost sm" data-reveal="${esc(f.path)}" title="Показать в проводнике">⌕</button></div>`).join('')}</div>`).join('') : '<div class="empty-card">Всё закоммичено.</div>'}
-    <div class="cols">
-      <div><h2>Последние коммиты</h2><div class="list">${gi.commits.map((c) => `<div class="li"><span class="h">${esc(c.hash)}</span><span class="t" title="${esc(c.subject)}">${esc(c.subject)} ${c.refs.map((r) => `<span class="ref">${esc(r)}</span>`).join(' ')}</span><span class="d">${esc(c.author)} · ${esc(ago(c.date))}</span></div>`).join('') || '<div class="li note">Коммитов нет</div>'}</div></div>
-      <div><h2>Адреса репозитория</h2><div class="list">${gi.remotes.map((r) => `<div class="li"><b class="mono" style="font-size:12.5px">${esc(r.name)}</b><span class="t mono faint" style="font-size:12px">${esc(r.url)}</span>${r.dup ? '<span class="d">дубль</span>' : ''}${r.trusted ? '' : '<span class="d" title="CI-запросы к этому серверу не отправляются">не доверенный</span>'}</div>`).join('') || '<div class="li note">Нет адресов - репозиторий только локальный</div>'}</div></div>
+    <div class="blk-stack">
+    ${actions.length ? Blocks.card({ title: SEC('gitActions'), flush: true, body: `<div class="rows">${actions.map(rowHtml).join('')}</div>` }) : ''}
+    ${off ? Blocks.card({ title: SEC('gitFiles'), body: notRun }) : Blocks.card({ title: SEC('gitFiles'), flush: files.length > 0,
+      aside: gi.files.length > 8 ? `<input type="search" id="gq" placeholder="фильтр…" value="${esc(S.gitQ)}" class="gq" aria-label="${esc(A('gitQ') || 'Фильтр файлов')}" autocomplete="off" spellcheck="false">` : '',
+      body: fileList })}
+    <div class="blk-pair">
+      ${Blocks.card({ title: SEC('gitCommits'), flush: !off, body: off ? `<p class="blk-empty">${esc(GT.notRun)}</p>` : commits })}
+      ${Blocks.card({ title: SEC('gitRemotes'), flush: true, body: remotes })}
+    </div>
     </div>`;
 }
 
@@ -801,16 +1226,16 @@ function viewHistory() {
   const hf = S.histFilter;
   const all = recentRuns(1000);
   const list = all.filter((r) => (!hf.status || r.status === hf.status) && (!hf.q || `${r.title} ${r.args || ''} ${r.cmd}`.toLowerCase().includes(hf.q.toLowerCase())));
-  const ok = all.filter((r) => r.status === 'ok').length, fail = all.filter((r) => r.status === 'fail').length;
-  return `<div class="toolbar">
-      <div class="seg">${[['', `Все ${all.length}`], ['ok', `Успех ${ok}`], ['fail', `Ошибка ${fail}`], ['stopped', 'Остановлены'], ['running', 'Идут']].map(([k, l]) => `<button class="${hf.status === k ? 'on' : ''}" data-hstatus="${k}">${l}</button>`).join('')}</div>
-      <div class="search"><input type="search" id="hq" placeholder="Найти запуск…" value="${esc(hf.q)}"></div>
+  const n = (st) => all.filter((r) => r.status === st).length;
+  return Blocks.card({ title: SEC('history'), flush: true, body: `<div class="blk-tools toolbar">
+      <div class="seg">${[['', `Все ${all.length}`], ['ok', `Успех ${n('ok')}`], ['fail', `Ошибка ${n('fail')}`], ['stopped', `Остановлены ${n('stopped')}`], ['running', `Идут ${n('running')}`]].map(([k, l]) => `<button class="${hf.status === k ? 'on' : ''}" aria-pressed="${hf.status === k}" data-hstatus="${k}">${l}</button>`).join('')}</div>
+      <div class="search"><input type="search" id="hq" aria-label="${esc(A('histQ'))}" placeholder="Найти запуск…" value="${esc(hf.q)}" autocomplete="off"></div>
       <span class="grow"></span>${all.length ? '<button class="btn sm" data-act="clear-history">Очистить историю</button>' : ''}</div>
-    ${list.length ? `<div class="list htable">${list.slice(0, 400).map((r) => `<div class="li click" data-log="${esc(r.id)}" title="Показать вывод (у старых - последние 80 строк)">
-      <span class="dot s-${esc(r.status)}"></span><span class="t mono">${esc(r.title)}</span><span class="t faint mono" style="font-size:12px">${esc(r.args || '')}</span>
-      <span class="d">${esc(new Date(r.startedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</span><span class="d">${r.status === 'running' ? 'идёт' : esc(dur((r.endedAt || Date.now()) - r.startedAt))}</span><span class="d">${r.code != null ? 'код ' + esc(r.code) : ''}</span>
-      ${scriptOf(r.scriptId) ? `<button class="btn ghost sm" data-rerun="${esc(r.scriptId)}" data-rargs="${esc(r.args || '')}" title="Запустить снова с теми же аргументами">▶</button>` : '<span></span>'}</div>`).join('')}</div>`
-    : `<div class="nothing"><b>${all.length ? 'Ничего не подходит' : 'История пуста'}</b>${all.length ? 'Измените фильтр.' : 'Здесь появится каждый запуск: когда, сколько шёл и чем закончился.'}</div>`}`;
+    ${list.length ? `<div class="list htable">${list.slice(0, 400).map((r) => `<div class="li click" tabindex="0" data-log="${esc(r.id)}" title="Показать вывод (у старых - последние 80 строк)">
+      ${sdot(r.status)}<span class="t mono">${esc(r.title)}</span><span class="t faint mono" style="font-size:12px">${esc(r.args || '')}</span>
+      <span class="d">${esc(new Date(r.startedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</span><span class="d">${r.status === 'running' ? 'идёт' : esc(dur((r.endedAt || Date.now()) - r.startedAt))}</span><span class="d">${r.code != null && r.status !== 'stopped' ? 'код ' + esc(r.code) : ''}</span>
+      ${scriptOf(r.scriptId) ? `<button class="btn ghost sm" data-rerun="${esc(r.scriptId)}" data-rargs="${esc(r.args || '')}" title="Запустить снова с теми же аргументами" aria-label="Запустить снова: ${esc(r.title)}">▶</button>` : '<span></span>'}</div>`).join('')}</div>`
+    : `<div class="nothing blk-nothing"><b>${all.length ? 'Ничего не подходит' : 'История пуста'}</b>${all.length ? 'Измените фильтр.' : 'Здесь появится каждый запуск: когда, сколько шёл и чем закончился.'}</div>`}` });
 }
 
 // =====================================================================
@@ -852,8 +1277,27 @@ function sgr(st, args) {
   }
 }
 const TOKEN_RE = /\x1b\[([0-9;?]*)([A-Za-z@`])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][A-Za-z0-9]|\x1b[=>78DEHMc]|\r\n|\r|\n|\x08|\x07|[^\x1b\r\n\x08\x07]+/g;
-const linkify = (h) => h.replace(/https?:\/\/[^\s"'<>`]+[^\s"'<>`.,;:!?)\]]/g, (u) => `<a data-href="${u}">${u}</a>`);
-const lineHtml = (segs) => segs.map(([o, t]) => o + linkify(esc(t)) + (o ? '</span>' : '')).join('');
+// ссылки ищутся по сырому тексту всей строки, а не по кускам одного цвета после esc(): Vite красит порт
+// отдельно («http://localhost:» + «5173»), а кавычка после esc() - это «&quot;», и она уезжала в адрес
+function lineHtml(segs) {
+  const plain = segs.map((x) => x[1]).join('');
+  const urls = plain.includes('://') ? [...plain.matchAll(URL_RE)].map((m) => [m.index, m.index + m[0].length, m[0]]) : [];
+  let pos = 0, out = '';
+  for (const [o, t] of segs) {
+    let body = '', i = 0;
+    while (i < t.length) {
+      const at = pos + i, u = urls.find((x) => x[1] > at);
+      if (!u || u[0] >= pos + t.length) { body += esc(t.slice(i)); break; }
+      if (u[0] > at) { body += esc(t.slice(i, u[0] - pos)); i = u[0] - pos; continue; }
+      const stop = Math.min(t.length, u[1] - pos);
+      body += `<a data-href="${esc(u[2])}">${esc(t.slice(i, stop))}</a>`;
+      i = stop;
+    }
+    out += o + body + (o ? '</span>' : '');
+    pos += t.length;
+  }
+  return out;
+}
 function lineKind(plain) {
   if (S.errRe?.test(plain) && !S.noErrRe?.test(plain)) return 'err';
   return S.warnRe?.test(plain) ? 'warn' : '';
@@ -936,7 +1380,13 @@ function addRun(r, focus) {
   if (focus || !prev) { S.active = r.id; S.console.open = true; }
   return run;
 }
-const consoleTabs = () => [...S.runs.values()].sort((a, b) => b.startedAt - a.startedAt).slice(0, 12);
+// не больше 12 вкладок, но открытая видна всегда: старый запуск из истории иначе показывал вывод без вкладки
+function consoleTabs() {
+  const all = [...S.runs.values()].sort((a, b) => b.startedAt - a.startedAt), top = all.slice(0, 12);
+  const a = S.runs.get(S.active);
+  if (a && !top.includes(a)) top[top.length - 1] = a;
+  return top;
+}
 function runStatusText(r) {
   if (r.kind === 'ci') return r.status === 'running' ? 'джоба идёт' : RU[r.status] || '';
   if (r.status === 'running') return `идёт ${dur(Date.now() - r.startedAt)}`;
@@ -947,11 +1397,18 @@ function runStatusText(r) {
 function renderConsole(full = false) {
   const el = $('#console');
   const tabs = consoleTabs();
-  if (!tabs.length) { el.hidden = true; return; }
+  // вкладок нет - консоль прячется и отдаёт свой DOM: до 4000 строк вывода иначе висели скрытыми (замер: 13 тыс. узлов)
+  if (!tabs.length) { el.hidden = true; if (el.firstChild) el.textContent = ''; return; }
   el.hidden = false;
   if (!S.runs.has(S.active)) S.active = tabs[0].id;
   const a = activeRun(), c = S.console;
   const stdinEl = $('#stdin'), keepIn = stdinEl?.value || '', keepFocus = document.activeElement === stdinEl;
+  // консоль рисуется целиком: кнопка в фокусе (вкладка, «Перенос») находится заново по своему data-*,
+  // иначе каждое событие запуска роняло фокус клавиатуры на body
+  const fe = el.contains(document.activeElement) && document.activeElement !== stdinEl ? document.activeElement : null;
+  const fkey = fe ? ['data-crun', 'data-c', 'data-url', 'data-href', 'id'].find((k) => fe.hasAttribute(k)) : null;
+  const fsel = fkey ? `[${fkey}="${CSS.escape(fe.getAttribute(fkey))}"]` : null;
+  el.setAttribute('aria-label', A('console'));
   el.classList.toggle('collapsed', !c.open);
   el.classList.toggle('max', c.max && c.open);
   el.style.setProperty('--ch', c.h + 'px');
@@ -959,28 +1416,31 @@ function renderConsole(full = false) {
   const isScript = a.kind === 'script';
   el.innerHTML = `<div class="cgrip" data-grip title="Потяните, чтобы изменить высоту"></div>
     <div class="chead">
-      <div class="ctabs" role="tablist">${tabs.map((r) => `<button class="ctab ${r.id === a.id ? 'on' : ''}" data-crun="${esc(r.id)}" title="${esc(r.cmd || '')}"><span class="dot s-${esc(r.status)}"></span>${esc(r.title)}<span class="el" data-el="${esc(r.id)}">${r.status === 'running' && r.kind === 'script' ? esc(dur(Date.now() - r.startedAt)) : ''}</span>${r.status !== 'running' || r.kind !== 'script' ? `<span class="cx" data-cclose="${esc(r.id)}" title="Закрыть вкладку">×</span>` : ''}</button>`).join('')}</div>
+      <div class="ctabs">${tabs.map((r) => `<button class="ctab ${r.id === a.id ? 'on' : ''}" ${r.id === a.id ? 'aria-current="true"' : ''} aria-keyshortcuts="Delete" data-crun="${esc(r.id)}" ${r.status === 'running' ? etaTip(r.cmd || '', r.startedAt, runEta(r)) : `title="${esc(r.cmd || '')}"`}>${sdot(r.status)}${esc(r.title)}<span class="el" data-el="${esc(r.id)}">${r.status === 'running' && r.kind === 'script' ? esc(dur(Date.now() - r.startedAt)) : ''}</span><span class="cx" data-cclose="${esc(r.id)}" aria-hidden="true" title="${esc(r.status === 'running' && r.kind === 'script' ? (UI().run || {}).closeHint || '' : 'Закрыть вкладку')}">×</span>${r.status === 'running' ? etaBar(r.startedAt, runEta(r), 'under') : ''}</button>`).join('')}</div>
       <div class="cact">
         ${c.open ? `<button class="btn ghost sm" data-c="find" title="Поиск в выводе (Ctrl+Shift+F)">Найти</button>
-        ${a.term?.errs > 0 ? `<button class="btn ghost sm" data-c="err" title="Прокрутить к первой строке с ошибкой" style="color:var(--bad)">✗ ${a.term.errs}</button>` : ''}
-        <button class="btn ghost sm ${c.wrap ? '' : 'faint'}" data-c="wrap" title="Перенос длинных строк">Перенос</button>
+        ${a.term?.errs > 0 ? `<button class="btn ghost sm" data-c="err" title="Прокрутить к следующей строке с ошибкой" aria-label="Строк с ошибкой: ${a.term.errs}. Прокрутить к следующей" style="color:var(--bad)">✗ ${a.term.errs}</button>` : ''}
+        <button class="btn ghost sm tog" data-c="wrap" aria-pressed="${c.wrap}" title="Перенос длинных строк">Перенос</button>
         <button class="btn ghost sm" data-c="copy" title="Скопировать весь вывод">Копировать</button>` : ''}
         ${isScript && a.status === 'running' ? '<button class="btn sm danger" data-c="stop" title="Остановить процесс и всех его потомков">■ Стоп</button>' : ''}
         ${(isScript && a.status !== 'running') || a.kind === 'ci' ? `<button class="btn sm" data-c="restart" title="${a.kind === 'ci' ? 'Загрузить журнал заново' : 'Запустить ещё раз с теми же аргументами'}">↻ Повторить</button>` : ''}
-        ${a.kind === 'ci' && a.url ? `<button class="btn ghost sm" data-url="${esc(a.url)}" title="Открыть джобу в браузере">↗</button>` : ''}
+        ${a.kind === 'ci' && a.url ? `<button class="btn ghost sm" data-url="${esc(a.url)}" title="Открыть джобу в браузере" aria-label="Открыть джобу в браузере">↗</button>` : ''}
         <button class="btn ghost sm" data-c="clear" title="Закрыть все завершённые вкладки">Очистить</button>
-        <button class="btn ghost icon sm" data-c="max" title="${c.max ? 'Обычный размер' : 'Развернуть'}">${c.max ? '⤡' : '⤢'}</button>
-        <button class="btn ghost icon sm" data-c="toggle" title="${c.open ? 'Свернуть' : 'Развернуть'} (Ctrl+J)">${c.open ? '▾' : '▴'}</button>
+      </div>
+      <div class="cwin">
+        <button class="btn ghost icon sm" data-c="max" title="${c.max ? 'Обычный размер' : 'Развернуть'}" aria-label="${c.max ? 'Обычный размер консоли' : 'Развернуть консоль'}" aria-pressed="${!!c.max}">${c.max ? '⤡' : '⤢'}</button>
+        <button class="btn ghost icon sm" data-c="toggle" title="${c.open ? 'Свернуть' : 'Развернуть'} (Ctrl+J)" aria-label="${c.open ? 'Свернуть' : 'Развернуть'} вывод" aria-expanded="${c.open}" aria-keyshortcuts="Control+J"><span class="cchev${c.open ? '' : ' up'}" aria-hidden="true">${Learn.icon('chevron', 16, 'currentColor', 2)}</span></button>
       </div>
     </div>
-    ${c.open ? `<div class="cmeta"><span class="dot s-${esc(a.status)}"></span><code title="${esc(a.cmd)}">${esc(a.cmd)}</code><span data-ctext>${esc(runStatusText(a))}</span>
-      ${urls.length ? `<span class="links">${urls.map((u) => `<a data-href="${esc(u)}" title="Открыть в браузере">${esc(u.replace(/^https?:\/\//, ''))} ↗</a>`).join('')}</span>` : ''}
-      ${c.findOpen ? `<span class="csearch"><input type="search" id="cfind" placeholder="Найти в выводе…" value="${esc(c.find)}"><span class="note" id="cfound"></span></span>` : ''}</div>
-    <div class="tbody ${c.wrap ? 'tw' : ''}" id="tbody" tabindex="0"></div>
-    ${isScript && a.status === 'running' ? '<div class="stdin"><span>›</span><input type="text" id="stdin" placeholder="Ответ процессу - Enter отправит. Не завершается после ответа? Нажмите «Конец ввода»" autocomplete="off"><button class="btn sm" data-c="eof" title="Закрыть ввод (Ctrl+D)">Конец ввода</button></div>' : ''}` : ''}`;
+    ${c.open ? `<div class="cmeta">${sdot(a.status)}<code title="${esc(a.cmd)}">${esc(a.cmd)}</code><span data-ctext>${esc(runStatusText(a))}</span>${a.status === 'running' ? etaLabel(a.startedAt, runEta(a)) + etaBar(a.startedAt, runEta(a), 'inl') : ''}
+      ${urls.length ? `<span class="links">${urls.map((u) => `<a data-href="${esc(u)}" role="link" tabindex="0" title="Открыть в браузере">${esc(u.replace(/^https?:\/\//, ''))} <span aria-hidden="true">↗</span></a>`).join('')}</span>` : ''}
+      ${c.findOpen ? `<span class="csearch"><input type="search" id="cfind" aria-label="${esc(A('find'))}" autocomplete="off" placeholder="Найти в выводе…" value="${esc(c.find)}"><span class="note" id="cfound"></span></span>` : ''}</div>
+    <div class="tbody ${c.wrap ? 'tw' : ''}" id="tbody" tabindex="0" role="log" aria-live="off" aria-label="${esc(A('log'))}"></div>
+    ${isScript && a.status === 'running' && !a.stdinClosed ? '<div class="stdin"><span aria-hidden="true">›</span><input type="text" id="stdin" aria-label="' + esc(A('stdin')) + '" placeholder="Ответ процессу - Enter отправит. Не завершается после ответа? Нажмите «Конец ввода»" autocomplete="off"><button class="btn sm" data-c="eof" title="Закрыть ввод (Ctrl+D)">Конец ввода</button></div>' : ''}` : ''}`;
   if (c.open) { a.term ||= makeTerm(); a.term.reset = true; syncTerm(true); if (c.findOpen) { applyFind(false); if (full) $('#cfind')?.focus(); } }
   const si = $('#stdin');
   if (si) { si.value = keepIn; if (keepFocus) si.focus(); }
+  if (fsel && !el.contains(document.activeElement)) $(fsel, el)?.focus({ preventScroll: true });
   updateTitle();
 }
 let syncQueued = false;
@@ -1022,11 +1482,17 @@ function applyFind(step) {
   const out = $('#cfound');
   if (!q) { if (out) out.textContent = ''; return; }
   const hits = [];
-  for (const n of $$('.ln[data-i]', body)) if (a.term.plain[+n.dataset.i]?.toLowerCase().includes(q)) { n.classList.add('hit'); hits.push(n); }
-  if (!hits.length) { if (out) out.textContent = 'нет'; return; }
+  const lines = $$('.ln[data-i]', body);
+  for (const n of lines) if (a.term.plain[+n.dataset.i]?.toLowerCase().includes(q)) { n.classList.add('hit'); hits.push(n); }
+  // совпадения в начале, которое не показано (последние 4000 строк в окне), - тоже считаем и называем
+  const first = lines.length ? +lines[0].dataset.i : a.term.plain.length;
+  let hidden = 0;
+  for (let i = 0; i < first; i++) if (a.term.plain[i].toLowerCase().includes(q)) hidden++;
+  const more = hidden ? ' · ' + tpl((UI().run || {}).findHidden, { n: hidden }) : '';
+  if (!hits.length) { if (out) out.textContent = (hidden ? '' : 'нет') + more.replace(/^ · /, ''); return; }
   S.console.hit = step ? (S.console.hit + 1) % hits.length : Math.min(Math.max(S.console.hit, 0), hits.length - 1);
   const h = hits[S.console.hit]; h.classList.add('cur-hit'); h.scrollIntoView({ block: 'center' });
-  if (out) out.textContent = `${S.console.hit + 1} из ${hits.length}`;
+  if (out) out.textContent = `${S.console.hit + 1} из ${hits.length}${more}`;
 }
 setInterval(() => {
   for (const r of S.runs.values()) {
@@ -1034,6 +1500,7 @@ setInterval(() => {
     for (const el of $$(`[data-el="${CSS.escape(r.id)}"]`)) el.textContent = dur(Date.now() - r.startedAt);
     if (S.active === r.id) { const t = $('[data-ctext]'); if (t) t.textContent = runStatusText(r); }
   }
+  etaTick();
 }, 1000);
 
 // =====================================================================
@@ -1051,7 +1518,7 @@ function fuzzy(q, s) {
 function paletteItems(q) {
   const out = [], p = P();
   const actions = [['Открыть папку проекта…', 'pick', 'Ctrl O'], ['Перечитать проект', 'rescan', 'F5'], ['Открыть терминал в проекте', 'term'], ['Открыть проект в VS Code', 'code'], ['Открыть проект в проводнике', 'explorer'],
-    ...TABS.map(([id, l], i) => [`Вкладка: ${l}`, 'tab:' + id, String(i + 1)]), ['Свернуть или развернуть консоль', 'console', 'Ctrl J'], ['Режим обучения: включить или выключить', 'learn'], ['Настройки', 'settings'], ['Справка и горячие клавиши', 'help', '?']]
+    ...TABS.map(([id, l], i) => [`Вкладка: ${l}`, 'tab:' + id, i < 9 ? String(i + 1) : '']), ['Свернуть или развернуть консоль', 'console', 'Ctrl J'], ['Режим обучения: включить или выключить', 'learn'], ['Настройки', 'settings'], ['Справка и горячие клавиши', 'help', '?']]
     .filter(([, a]) => p || ['pick', 'settings', 'help', 'learn'].includes(a));
   if (p) for (const s of p.scripts) {
     const sc = Math.max(fuzzy(q, s.name) * 2, q.length > 2 && hayOf(s).includes(q.toLowerCase()) ? 300 : -1);
@@ -1064,7 +1531,8 @@ function paletteItems(q) {
 }
 function openPalette() {
   S.palette = { q: '', sel: 0 };
-  overlay(`<div class="palette" role="dialog" aria-label="Палитра команд"><input id="pal" placeholder="Скрипт, урок, действие или проект…" autocomplete="off"><div class="plist" id="plist"></div>
+  // поле - комбобокс над списком: стрелки двигают выбор (aria-activedescendant), фокус остаётся в поле
+  overlay(`<div class="palette" role="dialog" aria-modal="true" aria-label="Палитра команд"><input id="pal" role="combobox" aria-expanded="true" aria-controls="plist" aria-autocomplete="list" aria-label="${esc(A('palette'))}" spellcheck="false" placeholder="Скрипт, урок, действие или проект…" autocomplete="off"><div class="plist" id="plist" role="listbox" aria-label="${esc(A('results'))}"></div>
     <div class="pfoot"><span>↑↓ выбор</span><span>Enter - запустить или открыть</span><span>Shift+Enter - подробности</span><span>Esc - закрыть</span></div></div>`, paletteKey);
   renderPalette();
   setTimeout(() => $('#pal')?.focus(), 0);
@@ -1076,8 +1544,10 @@ function renderPalette() {
   const ic = { script: '▶', action: '›', project: '◫', topic: '✦' };
   $('#plist').innerHTML = pal.items.length ? pal.items.map((it, i) => {
     const running = it.kind === 'script' && lastOf(it.id)?.status === 'running';
-    return `<div class="pi ${i === pal.sel ? 'sel' : ''}" data-pi="${i}"><span class="ic">${running ? '■' : ic[it.kind]}</span><span class="tx"><b class="${it.kind === 'script' ? 'mono' : ''}">${esc(it.title)}</b><span>${running ? 'запущен - Enter покажет вывод' : esc(it.sub)}</span></span>${it.kind === 'script' ? fxBadges(it.s, true) : `<span class="kind">${{ project: 'проект', topic: 'урок', action: 'действие' }[it.kind]}</span>`}</div>`;
+    return `<div class="pi ${i === pal.sel ? 'sel' : ''}" id="pi-${i}" role="option" aria-selected="${i === pal.sel}" data-pi="${i}"><span class="ic" aria-hidden="true">${running ? '■' : ic[it.kind]}</span><span class="tx"><b class="${it.kind === 'script' ? 'mono' : ''}">${esc(it.title)}</b><span>${running ? 'запущен - Enter покажет вывод' : esc(it.sub)}</span></span>${it.kind === 'script' ? fxBadges(it.s, true) : `<span class="kind">${{ project: 'проект', topic: 'урок', action: 'действие' }[it.kind]}</span>`}</div>`;
   }).join('') : '<div class="note" style="padding:14px">Ничего не нашлось.</div>';
+  const inp = $('#pal');
+  if (inp) { if (pal.items.length) inp.setAttribute('aria-activedescendant', 'pi-' + pal.sel); else inp.removeAttribute('aria-activedescendant'); }
   $('.pi.sel')?.scrollIntoView({ block: 'nearest' });
 }
 function paletteKey(e) {
@@ -1111,30 +1581,25 @@ function doAction(act) {
   else if (act === 'help') openHelp();
 }
 
+// справка: тексты - knowledge/ui.json, раздел help; вкладки - по списку TABS, значки - из effects.json
 function openHelp() {
-  const fx = FX_ORDER.map((f) => `<span class="fx fx-${f}">${esc(fxInfo(f).label)}</span><span>${esc(fxInfo(f).say)}</span>`).join('');
-  overlay(`<div class="dialog" role="dialog" aria-label="Справка"><button class="btn ghost icon x" data-act="close-overlay" aria-label="Закрыть">✕</button>
-    <h2>Что такое Пульт</h2>
-    <p>Пульт читает папку проекта и показывает всё, что в нём можно запустить, - с объяснением простыми словами. Сам ничего не меняет: каждый запуск - только по вашей кнопке ▶.</p>
-    <p>Пояснения берутся из базы знаний (папка knowledge рядом с программой), из комментариев в файлах скриптов, из описаний пакетов и из справки самих программ. Под конкретный проект ничего не подгоняется.</p>
-    <h2>Вкладки</h2><ul>
-      <li><b>Обзор</b> - быстрый запуск, путь разработки по этапам, состояние и технологии проекта.</li>
-      <li><b>Скрипты</b> - все команды с фильтрами. Клик по строке - подробности справа.</li>
-      <li><b>Документация</b> - уроки по технологиям проекта: схемы, примеры, частые ошибки, вопросы.</li>
-      <li><b>Пайплайны</b> - статус CI на сервере и настройка CI из файлов. Журнал джобы - в консоли.</li>
-      <li><b>Git</b> и <b>История</b> - состояние репозитория и все прошлые запуски.</li></ul>
-    <h2>Режим обучения</h2><p>Включается в настройках (⚙). Термины подчёркиваются и раскрываются по наведению, у каждого скрипта видно, что происходит внутри, у каждого значка - зачем он.</p>
-    <h2>Значки «что затронет»</h2><div class="keys">${fx}<span class="fx fx-long">${esc(fxInfo('long').label)}</span><span>${esc(fxInfo('long').say)}</span></div>
-    <h2>Горячие клавиши</h2>
-    <div class="keys"><kbd>Ctrl K</kbd><span>найти и запустить что угодно</span><kbd>Ctrl O</kbd><span>сменить проект</span><kbd>/</kbd><span>поиск по скриптам</span><kbd>1</kbd><span>…<kbd>6</kbd> вкладки</span>
-      <kbd>F5</kbd><span>перечитать проект</span><kbd>Ctrl J</kbd><span>свернуть или развернуть консоль</span><kbd>Ctrl Shift F</kbd><span>поиск в выводе консоли</span><kbd>Esc</kbd><span>закрыть панель, очистить поиск</span><kbd>Ctrl Enter</kbd><span>запустить из панели подробностей</span><kbd>?</kbd><span>эта справка</span></div>
-    <h2>Безопасность</h2><ul>
-      <li>Нет сервера и открытого порта: окно говорит с программой напрямую.</li>
-      <li>Команды запускаются без оболочки, списком аргументов: имя файла не может стать второй командой.</li>
-      <li>Файл .env не читается - только проверяется, что он есть. Сетевые папки не открываются.</li>
-      <li>Запросы CI уходят только на доверенные серверы.</li></ul>
-    <h2>Пульт в терминале</h2><p>В любой папке проекта наберите <code>pult</code> - тот же Пульт в консоли, без окна. <code>pult help</code> - все команды.</p>
+  const h = UI().help || {}, sec = (x) => x || {};
+  const fx = [...FX_ORDER, 'long'].map((f) => `<span class="fx fx-${f}">${esc(fxInfo(f).label)}</span><span>${esc(fxInfo(f).say)}</span>`).join('');
+  const tabs = TABS.map(([id, label]) => (sec(h.tabs).items || {})[id] ? `<li><b>${esc(label)}</b> - ${esc(h.tabs.items[id])}</li>` : '').join('');
+  const n = Math.min(9, TABS.length);
+  const keys = (sec(h.keys).items || []).map(([k, t]) => `<kbd>${esc(tpl(k, { n }))}</kbd><span>${esc(t)}</span>`).join('');
+  const code = { pult: '<code>pult</code>', help: '<code>pult help</code>' };
+  overlay(`<div class="dialog" role="dialog" aria-modal="true" tabindex="-1" aria-label="${esc(h.label || '')}"><button class="btn ghost icon x" data-act="close-overlay" aria-label="Закрыть">✕</button>
+    <h2>${esc(sec(h.about).title)}</h2>${(sec(h.about).text || []).map((p) => `<p>${esc(p)}</p>`).join('')}
+    <h2>${esc(sec(h.tabs).title)}</h2><ul>${tabs}</ul>
+    <h2>${esc(sec(h.learn).title)}</h2><p>${esc(sec(h.learn).text)}</p>
+    <h2>${esc(sec(h.fx).title)}</h2><div class="keys">${fx}</div>
+    <h2>${esc(sec(h.keys).title)}</h2><div class="keys">${keys}</div>
+    <h2>${esc(sec(h.safe).title)}</h2><ul>${(sec(h.safe).items || []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+    <h2>${esc(sec(h.cli).title)}</h2><p>${tpl(esc(sec(h.cli).text), code)}</p>
   </div>`);
+  // фокус - в окно справки: Tab и Esc работают в нём, а не на странице под подложкой
+  setTimeout(() => $('#overlay .dialog')?.focus(), 0);
 }
 
 // =====================================================================
@@ -1150,7 +1615,8 @@ async function openProject(path, { force = false, background = false } = {}) {
     loadHistory();
     loadEnv();
   } catch (e) {
-    if (switching) { S.project = null; S.error = { msg: String(e), path }; }
+    // открытый проект остаётся на месте: страница ошибки - только когда показать больше нечего
+    if (switching && !P()) S.error = { msg: String(e), path };
     toast(String(e), 'bad');
   }
   S.scanning = false; S.refreshing = false;
@@ -1167,7 +1633,7 @@ function setProject(d, switching) {
     S.collapsed = new Set(LS.get('fold:' + d.path, []));
     S.tab = LS.get('tab:' + d.path, 'overview');
     if (!TABS.some(([id]) => id === S.tab)) S.tab = 'overview';
-    S.topic = null;
+    S.topic = null; S.descOpen = false; S.descClamp = false;
   } else if (S.detail && !S.byId.has(S.detail)) S.detail = null;
 }
 async function loadHistory() {
@@ -1201,13 +1667,36 @@ async function pick() {
 }
 async function openWhat(what, rel, line) { try { await call('open', { what, path: P()?.path || null, rel: rel ?? null, line: line ?? null, url: null }); } catch (e) { toast(String(e), 'bad'); } }
 function openUrl(url) { call('open', { what: 'url', url, path: null, rel: null, line: null }).catch((e) => toast(String(e), 'bad')); }
-function toggleConsole() { S.console.open = !S.console.open; LS.set('c.open', S.console.open); renderConsole(); }
+// консоль сворачивается и разворачивается без анимации высоты: уходит и проявляется только её вывод
+function toggleConsole() {
+  const set = (v) => { S.console.open = v; LS.set('c.open', v); renderConsole(); };
+  if (S.console.open) { const b = $('#tbody'); if (b && !b.classList.contains('leaving')) closeWithAnim(b, () => set(false)); else if (!b) set(false); return; }
+  set(true);
+  enterAnim($('#tbody'), 6); enterAnim($('#console .cmeta'), 3);
+}
 function applyTheme() {
   document.documentElement.dataset.theme = LS.get('theme', 'auto');
   document.documentElement.style.setProperty('--term-size', LS.get('termSize', 12.5) + 'px');
+  syncWindowBg();
 }
+// фон самого окна - цвет страницы: иначе при изменении размера и открытии меню видны белые полосы WebView2
+function syncWindowBg() {
+  const c = getComputedStyle(document.body || document.documentElement).backgroundColor.match(/\d+/g);
+  if (!c) return;
+  const hex = '#' + c.slice(0, 3).map((x) => (+x).toString(16).padStart(2, '0')).join('');
+  call('window_bg', { color: hex }).catch(() => {});
+}
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => syncWindowBg());
 async function setSetting(k, v) {
-  try { S.settings = await call('settings', { patch: { [k]: v } }); } catch (e) { toast(String(e), 'bad'); }
+  // обучение и минимальный интерфейс - противоположности: включение одного выключает другое
+  const patch = { [k]: v };
+  if (v === true && k === 'minimal') patch.learn = false;
+  if (v === true && k === 'learn') patch.minimal = false;
+  // сразу в окне - чтобы второй переключатель, нажатый следом, не потерял первый; ответ ядра принимается,
+  // только если он на последний запрос: ответы двух быстрых нажатий могут прийти в другом порядке
+  Object.assign(S.settings, patch);
+  const seq = (setSetting.seq = (setSetting.seq || 0) + 1);
+  try { const s = await call('settings', { patch }); if (seq === setSetting.seq) S.settings = s; } catch (e) { toast(String(e), 'bad'); }
   render();
 }
 function applyKb(kb) {
@@ -1221,13 +1710,30 @@ function applyKb(kb) {
 
 // ---------- события ядра ----------
 function onRun(r) {
-  const prev = S.runs.get(r.id);
+  // вкладку закрыли, пока шёл: в консоль не возвращаем, итог - только в историю
+  const gone = closedRuns.get(r.id);
+  if (gone) {
+    if (r.status === 'running') return;
+    closedRuns.delete(r.id);
+    S.histIdx.set(r.scriptId, r);
+    S.hist.unshift({ ...r, tail: (gone.term?.plain || []).slice(-80).join('\n') });
+    call('forget', { runId: r.id }).catch(() => {});
+    renderTop();
+    if (P() && r.project === P().path) { refreshScript(r.scriptId); if (S.tab === 'overview' || S.tab === 'history') renderTab(); else if (S.tab === 'scripts') renderChips(); }
+    return;
+  }
+  // прежний статус - до addRun: он дописывает новые поля в тот же объект, и prev.status стал бы уже новым
+  const prev = S.runs.get(r.id), was = prev?.status;
   const run = addRun(r, !prev);
-  if (r.status !== 'running' && prev?.status === 'running') {
+  // чтение с экрана слышит начало и конец запуска; секундный счёт в консоли не объявляется
+  if (!prev && r.status === 'running' && r.kind === 'script') announce(A('started', { name: r.title }));
+  if (r.status !== 'running' && was === 'running') {
     termSys(run, `${r.status === 'ok' ? '■ Готово' : r.status === 'stopped' ? '■ Остановлено' : '■ Ошибка'} за ${dur(r.endedAt - r.startedAt)}${r.code != null && r.status !== 'stopped' ? ` · код выхода ${r.code}` : ''}`);
     S.histIdx.set(r.scriptId, r);
     S.hist.unshift({ ...r, tail: run.term.plain.slice(-80).join('\n') });
     const took = r.endedAt - r.startedAt;
+    // короткий успешный запуск уведомления не даёт - о его конце говорит только объявление
+    if (!(took > 2500 || r.status === 'fail')) announce(A('finished', { name: r.title, status: runStatusText(run) }));
     if (took > 2500 || r.status === 'fail') toast(`${r.status === 'ok' ? '✓' : r.status === 'stopped' ? '■' : '✗'} ${r.title} - ${runStatusText(run)}`, r.status === 'fail' ? 'bad' : r.status === 'ok' ? 'ok' : '', { label: 'Вывод', fn: () => activate(r.id) });
   }
   renderConsole(!prev);
@@ -1235,7 +1741,8 @@ function onRun(r) {
   if (P() && r.project === P().path) {
     refreshScript(r.scriptId);
     if (S.tab === 'overview' || S.tab === 'history') { const m = $('#main'), k = m.scrollTop; renderTab(); m.scrollTop = k; }
-    if (S.tab === 'scripts') renderChips();
+    // под фильтром «Запущены» или «Упали» строка входит в список и уходит из него вместе с запуском
+    if (S.tab === 'scripts') { renderChips(); if (S.f.only === 'running' || S.f.only === 'failed') renderList(); }
   }
 }
 function onLog({ runId, text }) {
@@ -1268,10 +1775,12 @@ async function connect() {
 
 // ---------- клики ----------
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-act],[data-open],[data-tab],[data-stage],[data-run],[data-stop],[data-run-args],[data-detail],[data-fold],[data-fav],[data-crun],[data-cclose],[data-c],[data-pipe],[data-job],[data-url],[data-href],[data-doc],[data-edit],[data-reveal],[data-open-what],[data-copy],[data-flag],[data-fstage],[data-fonly],[data-fhooks],[data-group],[data-ci-remote],[data-ci-scope],[data-ci-status],[data-log],[data-hstatus],[data-rerun],[data-hint],[data-set],[data-theme-set],[data-term-size],[data-recent-rm],[data-recent-pin],[data-pi],[data-topic],[data-quiz],[data-quiz-reset],[data-ask],[data-cf]');
-  if (S.pop && !e.target.closest('.pop') && !e.target.closest('[data-act=projects],[data-act=settings]')) { S.pop = null; S.popQ = ''; renderTop(); if (!t) return; }
+  const t = e.target.closest('[data-act],[data-open],[data-tab],[data-stage],[data-run],[data-stop],[data-run-args],[data-detail],[data-fold],[data-fav],[data-crun],[data-cclose],[data-c],[data-pipe],[data-job],[data-url],[data-href],[data-doc],[data-edit],[data-reveal],[data-open-what],[data-copy],[data-flag],[data-fstage],[data-fonly],[data-fhooks],[data-group],[data-ci-remote],[data-ci-scope],[data-ci-status],[data-log],[data-hstatus],[data-rerun],[data-hint],[data-set],[data-theme-set],[data-term-size],[data-recent-rm],[data-recent-pin],[data-pi],[data-topic],[data-quiz],[data-quiz-reset],[data-cheat],[data-ask],[data-cf],[data-hint-x],[data-flags-all]');
+  if (S.pop && !e.target.closest('.pop') && !e.target.closest('[data-act=projects],[data-act=settings],[data-act=more]')) { S.pop = null; S.popQ = ''; renderTop(); if (!t) return; }
   if (!t || t.dataset.cf !== undefined) return;
   const d = t.dataset;
+  // пункт меню «Ещё» закрывает меню; проект и настройки открывают своё окно на его месте
+  if (t.closest('.pop-more') && d.act !== 'projects' && d.act !== 'settings') { S.pop = null; renderTop(); }
   if (t.tagName === 'A' || d.tab || d.act === 'reset-filters' || d.quizReset) e.preventDefault();
   if (d.set !== undefined) { await setSetting(d.set, t.checked); return; }
   e.stopPropagation();
@@ -1279,17 +1788,20 @@ document.addEventListener('click', async (e) => {
   if (d.recentPin) { const r = S.recent.find((x) => x.path === d.recentPin); await call('recent', { path: d.recentPin, action: r?.pinned ? 'unpin' : 'pin' }); if (r) r.pinned = !r.pinned; renderTop(); return; }
   if (d.url) return openUrl(d.url);
   if (d.href) return openUrl(d.href);
-  if (d.cclose) { const id = d.cclose; S.runs.delete(id); if (!id.includes(':')) call('forget', { runId: id }).catch(() => {}); renderConsole(); return; }
+  if (d.cclose) { closeRunTab(d.cclose); return; }
   if (d.fav) {
     const on = !isFav(d.fav);
     P().favorites = await call('fav', { path: P().path, id: d.fav, on });
     refreshScript(d.fav);
     if (S.tab === 'overview') renderTab();
+    // счётчик «Избранные» и сам список под этим фильтром зависят от звезды
+    else if (S.tab === 'scripts') { renderChips(); if (S.f.only === 'fav') renderList(); }
     toast(on ? 'Добавлено в быстрый запуск на «Обзоре»' : 'Убрано из быстрого запуска', '', null, 1600);
     return;
   }
   if (d.quiz) { Learn.answer(d.quiz, +d.n); return ensureTopic(); }
-  if (d.quizReset) { Learn.resetQuiz(d.quizReset); return ensureTopic(); }
+  if (d.quizReset) { Learn.resetQuiz(d.quizReset); ensureTopic(); return requestAnimationFrame(() => document.getElementById('quiz-' + d.quizReset.replace(':', '-'))?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })); }
+  if (d.cheat != null) { Learn.cheat(d.cheat, d.g); return ensureTopic(); }
   if (d.topic) return openTopic(d.topic);
   if (d.ask) return askHelp(d.ask);
   if (d.run) return toggleRun(d.run);
@@ -1298,7 +1810,7 @@ document.addEventListener('click', async (e) => {
   if (d.runArgs) {
     const v = ($('#args')?.value || '').trim(); S.argDraft[d.runArgs] = v;
     const r = lastOf(d.runArgs);
-    if (r?.status === 'running') { try { addRun(await call('restart', { runId: r.id, args: v }), true); } catch (x) { toast(String(x), 'bad'); } return; }
+    if (r?.status === 'running') { const s = scriptOf(d.runArgs); if (s && !(await askDanger(s, v))) return; try { addRun(await call('restart', { runId: r.id, args: v }), true); } catch (x) { toast(String(x), 'bad'); } return; }
     return runScript(d.runArgs, { args: v });
   }
   if (d.copy !== undefined) return copy(d.copy);
@@ -1325,16 +1837,27 @@ document.addEventListener('click', async (e) => {
   if (d.ciScope) { S.ci.scope = d.ciScope; renderTab(); ensureCI(); return; }
   if (d.ciStatus !== undefined) { S.ci.status = d.ciStatus; renderTab(); return; }
   if (d.hstatus !== undefined) { S.histFilter.status = d.hstatus; renderTab(); return; }
-  if (d.hint) { LS.set('hint.' + d.hint, 1); t.closest('.hint-box')?.remove(); return; }
+  if (d.hint) { LS.set('hint.' + d.hint, 1); const box = t.closest('.hint-box'); if (box) { dirty(box); box.remove(); } return; }
+  if (d.hintX) {
+    const on = !S.hintOpen.has(d.hintX);
+    if (on) S.hintOpen.add(d.hintX); else S.hintOpen.delete(d.hintX);
+    const box = t.closest('.hint-box'), body = box?.querySelector(':scope>div');
+    t.setAttribute('aria-expanded', on); dirty(box);
+    if (on) { box?.classList.add('open'); enterAnim(body); enterAnim(box?.querySelector(':scope>.btn'), 4); }
+    else closeWithAnim(body, () => box?.classList.remove('open'));
+    return;
+  }
+  if (d.flagsAll) { S.flagsAll.add(S.detail + ':' + d.flagsAll); renderDrawer(); return; }
   if (d.themeSet) { LS.set('theme', d.themeSet); applyTheme(); renderTop(); return; }
   if (d.termSize) { LS.set('termSize', +d.termSize); applyTheme(); renderTop(); return; }
-  if (d.detail) return openDetail(d.detail);
+  if (d.detail) return openDetail(d.detail, e.detail === 0);
   switch (d.act) {
     case 'home': S.project = null; S.detail = null; S.error = null; render(); break;
     case 'projects': S.pop = S.pop === 'projects' ? null : 'projects'; S.popQ = ''; S.popSel = 0; renderTop(); break;
     case 'settings': S.pop = S.pop === 'settings' ? null : 'settings'; renderTop(); break;
+    case 'more': S.pop = S.pop === 'more' ? null : 'more'; renderTop(); break;
     case 'help': openHelp(); break;
-    case 'side-toggle': LS.set('side.mini', !sideMini()); renderTop(); break;
+    case 'side-toggle': { const sd = $('#side'); sd.classList.add('anim'); setTimeout(() => sd.classList.remove('anim'), 260); LS.set('side.mini', !sideMini()); renderTop(); break; }
     case 'toggle-learn': setSetting('learn', !S.settings.learn); break;
     case 'close-overlay': closeOverlay(); break;
     case 'palette': openPalette(); break;
@@ -1342,12 +1865,16 @@ document.addEventListener('click', async (e) => {
     case 'rescan': rescan(); break;
     case 'openpath': { const v = $('#pathin').value.trim(); if (v) openProject(v); break; }
     case 'clearq': S.f.q = ''; $('#q').value = ''; t.hidden = true; renderChips(); renderList(); $('#q').focus(); break;
-    case 'reset-filters': S.f = { ...defaultFilters(), group: S.f.group }; saveFilters(); renderTab(); break;
+    // поле поиска - руками: patch() сравнивает атрибуты, а набранный текст живёт в свойстве value, и
+    // разметка «до» и «после» сброса одинакова - без этого в поле оставался прежний запрос
+    case 'reset-filters': { S.f = { ...defaultFilters(), group: S.f.group }; saveFilters(); const qi = $('#q'), c = $('[data-act=clearq]'); if (qi) qi.value = ''; if (c) c.hidden = true; renderTab(); break; }
     case 'showall': S.showAll = true; renderList(); break;
-    case 'closedrawer': S.detail = null; $$('.row.sel').forEach((x) => x.classList.remove('sel')); renderDrawer(); break;
-    case 'desc': t.classList.toggle('open'); break;
+    case 'closedrawer': closeDetail(); break;
+    case 'desc': S.descOpen = !S.descOpen; renderHead(); break;
+    case 'skip': $('#main').focus(); break;
     case 'ciload': { const r = remotesForCI().find((x) => x.name === S.ci.remote); if (r?.trusted) loadCI(r, true); break; }
     case 'docker-recheck': S.docker = null; renderTab(); loadEnv(true); break;
+    case 'git-trust': trustRepo(); break;
     case 'reset-hints': for (const k of Object.keys(UI().hints || {})) LS.set('hint.' + k, 0); S.pop = null; render(); break;
     case 'kb-reload': try { applyKb(await call('kb_reload')); toast('База знаний перечитана. Нажмите F5, чтобы обновить объяснения проекта', 'ok'); render(); } catch (x) { toast(String(x), 'bad'); } break;
     case 'all-topics': S.allTopics = !S.allTopics; renderTab(); break;
@@ -1371,13 +1898,22 @@ async function consoleAction(c) {
   if (c === 'copy') return copy([...(a.term?.plain || []), (a.term?.cur || []).map((x) => x[1]).join('')].join('\n'));
   if (c === 'find') { S.console.findOpen = !S.console.findOpen; return renderConsole(true); }
   if (c === 'err') {
-    const body = $('#tbody'), i = a.term.kinds.indexOf('err');
-    const n = body && $(`.ln[data-i="${i}"]`, body);
-    if (n) { n.scrollIntoView({ block: 'center' }); n.classList.add('cur-hit'); setTimeout(() => n.classList.remove('cur-hit'), 1600); }
-    else toast('Строка с ошибкой скрыта в начале - используйте «Копировать»');
+    // каждое нажатие - следующая строка с ошибкой по кругу, а не всегда первая
+    const body = $('#tbody'); if (!body) return;
+    const first = +($('.ln[data-i]', body)?.dataset.i ?? 0);
+    const errs = [];
+    a.term.kinds.forEach((k, i) => { if (k === 'err' && i >= first) errs.push(i); });
+    if (!errs.length) { toast('Строка с ошибкой скрыта в начале - используйте «Копировать»'); return; }
+    const i = errs.find((x) => x > (a.errAt ?? -1)) ?? errs[0];
+    a.errAt = i;
+    const n = $(`.ln[data-i="${i}"]`, body);
+    if (n) { $$('.ln.cur-hit', body).forEach((x) => x.classList.remove('cur-hit')); n.scrollIntoView({ block: 'center' }); n.classList.add('cur-hit'); setTimeout(() => n.classList.remove('cur-hit'), 1600); }
     return;
   }
-  if (c === 'eof') return call('stdin', { runId: a.id, eof: true, text: null }).catch((e) => toast(String(e), 'bad'));
+  if (c === 'eof') {
+    // после конца ввода поле прячется: писать в закрытый ввод - только получить ошибку
+    try { await call('stdin', { runId: a.id, eof: true, text: null }); a.stdinClosed = true; termSys(a, (UI().run || {}).eofDone || ''); renderConsole(); } catch (e) { toast(String(e), 'bad'); }
+  }
 }
 
 // ---------- ввод ----------
@@ -1402,12 +1938,14 @@ document.addEventListener('change', (e) => {
 // подсказка к термину
 document.addEventListener('mouseover', (e) => {
   const t = e.target.closest('.term'), tip = $('#tip');
-  if (!t) { tip.hidden = true; return; }
+  // mouseover идёт на каждое движение мыши: атрибут ставится, только если подсказка правда видна
+  if (!t) { if (!tip.hidden) tip.hidden = true; return; }
   const topic = topicMeta(t.dataset.topic);
   tip.innerHTML = `${esc(t.dataset.tip)}${topic ? `<small>урок: ${esc(topic.title)} - клик откроет</small>` : ''}`;
   tip.hidden = false;
   const r = t.getBoundingClientRect();
-  tip.style.left = Math.min(window.innerWidth - 350, Math.max(8, r.left)) + 'px';
+  // в узком окне подсказка не уходит за левый край: ширина берётся настоящая, а не 340
+  tip.style.left = Math.max(8, Math.min(window.innerWidth - tip.offsetWidth - 8, r.left)) + 'px';
   tip.style.top = (r.bottom + 6 + 120 > window.innerHeight ? r.top - tip.offsetHeight - 6 : r.bottom + 6) + 'px';
 });
 document.addEventListener('click', (e) => { const t = e.target.closest('.term'); if (t?.dataset.topic && topicMeta(t.dataset.topic)) { $('#tip').hidden = true; openTopic(t.dataset.topic); } }, true);
@@ -1415,7 +1953,26 @@ document.addEventListener('click', (e) => { const t = e.target.closest('.term');
 document.addEventListener('keydown', async (e) => {
   const tag = e.target.tagName, typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
   const k = e.key;
-  if (!$('#overlay').hidden) { if (k === 'Escape') { e.preventDefault(); closeOverlay(); return; } S.overlayKey?.(e); return; }
+  if (overlayOpen()) {
+    if (k === 'Escape') { e.preventDefault(); closeOverlay(); return; }
+    // фокус не уходит из окна поверх страницы: Tab и Shift+Tab ходят по кругу внутри него
+    if (k === 'Tab') {
+      const o = $('#overlay'), f = $$('button:not([disabled]), input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])', o).filter((x) => x.offsetParent);
+      const first = f[0], last = f[f.length - 1], cur = document.activeElement;
+      if (!f.length) { e.preventDefault(); return; }
+      if (!o.contains(cur) || (e.shiftKey ? cur === first || cur === o.firstElementChild : cur === last)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+      return;
+    }
+    S.overlayKey?.(e); return;
+  }
+  // Delete на вкладке консоли закрывает её, как крестик: крестик - часть вкладки, Tab на него не попадает
+  if (k === 'Delete' && e.target.matches?.('.ctab[data-crun]')) {
+    e.preventDefault();
+    // фокус переходит на соседнюю вкладку, а не падает на body; вкладок не осталось - на страницу
+    const i = $$('.ctab').indexOf(e.target);
+    closeRunTab(e.target.dataset.crun).then(() => { if (document.activeElement !== document.body) return; const tabs = $$('.ctab'); (tabs[Math.min(i, tabs.length - 1)] || $('#main')).focus(); });
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && ['k', 'K', 'p', 'л', 'з'].includes(k)) { e.preventDefault(); openPalette(); return; }
   if ((e.ctrlKey || e.metaKey) && ['o', 'O', 'щ'].includes(k)) { e.preventDefault(); if (P()) { S.pop = 'projects'; S.popQ = ''; S.popSel = 0; renderTop(); } else pick(); return; }
   if ((e.ctrlKey || e.metaKey) && ['j', 'J', 'о', '`'].includes(k)) { e.preventDefault(); toggleConsole(); return; }
@@ -1438,30 +1995,71 @@ document.addEventListener('keydown', async (e) => {
   }
   if (k === 'Escape') {
     if (S.pop) { S.pop = null; renderTop(); return; }
-    if (e.target.id === 'q' && S.f.q) { S.f.q = ''; e.target.value = ''; renderChips(); renderList(); return; }
+    if (e.target.id === 'q' && S.f.q) { S.f.q = ''; e.target.value = ''; const c = $('[data-act=clearq]'); if (c) c.hidden = true; renderChips(); renderList(); return; }
     if (e.target.id === 'cfind') { S.console.findOpen = false; S.console.find = ''; renderConsole(); return; }
-    if (S.detail) { S.detail = null; $$('.row.sel').forEach((x) => x.classList.remove('sel')); renderDrawer(); return; }
+    if (S.detail) { closeDetail(); return; }
     if (S.console.max) { S.console.max = false; renderConsole(); return; }
     if (typing) e.target.blur();
     return;
   }
   if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+  // строка, плитка, карточка с tabindex - не кнопка браузера: Enter и пробел нажимают её сами
+  const own = e.target.matches?.('[tabindex="0"]:not(button, a[href], input, select, textarea, summary, #tbody)');
+  if (own && (k === 'Enter' || k === ' ')) { e.preventDefault(); e.target.click(); return; }
+  // стрелки вверх и вниз - по соседним строкам того же списка, без десятков нажатий Tab
+  if (own && (k === 'ArrowDown' || k === 'ArrowUp')) {
+    const cls = ['row', 'pr', 'li', 'qtile', 'rcard'].find((c) => e.target.classList.contains(c));
+    if (cls) {
+      const all = $$(`.${cls}[tabindex="0"]`, e.target.closest('#main, #drawer') || document).filter((x) => x.offsetParent);
+      const i = all.indexOf(e.target), next = all[i + (k === 'ArrowDown' ? 1 : -1)];
+      if (next) { e.preventDefault(); next.focus(); }
+      return;
+    }
+  }
   if (k === '/' && P()) { e.preventDefault(); if (S.tab !== 'scripts') setTab('scripts'); setTimeout(() => $('#q')?.focus(), 0); return; }
   if (k === '?') { openHelp(); return; }
-  if (/^[1-6]$/.test(k) && P()) { setTab(TABS[+k - 1][0]); return; }
+  if (/^[1-9]$/.test(k) && P() && TABS[+k - 1]) { setTab(TABS[+k - 1][0]); return; }
 });
 document.addEventListener('mousedown', (e) => {
   if (!e.target.matches('[data-grip]')) return;
   e.preventDefault();
   const el = $('#console'), startY = e.clientY, startH = el.getBoundingClientRect().height;
   S.console.max = false; el.classList.remove('max');
-  const move = (ev) => { const h = Math.max(120, Math.min(window.innerHeight - 140, startH + (startY - ev.clientY))); S.console.h = h; el.style.setProperty('--ch', h + 'px'); };
-  const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); LS.set('c.h', S.console.h); };
+  // потолок тот же, что у #console в app.css (высота окна без заголовка минус 200): иначе запомненная
+  // высота больше видимой, и при уменьшении окна консоль закрывала всю страницу
+  const move = (ev) => { const h = Math.max(120, Math.min(window.innerHeight - 234, startH + (startY - ev.clientY))); S.console.h = h; el.style.setProperty('--ch', h + 'px'); };
+  // планка ручки видна, пока тянут, даже если указатель ушёл с полосы
+  const grip = e.target; grip.classList.add('on');
+  const up = () => { grip.classList.remove('on'); document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); LS.set('c.h', S.console.h); };
   document.addEventListener('mousemove', move);
   document.addEventListener('mouseup', up);
 });
-// F5 и Ctrl+R в окне перечитывают проект, а не перезагружают страницу
-document.addEventListener('contextmenu', (e) => { if (!e.target.closest('input,textarea,.tbody,pre,code')) e.preventDefault(); });
+// кнопка «наверх» у длинной страницы и у длинной панели подробностей: появляется, когда пролистано
+// почти экран (не меньше 400 px), стоит в правом нижнем углу своей области (не поверх соседней)
+function toTop(scroller) {
+  let b = scroller._top;
+  const far = scroller.scrollTop > Math.max(400, scroller.clientHeight * 0.8);
+  if (!far) { if (b) b.hidden = true; return; }
+  if (!b) {
+    b = scroller._top = document.createElement('button');
+    b.className = 'totop of-' + scroller.id; b.type = 'button';
+    b.innerHTML = '<span aria-hidden="true">↑</span>';
+    b.addEventListener('click', () => scroller.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
+    $('#body').append(b);
+  }
+  const t = (UI().lessonNav || {}).top || 'Наверх';
+  b.title = t; b.setAttribute('aria-label', t);
+  const r = scroller.getBoundingClientRect(), o = $('#body').getBoundingClientRect();
+  b.style.right = Math.round(o.right - r.right + 18) + 'px';
+  b.style.bottom = Math.round(o.bottom - r.bottom + 18) + 'px';
+  // кнопка не ложится на то, что можно нажать (край плитки, звезда, кнопка строки): там она прячется
+  // и появится снова, как только под ней окажется пустое место или текст
+  const x1 = r.right - 18 - 38, y1 = r.bottom - 18 - 38, pts = [[x1 + 3, y1 + 3], [x1 + 35, y1 + 3], [x1 + 3, y1 + 35], [x1 + 35, y1 + 35], [x1 + 19, y1 + 19]];
+  const HIT = 'button,a,input,select,textarea,summary,.row,.qtile,.li.click,.fchip,.sc-card';
+  b.hidden = pts.some(([x, y]) => document.elementsFromPoint(x, y).some((el) => el !== b && !b.contains(el) && scroller.contains(el) && el.closest(HIT)));
+}
+document.addEventListener('scroll', (e) => { if (e.target.id === 'main' || e.target.id === 'drawer') toTop(e.target); }, true);
+// контекстное меню WebView запрещает ui/titlebar.js: там же исключения - поля ввода и выделенный текст
 
 // ---------- старт ----------
 (async () => {
@@ -1479,4 +2077,7 @@ document.addEventListener('contextmenu', (e) => { if (!e.target.closest('input,t
     if (target) { await openProject(target); return; }
   } catch (e) { toast(String(e), 'bad'); }
   render();
-})();
+})().finally(() => {
+  // движение включается после первой отрисовки: окно открывается сразу готовым, без въезжающих частей
+  requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.add('anim-ready')));
+});

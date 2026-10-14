@@ -1,0 +1,108 @@
+/* Блоки страниц (ui/blocks.js): карточка с шапкой - заголовок, «i», ссылка, ручка, свёртка, меню.
+   Одна карточка на всё окно: блоки «Обзора» (переставляются) и разделы других вкладок (.static, не двигаются).
+   Цвета - токены, отступы - шкала --s*; скругление --rb и зазор --bgap - layout.css. */
+
+/* ---------- сетка: 1, 2 или 6 дорожек по ширине самой сетки (blocks.js, colsFor) ----------
+   Ширина блока - число дорожек в data-span: «половина» - 1 из 2 или 3 из 6, «треть» - 2 из 6. Края блоков стоят
+   на линиях дорожек, а крайние - на линиях колонки --gx. */
+.blk-grid{display:grid;gap:var(--bgap);position:relative;align-items:stretch}
+.blk-grid[data-cols="1"]{grid-template-columns:minmax(0,1fr)}
+.blk-grid[data-cols="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+.blk-grid[data-cols="6"]{grid-template-columns:repeat(6,minmax(0,1fr))}
+.blk[data-span="1"]{grid-column:span 1}
+.blk[data-span="2"]{grid-column:span 2}
+.blk[data-span="3"]{grid-column:span 3}
+.blk[data-span="4"]{grid-column:span 4}
+.blk[data-span="5"]{grid-column:span 5}
+.blk[data-span="6"]{grid-column:span 6}
+.blk-none{grid-column:1/-1}
+.blk-stack{display:flex;flex-direction:column;gap:var(--bgap)}
+.blk-stack+.blk-stack,.blk-stack+.blk{margin-top:var(--bgap)}
+
+/* ---------- карточка ---------- */
+.blk{position:relative;min-width:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:var(--rb);container:blk/inline-size}
+/* свёрнутый блок не тянется до высоты соседа по строке */
+.blk.closed{align-self:start}
+.blk.menu-open{z-index:21}
+
+/* шапка: заголовок на поле --s4 (как содержимое), справа - ссылка и кнопки блока; всё на одной средней линии */
+.blk-h{position:relative;display:flex;align-items:center;gap:var(--s2);min-height:var(--bh);padding:var(--s1) var(--s2) var(--s1) var(--s4);user-select:none;-webkit-user-select:none;touch-action:none;cursor:grab}
+.blk.static .blk-h{cursor:default;touch-action:auto;padding-right:var(--s4)}
+.blk-h h2.blk-t{display:block;min-width:0;margin:0;font-size:11.5px;line-height:20px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.blk-h .info{cursor:help}
+.blk-aside{margin-left:auto;display:flex;align-items:center;min-width:0}
+.blk-aside .tlink{margin:0}
+.blk-ctl{display:flex;align-items:center;gap:2px;flex:none}
+/* кнопки блока - 28 px (цель не меньше 24, WCAG 2.5.8); значок третичным цветом, при наведении - основным */
+.blk-ic{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:8px;background:none;color:var(--faint);cursor:pointer}
+.blk-ic:hover,.blk-ic[aria-expanded=true]:not(.blk-fold){background:var(--soft);color:var(--ink)}
+.blk-ic svg{display:block}
+.blk-grip{cursor:grab}
+.blk-fold svg{transition:transform var(--t-med) var(--ease)}
+.blk.closed .blk-fold svg{transform:rotate(-90deg)}
+
+/* тело: свёртка - высота строки сетки 1fr -> 0fr, без замеров высоты в скрипте; линия под шапкой живёт внутри
+   обрезки, поэтому у свёрнутого блока не остаётся двойной черты */
+.blk-b{flex:1;display:grid;grid-template-rows:1fr}
+.blk.closed .blk-b{grid-template-rows:0fr}
+.blk-in{min-height:0;overflow:hidden;border-radius:0 0 calc(var(--rb) - 1px) calc(var(--rb) - 1px)}
+.blk-pad{height:100%;padding:var(--s4);border-top:1px solid var(--line)}
+.blk-pad.flush{padding:0}
+.blk-empty{margin:0;padding:var(--s2) 0;color:var(--mute);font-size:13px;text-align:center}
+
+/* содержимое внутри карточки: плитки - слоем --panel2, списки - во всю ширину карточки без своей рамки */
+.blk .qtile{background:var(--panel2)}
+.blk .qtile .t b.plain{font-family:inherit}
+.blk-pad.flush>.list{border:0;border-radius:0;background:none}
+.blk-pad.flush>.rows{border:0;border-radius:0}
+
+/* ---------- перенос ---------- */
+.blk.drag{z-index:20;cursor:grabbing;box-shadow:var(--shadow);border-color:var(--accent);will-change:transform}
+html.blk-dragging,html.blk-dragging *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}
+
+/* ---------- меню блока и меню «Блоки» ---------- */
+.blk-menu{position:absolute;right:var(--s2);top:calc(100% - var(--s1));z-index:30;min-width:210px;padding:var(--s1);display:flex;flex-direction:column;gap:1px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);cursor:default;text-transform:none;letter-spacing:0}
+/* у всех пунктов текст на одной вертикали: место под галочку есть и у пунктов без неё */
+.blk-mi{display:flex;align-items:center;gap:var(--s2);min-height:30px;padding:0 var(--s3) 0 var(--s2);border:0;border-radius:7px;background:none;color:var(--ink);font-size:13px;text-align:left;white-space:nowrap;cursor:pointer}
+.blk-mi[role=menuitem]{padding-left:calc(var(--s2) + 14px + var(--s2))}
+.blk-mi:hover,.blk-mi:focus-visible{background:var(--soft)}
+.blk-mi:focus-visible{outline-offset:-2px}
+.blk-mi[aria-disabled=true]{color:var(--faint);cursor:default;background:none}
+.blk-chk{width:14px;height:14px;flex:none;display:grid;place-items:center}
+.blk-mi[aria-checked=true] .blk-chk::after{content:"";width:8px;height:4px;margin-top:-2px;border-left:2px solid var(--accent-ink);border-bottom:2px solid var(--accent-ink);transform:rotate(-45deg)}
+.blk-mh{padding:6px var(--s2) 2px calc(var(--s2) + 14px + var(--s2));font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+.blk-sep{height:1px;margin:var(--s1) 0;background:var(--line)}
+.blk-list{position:relative;display:inline-flex}
+.blk-list>.btn svg{flex:none}
+.blk-list .blk-menu{right:0;top:calc(100% + var(--s1))}
+.blk-n{font-size:11px;line-height:1.6;padding:0 6px;border-radius:99px;background:var(--soft);color:var(--mute)}
+
+@media (prefers-reduced-motion:no-preference){
+  html.anim-ready .blk-b{transition:grid-template-rows var(--t-med) var(--ease)}
+  html.anim-ready .blk-menu{animation:m-pop-in var(--t-med) var(--ease);transform-origin:top right}
+}
+@media (prefers-reduced-motion:reduce){.blk-fold svg{transition:none}}
+
+/* ---------- разделы других вкладок той же карточкой (Blocks.card) ---------- */
+.stats+.blk-stack{margin-top:var(--bgap)}
+.blk-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--bgap)}
+@container main (max-width:720px){.blk-pair{grid-template-columns:minmax(0,1fr)}}
+.blk-pad.flush>.list+.list{border-top:1px solid var(--line)}
+.blk-aside .gq{width:min(200px,100%);padding-block:3px}
+/* панель фильтров над списком в карточке (история, пайплайны): поле карточки и линия под панелью */
+.blk-tools{margin:0;padding:var(--s3) var(--s4);border-bottom:1px solid var(--line)}
+.blk-in-pad{padding:var(--s3) var(--s4)}
+.blk-pad.flush>.runs{border:0;border-radius:0;margin:0;background:none}
+.blk-pad.flush>.blk-empty{padding:var(--s4)}
+.blk-nothing{border:0;border-radius:0;background:none}
+/* состояние вместо данных: «git не запускался» - заголовок, пояснение и кнопка, по левому краю на поле карточки */
+.blk-state{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s2)}
+.blk-state b{font-size:13px}
+.blk-state p{margin:0;color:var(--mute);font-size:12.5px;max-width:90ch}
+.stat .stat-unk{font-size:13px;font-weight:500}
+/* разделы настройки CI внутри одной карточки: линия между разделами вместо карточки в карточке */
+.cfgsec{padding:var(--s3) var(--s4) var(--s2)}
+.cfgsec+.cfgsec{border-top:1px solid var(--line)}
+.cfgsec h4{margin:0 0 var(--s2);font-size:14px;display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap}
+.cfgsec h4 small{color:var(--mute);font-weight:400}
+.blk-aside .note{margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

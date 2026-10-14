@@ -1,0 +1,25 @@
+/* Минимальный интерфейс (настройка minimal, класс html.ui-min): только кнопки и данные.
+   Прячется пояснительный текст - подсказки, значки «i», описания в списках, пояснения этапов,
+   «разобрано N мс назад», источник пояснения. Ничего, на что можно нажать, не прячется.
+   Отступы плотнее: --s3..--s6 меньше на шаг, строки списков ниже. Противоположность режиму обучения. */
+html.ui-min{--s3:10px;--s4:12px;--s5:18px;--s6:24px}
+
+/* подсказки и значки «i» */
+html.ui-min .hint-box,html.ui-min .hint-chip,html.ui-min span.info{display:none!important}
+
+/* шапка страницы: без подписи раздела, описания проекта и «разобрано…» */
+html.ui-min .ph-meta .crumb,html.ui-min .ph-desc,html.ui-min .ph-meta .freshness{display:none}
+html.ui-min .ph-meta>.crumb+.ph-m::before{content:none}
+html.ui-min .pagehead{margin-bottom:var(--s3)}
+
+/* скрипты: только имя и значки; описание - в панели подробностей */
+html.ui-min .row .rdesc{display:none}
+html.ui-min .row{min-height:0;padding-top:6px;padding-bottom:6px}
+html.ui-min .group h3 .gh{display:none}
+
+/* обзор: строки состояния, плитки запуска и уроков без пояснений, документы без подписи */
+html.ui-min .hrow .hd,html.ui-min .qtile .t>span,html.ui-min .blk .li .sub{display:none}
+html.ui-min .hrow{min-height:36px}
+
+/* панель подробностей: без строки «откуда пояснение» */
+html.ui-min .srcnote{display:none}

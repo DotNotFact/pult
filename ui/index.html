@@ -8,24 +8,41 @@
 <link rel="stylesheet" href="app.css">
 <link rel="stylesheet" href="learn.css">
 <link rel="stylesheet" href="layout.css">
+<link rel="stylesheet" href="blocks.css">
+<link rel="stylesheet" href="widget.css">
+<link rel="stylesheet" href="scenarios.css">
+<link rel="stylesheet" href="statusbar.css">
+<link rel="stylesheet" href="titlebar.css">
+<link rel="stylesheet" href="minimal.css">
 <script src="theme.js"></script>
 </head>
 <body>
+<button id="skip" class="skip" type="button" data-act="skip"></button>
+<header id="titlebar" data-tauri-drag-region></header>
 <div id="app">
   <nav id="side" aria-label="Разделы"></nav>
   <div id="col">
     <div id="body">
       <main id="main" tabindex="-1"></main>
-      <aside id="drawer" hidden></aside>
+      <div id="scrim" data-act="closedrawer" aria-hidden="true"></div>
+      <aside id="drawer" aria-labelledby="dh-title" hidden></aside>
     </div>
     <section id="console" hidden></section>
+    <footer id="statusbar"></footer>
   </div>
 </div>
+<div id="widget" hidden></div>
 <div id="pops"></div>
 <div id="overlay" hidden></div>
-<div id="toasts" aria-live="polite"></div>
+<div id="toasts" role="status" aria-live="polite"></div>
+<div id="sr" class="sr" aria-live="polite"></div>
 <div id="tip" hidden></div>
+<script src="titlebar.js"></script>
 <script src="learn.js"></script>
+<script src="blocks.js"></script>
 <script src="app.js"></script>
+<script src="scenarios.js"></script>
+<script src="widget.js"></script>
+<script src="statusbar.js"></script>
 </body>
 </html>

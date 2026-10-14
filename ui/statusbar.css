@@ -1,0 +1,27 @@
+/* Строка состояния: тонкая полоса под консолью. Края - общий отступ колонки --gx (layout.css: тот же, что
+   у содержимого, консоли и панели подробностей), поэтому текст стоит на одной вертикали с ними.
+   Что не помещается, уходит целиком по важности (data-p, statusbar.js), а не сжимается. */
+/* поля по бокам - --gx; зазоры сверху и снизу задаёт стопка в layout.css (#col>#statusbar, --gy) */
+#statusbar{flex:none;padding:0 var(--gx);min-width:0}
+#statusbar:empty{display:none}
+html.widget-mode #statusbar{display:none}
+/* -7px: поле кнопки уходит за край, а текст первого и последнего пункта встаёт ровно на линию --gx */
+.stb{display:flex;align-items:center;height:var(--stbh);margin:0 -7px;font-size:11.5px;color:var(--mute);min-width:0;white-space:nowrap;overflow:hidden}
+.stb-g{display:flex;align-items:center;flex:none}
+.stb-i{display:inline-flex;align-items:center;gap:5px;padding:2px 7px;border-radius:7px;border:0;background:none;color:inherit;font:inherit;flex:none;font-variant-numeric:tabular-nums;position:relative}
+/* разделитель - перед каждым пунктом, кроме первого; спрятанный пункт уносит свой разделитель с собой */
+.stb-g>.stb-i+.stb-i{margin-left:9px}
+.stb-g>.stb-i+.stb-i::before{content:"";position:absolute;left:-5px;top:50%;width:1px;height:12px;margin-top:-6px;background:var(--line)}
+/* цель не ниже 24 px (WCAG 2.5.8) - строка высотой 26 её вмещает; кольцо фокуса внутрь: .stb режет выступающее */
+button.stb-i{cursor:pointer;min-height:24px}
+.stb-i:focus-visible{outline-offset:-2px}
+button.stb-i:hover:not(:disabled){background:var(--soft);color:var(--ink)}
+.stb-i b{font-weight:600;color:var(--ink);max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.stb-i svg{flex:none}
+.stb-n{font-size:10.5px;padding:0 6px;border-radius:99px;background:var(--soft);line-height:1.6}
+.stb-n.warn{background:var(--warn-soft);color:var(--warn)}
+.stb-ab svg{vertical-align:-1px;margin-right:1px}
+.stb .dot{width:7px;height:7px}
+.stb-rec:disabled{opacity:.45;cursor:default}
+/* всплывающие сообщения не ложатся на строку состояния */
+@media (min-width:761px){html:not(.widget-mode) #toasts{bottom:calc(var(--stbh) + var(--gy) + var(--s2))}}

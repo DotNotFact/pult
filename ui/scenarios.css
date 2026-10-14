@@ -1,0 +1,113 @@
+/* Вкладка «Сценарии»: карточки цепочек, живой ход по шагам, редактор. Цвета только из токенов app.css. */
+.sc-top{display:flex;align-items:center;gap:var(--s3);justify-content:space-between;margin:0 0 var(--bgap);flex-wrap:wrap}
+.sc-top .note{margin:0;max-width:72ch;line-height:1.5}
+
+/* карточка сценария - та же карточка, что блоки (blocks.css): скругление --rb, шапка высотой --bh с полем --s4
+   слева и линией снизу, тело с полем --s4; соседние карточки одной строки одной высоты */
+.sc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr));gap:var(--bgap)}
+.sc-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--rb);padding:0 0 var(--s3);display:flex;flex-direction:column;gap:var(--s3);min-width:0;transition:border-color .15s}
+.sc-card>:not(.sc-h){margin:0 var(--s4)}
+.sc-card.on{border-color:color-mix(in srgb,var(--info) 55%,var(--line))}
+.sc-card.editing{border-color:var(--accent)}
+.sc-h{display:flex;align-items:center;gap:var(--s3);min-width:0;min-height:var(--bh);padding:var(--s1) var(--s2) var(--s1) var(--s4);border-bottom:1px solid var(--line)}
+.sc-t{flex:1;min-width:0}
+.sc-t b{display:block;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-t small{display:block;color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-acts{display:flex;gap:var(--s1);flex:none}
+
+/* цепочка шагов: капсулы со стрелкой между ними */
+.sc-chain{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 0;align-items:center;min-width:0}
+.sc-link{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 4px;border:1px solid var(--line);border-radius:99px;background:var(--panel2);font-size:12px;min-width:0;max-width:100%;position:relative}
+.sc-link+.sc-link{margin-left:22px}
+.sc-link+.sc-link::before{content:"→";position:absolute;left:-17px;color:var(--faint);font-size:12px}
+.sc-link .n{width:18px;height:18px;border-radius:50%;background:var(--soft);color:var(--mute);display:grid;place-items:center;font-size:10.5px;font-weight:600;flex:none}
+.sc-link .dot{margin:0 4px;width:8px;height:8px}
+.sc-link .nm{font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sc-link .ar{color:var(--mute);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.sc-link.k-running{border-color:var(--info);background:var(--info-soft)}
+.sc-link.k-ok{border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
+.sc-link.k-fail{border-color:var(--bad);background:var(--bad-soft)}
+.sc-link.k-stopped{border-style:dashed}
+.sc-link.miss{border-style:dashed;color:var(--faint)}
+
+.sc-prog{display:flex;align-items:center;gap:var(--s1) var(--s2);font-size:12.5px;color:var(--mute);flex-wrap:wrap;min-width:0}
+.sc-prog .tx{min-width:0;flex:1}
+.sc-prog.p-fail .tx{color:var(--bad)}
+.sc-prog.p-ok .tx{color:var(--ok)}
+.sc-prog .tlink{margin:0}
+.sc-prog .bar{flex:1 1 100%;height:4px;border-radius:99px;background:var(--soft);overflow:hidden}
+.sc-prog .bar i{display:block;height:100%;background:var(--info);border-radius:inherit;transition:width .3s ease}
+.sc-prog.p-ok .bar i{background:var(--ok)}
+.sc-prog.p-fail .bar i{background:var(--bad)}
+.sc-prog.p-stopped .bar i{background:var(--faint)}
+
+/* пустая вкладка: что такое сценарий и пример */
+.sc-empty{max-width:580px;margin:var(--s6) auto;text-align:center;display:flex;flex-direction:column;align-items:center;gap:var(--s2);padding:var(--s6) var(--s5);border:1px dashed var(--line);border-radius:var(--rb);background:var(--panel)}
+.sc-ico{width:54px;height:54px;border-radius:16px;background:var(--accent-soft);color:var(--accent-ink);display:grid;place-items:center;margin-bottom:4px}
+.sc-empty>b{font-size:17px;letter-spacing:-.2px}
+.sc-empty p{margin:0;color:var(--mute);line-height:1.55;max-width:48ch}
+.sc-example{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;margin:var(--s2) 0 var(--s3);padding:var(--s3) var(--s4);background:var(--panel2);border-radius:12px;border:1px solid var(--line);max-width:100%}
+.sc-exname{font-weight:650;font-size:13px}
+.sc-example .sc-link{padding-left:10px}
+
+/* редактор */
+.sc-editor{border-color:var(--accent);padding:var(--s4);margin-bottom:var(--s5)}
+.sc-editor h4{font-size:15px;margin-bottom:var(--s3)}
+.sc-f{display:flex;flex-direction:column;gap:var(--s2);margin:0 0 var(--s4);min-width:0}
+.sc-f>span{font-size:12px;color:var(--mute);font-weight:600}
+.sc-f>input[type=text]{max-width:420px}
+.sc-steps{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel)}
+.sc-step{display:grid;grid-template-columns:24px minmax(0,1fr) minmax(100px,220px) auto;gap:var(--s3);align-items:center;padding:6px 8px 6px 10px;border-bottom:1px solid var(--line)}
+.sc-step:last-child{border-bottom:0}
+.sc-step .n{width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);display:grid;place-items:center;font-size:11px;font-weight:700}
+.sc-sm{min-width:0;display:flex;flex-direction:column}
+.sc-sm b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-sm small{color:var(--mute);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-step .sc-args{padding:4px 8px;font-size:12.5px;font-family:var(--mono);width:100%}
+.sc-sb{display:flex}
+.sc-step.miss .sc-sm b{color:var(--faint);text-decoration:line-through}
+.sc-none{padding:12px;color:var(--mute);font-size:12.5px;text-align:center;list-style:none}
+.sc-add{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel)}
+.sc-add input[type=search]{width:100%;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:8px 10px}
+.sc-add input[type=search]:focus{box-shadow:none;border-color:var(--line);background:var(--panel2)}
+.sc-pick{max-height:230px;overflow:auto;padding:4px}
+.sc-opt{display:flex;align-items:center;gap:10px;width:100%;min-height:38px;padding:5px 8px;border:0;background:none;border-radius:8px;cursor:pointer;text-align:left;color:inherit}
+.sc-opt:hover,.sc-opt:focus-visible{background:var(--soft)}
+.sc-opt .plus{width:24px;height:24px;border-radius:7px;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center;font-weight:700;flex:none}
+.sc-opt .sc-sm{flex:1}
+.sc-sw{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:0 var(--s4)}
+.sc-foot{display:flex;justify-content:flex-end;gap:var(--gap-btn);margin-top:var(--s3);padding-top:var(--s3);border-top:1px solid var(--line)}
+
+@container main (max-width:560px){
+  .sc-step{grid-template-columns:24px minmax(0,1fr) auto}
+  .sc-step .sc-args{grid-column:2/-1;grid-row:2}
+  .sc-h{flex-wrap:wrap}
+  .sc-acts{width:100%;justify-content:flex-end}
+  .sc-empty{padding:var(--s5) var(--s4);margin:var(--s3) auto}
+}
+@media (prefers-reduced-motion:reduce){.sc-card,.sc-prog .bar i{transition:none}}
+.sc-topact{display:flex;gap:var(--gap-btn);flex-wrap:wrap;justify-content:flex-end}
+
+/* список «Добавить шаг»: часто нужные сверху, значки ★ / часто / рекомендуем */
+.sc-grp{padding:8px 8px 4px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);font-weight:650}
+.sc-grp:not(:first-child){margin-top:4px;border-top:1px solid var(--line);padding-top:10px}
+.sc-bdgs{display:flex;gap:4px;align-items:center;flex:none}
+.sc-bdg{font-size:10.5px;line-height:1.6;padding:0 7px;border-radius:99px;white-space:nowrap}
+.sc-bdg.fav{background:var(--warn-soft);color:var(--warn)}
+.sc-bdg.often{background:var(--info-soft);color:var(--info)}
+.sc-bdg.rec{background:var(--ok-soft);color:var(--ok)}
+
+/* панель популярных сценариев */
+.sc-sugnote{margin:calc(-1 * var(--s1)) 0 var(--s3)}
+.sc-sglist{display:flex;flex-direction:column;gap:var(--s2)}
+.sc-sg{border:1px solid var(--line);border-radius:var(--r);padding:var(--s2) var(--s3);background:var(--panel2);display:flex;flex-direction:column;gap:6px;transition:opacity .15s}
+.sc-sg.off{opacity:.6}
+.sc-sg .set{padding:2px 0}
+.sc-sg .set b{font-size:13.5px}
+.sc-sg .sc-chain{padding-left:44px}
+.sc-sg .sc-link{padding-right:4px}
+.sc-x{width:20px;height:20px;border-radius:50%;border:0;background:none;color:var(--faint);cursor:pointer;display:grid;place-items:center;flex:none;padding:0}
+.sc-x:hover:not(:disabled){background:var(--bad-soft);color:var(--bad)}
+.sc-x:disabled{display:none}
+@container main (max-width:560px){.sc-sg .sc-chain{padding-left:0}}
+@media (prefers-reduced-motion:reduce){.sc-sg{transition:none}}

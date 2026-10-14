@@ -1,0 +1,111 @@
+/* Виджет: всё окно - одна карточка с самым нужным. Цвета только из токенов app.css, отступы - --s1..--s6.
+   Текст не обрезается: длинные имена переносятся (overflow-wrap:anywhere), многоточий нет. */
+#widget{position:fixed;inset:0;background:var(--panel);display:flex;z-index:30}
+html.widget-mode #app,html.widget-mode #pops,html.widget-mode #tip{display:none!important}
+html.widget-mode,html.widget-mode body{background:var(--panel)}
+html.widget-mode #toasts{left:var(--s3);right:var(--s3);bottom:calc(var(--s6) + var(--s3));align-items:stretch}
+html.widget-mode .toast{max-width:100%;font-size:12px;padding:7px 10px}
+
+.wg{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel);overflow:hidden}
+
+/* тело: прокрутка своей полосой (layout.css), когда окно упёрлось в наибольшую высоту */
+.wg-body{flex:1;min-height:0;overflow:auto;padding:var(--s3)}
+.wg-list{display:flex;flex-direction:column;gap:var(--s3)}
+.wg-sec{display:flex;flex-direction:column;gap:var(--s1);min-width:0}
+.wg-sec h5{margin:0 0 2px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);font-weight:650;line-height:1.3}
+.wg-none{color:var(--mute);font-size:12px;line-height:1.4;padding:2px 2px 0;overflow-wrap:anywhere}
+
+/* строка: точка, имя (переносится), кнопка справа на две строки, под именем - числа */
+.wg-row{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:var(--s2);row-gap:1px;min-height:40px;padding:var(--s1) var(--s1) var(--s1) var(--s3);border-radius:var(--r);background:var(--soft);min-width:0}
+.wg-row>.dot,.wg-row>.ic{grid-column:1;grid-row:1}
+.wg-row>.ic{display:grid;place-items:center;color:var(--mute)}
+.wg-row>.t{grid-column:2;grid-row:1;font-size:12.5px;line-height:1.35;overflow-wrap:anywhere;min-width:0}
+.wg-row>.wg-act{grid-column:3;grid-row:1/span 2}
+.wg-row>.m{grid-column:2;grid-row:2;font-size:11.5px;line-height:1.35;color:var(--mute);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:0}
+.wg-row .mono,.wg-last .mono{font-family:var(--mono)}
+.wg-run .m{display:flex;flex-wrap:wrap;column-gap:var(--s2)}
+.wg-run .wg-eta{min-width:0;font-size:11.5px;white-space:normal}
+.wg-sc>.t{font-weight:600}
+.wg-sc.on{background:var(--info-soft)}
+.wg-sc.on>.m{color:var(--info)}
+.wg-git>.m .ok{color:var(--ok)}
+.wg-git>.m .warn{color:var(--warn)}
+.wg-git .ab{white-space:nowrap}
+.wg-git .ab svg{vertical-align:-1px;margin-right:1px}
+
+.wg-act{width:32px;height:32px;flex:none;border-radius:8px;border:1px solid var(--line);background:var(--panel);cursor:pointer;display:grid;place-items:center;font-size:11px;line-height:1;padding:0}
+.wg-act.stop{color:var(--bad)}
+.wg-act.stop:hover{border-color:var(--bad);background:var(--bad-soft)}
+.wg-act.go{color:var(--ok)}
+.wg-act.go:hover{border-color:var(--ok);background:var(--ok-soft)}
+.wg-act:disabled{color:var(--faint);cursor:default;background:var(--soft)}
+
+/* последний завершённый запуск - одна строка, имя переносится */
+.wg-last{display:flex;align-items:center;gap:var(--s2);width:100%;min-height:32px;border:0;background:none;padding:var(--s1) var(--s2);cursor:pointer;color:inherit;text-align:left;border-radius:8px;font-size:12px;line-height:1.35}
+.wg-last:hover{background:var(--soft)}
+.wg-last .t{flex:1;min-width:0;overflow-wrap:anywhere}
+.wg-last .lb{color:var(--faint);font-size:11.5px}
+.wg-last .d{color:var(--mute);font-size:11.5px;flex:none;font-variant-numeric:tabular-nums}
+
+/* быстрый запуск: до четырёх кнопок стопкой, полные имена */
+.wg-quick{display:flex;flex-direction:column;gap:var(--s1)}
+.wg-q{display:flex;align-items:center;gap:var(--s2);width:100%;min-height:36px;padding:var(--s1) var(--s2);border:1px solid var(--line);background:var(--panel2);border-radius:var(--r);cursor:pointer;text-align:left;color:inherit;min-width:0;transition:border-color .12s}
+.wg-q:hover{border-color:var(--accent)}
+.wg-q:disabled{opacity:.5;cursor:not-allowed}
+.wg-q .ic{width:24px;height:24px;border-radius:7px;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center;font-size:9px;flex:none}
+.wg-q.on{border-color:color-mix(in srgb,var(--info) 50%,var(--line));background:var(--info-soft)}
+.wg-q.on .ic{background:var(--bad-soft);color:var(--bad)}
+.wg-q .t{flex:1;min-width:0;font-family:var(--mono);font-size:12px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+
+/* строка внизу: вид строки состояния окна (statusbar.css: .stb, .stb-g, .stb-i, .stb-rec), высота - под палец.
+   Окно за неё не тянется: место для перетаскивания - только верхняя полоса. Ветка не влезает - прячется (widget.js, fitBar). */
+.wg-foot{flex:none;padding:0 var(--s3);border-top:1px solid var(--line);background:var(--bg);min-width:0;--stbh:34px}
+.wg-stb{height:auto;min-height:var(--stbh);cursor:default;user-select:none;-webkit-user-select:none}
+.wg-stb .stb-i{min-height:28px}
+.wg-stb .stb-i b{max-width:none;overflow:visible;text-overflow:clip}
+.wg-stb .mono{font-family:var(--mono)}
+.wg-stb .wf-eta{min-width:0;font-size:11.5px}
+/* разделитель только между видимыми пунктами: спрятанный первый не оставляет черту в начале строки */
+.wg-stb .wf-left>.stb-i{margin-left:0}
+.wg-stb .wf-left>.stb-i::before{display:none}
+.wg-stb .wf-left>.stb-i:not([hidden])~.stb-i:not([hidden]){margin-left:9px}
+.wg-stb .wf-left>.stb-i:not([hidden])~.stb-i:not([hidden])::before{display:block}
+.wg-stb .wf-right{margin-left:var(--s1)}
+.wg-stb .wf-x{width:32px;min-height:32px;justify-content:center;padding:0}
+.wg-stb .wf-x:hover{background:var(--bad);color:var(--on-status)}
+.wg-stb .stb-rec{min-height:32px;min-width:32px;justify-content:center}
+.wg-stb .wf-x:focus-visible,.wg-stb .stb-rec:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* самый нужный пункт не прячется: если и он не влезает, переносится, а не обрезается */
+.wg-stb:not(.measure) .wf-left{flex:0 1 auto;min-width:0}
+.wg-stb:not(.measure) .stb-i[data-p="0"]{flex:0 1 auto;min-width:0;white-space:normal;flex-wrap:wrap;overflow-wrap:anywhere}
+
+@media (prefers-reduced-motion:reduce){.wg-q{transition:none}}
+
+/* настройки: блоки виджета со стрелками порядка */
+.wset-list{display:flex;flex-direction:column;margin:2px 0 4px}
+.wset{display:flex;align-items:center;gap:6px}
+.wset .set{flex:1;padding:4px 0}
+.wset.off .set span{color:var(--mute)}
+.wset-mv{display:flex;flex:none}
+
+/* верхняя полоса виджета: значок и имя - место для перетаскивания, справа три кнопки окна */
+.wg-top{flex:none;display:flex;align-items:center;gap:var(--s2);height:36px;padding:0 var(--s1) 0 var(--s3);background:var(--bg);border-bottom:1px solid var(--line);user-select:none;-webkit-user-select:none}
+.wg-logo{width:16px;height:16px;flex:none}
+.wg-title{flex:1;min-width:0;font-size:12.5px;font-weight:600;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
+.wg-tb{width:32px;height:28px;flex:none;border:0;border-radius:8px;background:none;color:var(--mute);display:grid;place-items:center;cursor:pointer;padding:0}
+.wg-tb:hover{background:var(--soft);color:var(--ink)}
+.wg-tb.on{color:var(--accent-ink);background:var(--accent-soft)}
+.wg-tb.x:hover{background:var(--bad);color:var(--on-status)}
+.wg-tb:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* нижняя строка: репозиторий и ветка в одну строку, без переносов */
+.wg-stb{flex-wrap:nowrap;white-space:nowrap;overflow:hidden}
+.wg-stb .wf-proj{min-width:0;flex:0 1 auto}
+.wg-stb .wf-proj b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.wg-stb .wf-git{flex:none}
+
+/* пока край тянут ниже порога: вместо сжатого окна - заглушка, без перерисовки раскладки под рукой */
+html.widget-pending #app,html.widget-pending #titlebar,html.widget-pending #pops,html.widget-pending #toasts{visibility:hidden}
+#wg-pending{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--s2);padding:var(--s4);background:var(--bg);text-align:center}
+#wg-pending[hidden]{display:none}
+#wg-pending b{font-size:14px;color:var(--ink)}
+#wg-pending span{font-size:12px;color:var(--mute)}

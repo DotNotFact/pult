@@ -1,0 +1,20 @@
+/* Свой заголовок окна. Высота - --tbh; всё, что считало высоту от 100vh, вычитает её. */
+:root{--tbh:34px;--vh:calc(100vh - var(--tbh))}
+:root.no-tb{--tbh:0px}
+:root.no-tb #titlebar{display:none}
+#titlebar{height:var(--tbh);display:flex;align-items:center;gap:8px;padding-left:var(--gx,16px);background:var(--bg);user-select:none;-webkit-user-select:none;position:relative;z-index:40;flex:none}
+#titlebar .tb-logo{width:16px;height:16px;flex:none}
+#titlebar .tb-title{flex:1;min-width:0;font-size:12.5px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
+#titlebar .tb-btns{display:flex;height:100%;flex:none}
+#titlebar .tb-btn{width:46px;height:100%;border:0;border-radius:0;background:none;color:var(--mute);display:grid;place-items:center;cursor:pointer;padding:0;transition:background var(--t-fast,.12s) ease,color var(--t-fast,.12s) ease}
+#titlebar .tb-btn:hover{background:var(--soft);color:var(--ink)}
+#titlebar .tb-btn.close:hover{background:var(--bad);color:var(--on-status,#fff)}
+#titlebar .tb-btn:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* всё, что раньше бралось от 100vh, теперь от --vh: высота окна без заголовка */
+@media (prefers-reduced-motion:reduce){#titlebar .tb-btn{transition:none}}
+/* полоса растягивания вдоль верхнего края и углы: курсор показывает, куда потянется окно */
+#titlebar .tb-edge{position:absolute;top:0;z-index:2}
+#titlebar .tb-edge.n{left:8px;right:8px;height:4px;cursor:ns-resize}
+#titlebar .tb-edge.nw{left:0;width:8px;height:8px;cursor:nwse-resize}
+#titlebar .tb-edge.ne{right:0;width:8px;height:8px;cursor:nesw-resize}
+#titlebar.max .tb-edge{display:none}
