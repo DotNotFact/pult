@@ -6,9 +6,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const K = path.dirname(fileURLToPath(import.meta.url));
-const TOPICS = ['terminal', 'git', 'node', 'package-managers', 'typescript', 'frontend', 'testing', 'code-quality', 'env', 'task-runners', 'shell-scripts',
-  'docker', 'docker-compose', 'wsl', 'ci-cd', 'dotnet', 'rust', 'python', 'go', 'java', 'databases', 'deploy'];
-const SECTIONS = ['idea', 'diagram', 'terms', 'steps', 'anatomy', 'example', 'compare', 'chart', 'mistakes', 'cheatsheet', 'quiz', 'project'];
+// список уроков и их порядок - в lessons.json, его же читают окно и терминал
+const TOPICS = JSON.parse(await fs.readFile(path.join(K, 'lessons.json'), 'utf8')).order;
+const SECTIONS = ['idea', 'diagram', 'terms', 'steps', 'anatomy', 'example', 'codepair', 'compare', 'chart', 'mistakes', 'rules', 'practice', 'cheatsheet', 'quiz', 'project'];
+const RULE_KINDS = ['do', 'dont', 'when', 'tip'];
 const DASHES = new RegExp('[' + String.fromCharCode(0x2014, 0x2013) + ']');
 const BAD_WORDS = /(давайте разбер|важно отметить|стоит отметить|(?<![а-яё])мощн|современн|(?<![а-яё])является|в мире|не секрет|по сути|ключевую роль|играет роль|позволяет вам|уникальн|инновац)/i;
 const errors = [];
@@ -57,6 +58,7 @@ for (const f of (await fs.readdir(path.join(K, 'tools')).catch(() => [])).filter
     if (toolIds.has(t.id)) err(rel, w, 'повтор id');
     toolIds.add(t.id);
     for (const b of t.bins || []) {
+      if (typeof b !== 'string' || !b.trim()) { err(rel, w, 'пустая строка в bins'); continue; }
       const key = b.toLowerCase();
       if (binOwner.has(key)) err(rel, w, `bin «${b}» уже есть у ${binOwner.get(key)}`);
       binOwner.set(key, `${rel}:${t.id}`);
@@ -83,6 +85,17 @@ for (const f of (await fs.readdir(path.join(K, 'tools')).catch(() => [])).filter
       desc(fl, `${w}.flags[${j}]`);
     });
     if (t.how && (!Array.isArray(t.how) || t.how.length > 6)) err(rel, w, 'how - массив до 6 шагов');
+    // help: null, ключ («--help») или шаблоны по порядку, каждый с {bin} в начале
+    if (t.help !== undefined && t.help !== null) {
+      const pats = Array.isArray(t.help) ? t.help : [t.help];
+      if (!pats.length) err(rel, w, 'help - пустой список');
+      for (const p of pats) {
+        if (typeof p !== 'string' || !p.trim()) { err(rel, w, 'help - строка или список строк'); continue; }
+        const isPattern = Array.isArray(t.help) || p.includes('{');
+        if (isPattern && !p.startsWith('{bin}')) err(rel, w, `шаблон help «${p}» должен начинаться с {bin}`);
+        for (const ph of p.match(/\{[^}]*\}/g) || []) if (ph !== '{bin}' && ph !== '{sub}') err(rel, w, `в help неизвестная подстановка ${ph}`);
+      }
+    }
   });
 }
 
@@ -108,6 +121,8 @@ for (const f of (await fs.readdir(path.join(K, 'topics')).catch(() => [])).filte
     if (s.type === 'idea' && !s.text) err(rel, w, 'нет text');
     if (s.type === 'diagram') {
       const ids = new Set(arr('nodes').map((n) => n.id));
+      if (ids.size !== (s.nodes || []).length) err(rel, w, 'повтор id узла');
+      for (const e of s.edges || []) if (typeof e[2] === 'string' && e[2] !== e[2].trim()) err(rel, w, `пробелы по краям подписи «${e[2]}»`);
       for (const n of s.nodes || []) { if (!n.id || !n.label) err(rel, w, 'узлу нужны id и label'); if (n.icon && !ICONS.has(n.icon)) err(rel, w, `нет значка «${n.icon}»`); }
       for (const e of arr('edges')) if (!ids.has(e[0]) || !ids.has(e[1])) err(rel, w, `стрелка к неизвестному узлу: ${e.join(' -> ')}`);
     }
@@ -119,8 +134,37 @@ for (const f of (await fs.readdir(path.join(K, 'topics')).catch(() => [])).filte
     if (s.type === 'chart') for (const x of arr('items')) if (typeof x.value !== 'number' || !x.label) err(rel, w, 'столбцу нужны label и число value');
     if (s.type === 'mistakes') for (const x of arr('items')) if (!x.problem || !x.fix) err(rel, w, 'нужны problem и fix');
     if (s.type === 'cheatsheet') for (const x of arr('items')) if (!x.cmd || !x.text) err(rel, w, 'нужны cmd и text');
+    if (s.type === 'codepair') for (const k of ['left', 'right']) if (!s[k]?.label || !s[k]?.code) err(rel, w, `${k}: нужны label и code`);
+    if (s.type === 'practice' && !s.task) err(rel, w, 'нет task');
+    if (s.type === 'rules') for (const x of arr('items')) { if (!RULE_KINDS.includes(x.kind)) err(rel, w, `kind - одно из ${RULE_KINDS.join(', ')}`); if (!x.text) err(rel, w, 'нет text'); }
     if (s.type === 'quiz') for (const x of arr('items')) if (!x.q || !Array.isArray(x.options) || typeof x.answer !== 'number' || x.answer >= x.options.length || !x.why) err(rel, w, 'вопросу нужны q, options, answer (номер), why');
   });
+}
+
+// ---- scenarios.json: готовые сценарии вкладки «Сценарии»
+{
+  const rel = 'scenarios.json';
+  const d = await readJson(rel), st = await readJson('stages.json');
+  const STAGES = new Set((Array.isArray(st) ? st : st?.stages || []).map((x) => x.id));
+  if (d) {
+    textRules(rel, d);
+    if (!Array.isArray(d.templates) || !d.templates.length) err(rel, '-', 'нет массива templates');
+    const ids = new Set();
+    (d.templates || []).forEach((t, i) => {
+      const w = `templates[${i}] ${t.id || '?'}`;
+      for (const k of ['id', 'name', 'why']) if (typeof t[k] !== 'string' || !t[k].trim()) err(rel, w, `нет поля ${k}`);
+      if (ids.has(t.id)) err(rel, w, 'повтор id');
+      ids.add(t.id);
+      if (!Array.isArray(t.steps) || t.steps.length < 2) err(rel, w, 'нужно хотя бы два шага');
+      (t.steps || []).forEach((s, j) => {
+        const ws = `${w}.steps[${j}]`;
+        if (!s.stage && !s.name) err(rel, ws, 'шагу нужен stage или name');
+        if (s.stage && !STAGES.has(s.stage)) err(rel, ws, `неизвестный этап «${s.stage}»`);
+        if (s.name) { try { new RegExp(s.name, 'i'); } catch (e) { err(rel, ws, 'плохой name: ' + e.message); } }
+      });
+      if ((t.steps || []).every((s) => s.optional)) err(rel, w, 'все шаги необязательные');
+    });
+  }
 }
 
 // ---- ссылки tools -> topics на диске

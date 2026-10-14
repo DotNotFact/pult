@@ -1,0 +1,371 @@
+{
+  "id": "docker-engine",
+  "title": "Docker Engine",
+  "color": "#0db7ed",
+  "icon": "server",
+  "level": "продвинутый",
+  "summary": "Docker Engine - сам Docker без Docker Desktop: служба dockerd внутри Linux, в дистрибутиве WSL или на сервере. Меньше памяти, бесплатно для всех, и вы сами решаете, где лежат данные и когда служба работает.",
+  "detect": { "files": ["Dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yaml", "compose.yml"], "deps": [], "bins": ["docker", "dockerd"], "stacks": ["Docker"] },
+  "related": ["docker", "docker-compose", "wsl", "deploy"],
+  "sections": [
+    {
+      "type": "idea",
+      "title": "Зачем это нужно",
+      "text": "Команда docker сама контейнеры не запускает. Она отправляет запрос службе dockerd, а та делает работу. Docker Desktop прячет эту службу в свою виртуальную машину и добавляет окно с настройками. Docker Engine - та же служба, поставленная напрямую в Linux: в ваш дистрибутив WSL или на сервер. Команды docker и docker compose остаются те же. Зато вы видите, где лежат данные, сколько памяти занято, и сами решаете, когда служба работает. На серверах и в CI Docker всегда работает именно так.",
+      "analogy": "Машина и двигатель. Docker Desktop - готовая машина с салоном и приборной панелью. Docker Engine - тот же двигатель, поставленный в вашу раму: удобств меньше, зато всё на виду и чинится своими руками."
+    },
+    {
+      "type": "diagram",
+      "title": "Что происходит после docker run",
+      "nodes": [
+        { "id": "cli", "label": "docker", "note": "клиент: превращает команду в запрос HTTP", "icon": "terminal" },
+        { "id": "sock", "label": "/var/run/docker.sock", "note": "сокет: дверь к службе", "icon": "link" },
+        { "id": "dockerd", "label": "dockerd", "note": "API, образы, сети, тома, сборка, журналы", "icon": "server" },
+        { "id": "containerd", "label": "containerd", "note": "запускает контейнеры и следит за ними", "icon": "gear" },
+        { "id": "shim", "label": "containerd-shim", "note": "держит один контейнер", "icon": "box" },
+        { "id": "runc", "label": "runc", "note": "создаёт контейнер и сразу выходит", "icon": "wrench" },
+        { "id": "kernel", "label": "Ядро Linux", "note": "namespaces и cgroups", "icon": "chip" },
+        { "id": "proc", "label": "Процесс контейнера", "note": "например nginx", "icon": "play" }
+      ],
+      "edges": [
+        ["cli", "sock", "POST /containers/create"],
+        ["sock", "dockerd", "запрос"],
+        ["dockerd", "containerd", "создай и запусти"],
+        ["containerd", "shim", "по одному на контейнер"],
+        ["shim", "runc", "вызывает"],
+        ["runc", "kernel", "просит изоляцию"],
+        ["kernel", "proc", "обычный процесс в своей среде"]
+      ],
+      "caption": "docker - только клиент. Работу делает цепочка служб. В конце получается обычный процесс Linux, которому ядро показывает свои файлы, свою сеть и выделяет свою долю памяти и процессора."
+    },
+    {
+      "type": "terms",
+      "title": "Слова, которые надо знать",
+      "items": [
+        { "term": "dockerd", "text": "Демон Docker - программа, которая постоянно работает в фоне и выполняет команды docker. Хранит образы, сети, тома, собирает образы, пишет журналы контейнеров. Работает от root.", "forms": ["демон Docker", "демон", "демона", "daemon", "Docker Engine", "Engine"] },
+        { "term": "containerd", "text": "Служба ниже dockerd. Запускает и останавливает контейнеры. С Docker 29 в новых установках хранит и слои образов, после обновления со старой версии слои остаются в overlay2. Её же используют Kubernetes и другие системы без dockerd.", "forms": ["containerd.io"] },
+        { "term": "runc", "text": "Маленькая программа, которая по описанию создаёт контейнер: просит у ядра namespaces и cgroups, запускает первый процесс и выходит. Дальше контейнер держит containerd-shim: если перезапустить containerd, контейнеры продолжат работать.", "forms": ["containerd-shim", "shim"] },
+        { "term": "Namespaces", "text": "Пространства имён - механизм ядра, который показывает процессу свой отдельный мир: свои процессы, свою сеть, свои файлы, своё имя машины. Процесс в контейнере не видит остальных процессов системы.", "forms": ["пространства имён", "namespace"] },
+        { "term": "cgroups", "text": "Контрольные группы - механизм ядра, который ограничивает процессу память, процессор и число процессов. Через них работают ключи --memory и --cpus.", "forms": ["cgroup", "контрольные группы"] },
+        { "term": "Сокет", "text": "Файл-дверь, через которую программы на одной машине говорят друг с другом. docker стучится в /var/run/docker.sock, за ним слушает dockerd. Кто может писать в сокет, тот управляет Docker.", "forms": ["unix-сокет", "docker.sock", "socket", "сокета", "сокет"] },
+        { "term": "daemon.json", "text": "Файл настроек службы: /etc/docker/daemon.json. Где хранить данные, как ротировать журналы, какие зеркала реестров брать. Формат JSON, читается при старте dockerd.", "forms": ["/etc/docker/daemon.json"] },
+        { "term": "Группа docker", "text": "Группа пользователей Linux, которой разрешено писать в сокет Docker. Участник группы запускает docker без sudo. Это то же самое, что дать ему root.", "forms": ["группа docker", "группу docker", "группе docker"] },
+        { "term": "Контекст Docker", "text": "Сохранённый адрес службы: локальный сокет, порт TCP с TLS или сервер по SSH. docker context use переключает, к какой службе идут все команды.", "forms": ["docker context", "контекст Docker", "контекста Docker", "контексты Docker"] },
+        { "term": "Драйвер хранения", "text": "Способ, которым Docker складывает слои образа и контейнера на диск. В Linux это overlay2 или overlayfs в хранилище containerd. Узнать: docker info, строка Storage Driver. Строка driver-type: io.containerd.snapshotter.v1 значит, что слои хранит containerd.", "forms": ["overlay2", "overlayfs", "storage driver"] },
+        { "term": "journalctl", "text": "Команда, которая показывает журнал systemd. Всё, что dockerd пишет о себе, лежит там: journalctl -u docker.", "forms": ["журнал systemd"] },
+        { "term": "Rootless", "text": "Режим, в котором dockerd работает от обычного пользователя, а не от root. Взлом контейнера тогда не даёт прав администратора на машине.", "forms": ["rootless-режим", "rootless mode"] }
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "Кто за что отвечает",
+      "cols": ["Часть", "Что делает", "Если остановить"],
+      "rows": [
+        ["docker (клиент)", "Читает команду, шлёт запрос в API, печатает ответ", "Ничего: это просто программа-клиент"],
+        ["dockerd", "API, сборка, сети, тома, журналы контейнеров", "Новые команды не работают. Контейнеры останавливаются, если не включён live-restore"],
+        ["containerd", "Запуск контейнеров, в новых версиях хранение слоёв", "Запущенные контейнеры живут, новые не стартуют"],
+        ["containerd-shim", "Держит один контейнер: его ввод, вывод и код выхода", "Этот контейнер останавливается"],
+        ["runc", "Создаёт контейнер через ядро и выходит", "Он и так не работает постоянно"]
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Установка из репозитория Docker (Ubuntu, в том числе в WSL)",
+      "label": "bash",
+      "code": "# 1. убрать старые пакеты из Ubuntu, если ставились\nfor pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do sudo apt-get remove -y $pkg; done\n\n# 2. ключ, которым подписаны пакеты Docker\nsudo apt-get update\nsudo apt-get install -y ca-certificates curl\nsudo install -m 0755 -d /etc/apt/keyrings\nsudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc\nsudo chmod a+r /etc/apt/keyrings/docker.asc\n\n# 3. сам репозиторий\nsudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF\nTypes: deb\nURIs: https://download.docker.com/linux/ubuntu\nSuites: $(. /etc/os-release && echo \"${UBUNTU_CODENAME:-$VERSION_CODENAME}\")\nComponents: stable\nSigned-By: /etc/apt/keyrings/docker.asc\nEOF\n\n# 4. служба, клиент, сборщик и compose\nsudo apt-get update\nsudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin",
+      "note": "Пакет docker.io из самой Ubuntu тоже Docker, но старее и собран не Docker. Скрипт get.docker.com ставит то же одной строкой, но сам ничего не спрашивает, и для серверов его не советуют. Для Debian замените ubuntu на debian в двух адресах. Если в WSL стоит Docker Desktop с интеграцией для этого дистрибутива, сначала выключите её: иначе команда docker будет ходить в Desktop."
+    },
+    {
+      "type": "steps",
+      "title": "После установки",
+      "items": [
+        "Проверьте, что работает systemd: ps -p 1 -o comm= должно напечатать systemd. Как его включить в WSL - в уроке WSL",
+        "Включите и запустите службы: sudo systemctl enable --now docker.service containerd.service",
+        "systemctl status docker должна показать active (running). Выход - клавиша q",
+        "Чтобы работать без sudo: sudo usermod -aG docker $USER. Прочитайте ниже, чем это опасно",
+        "Перезапустите сеанс, иначе группа не подхватится. В WSL - wsl -t Ubuntu из PowerShell, на сервере - выйти и зайти по SSH. Или newgrp docker в текущем окне",
+        "docker run --rm hello-world - скачает маленький образ, напечатает приветствие и удалит контейнер",
+        "docker version: если видны две части, Client и Server, клиент достучался до службы"
+      ]
+    },
+    {
+      "type": "rules",
+      "title": "Безопасность: кто управляет Docker",
+      "items": [
+        { "kind": "dont", "title": "Группа docker - это root", "text": "Кто может запускать контейнеры, тот может подключить в контейнер весь диск машины: docker run -v /:/host -it alpine chroot /host открывает полный доступ от root. Добавляйте в группу только себя и только на своей машине." },
+        { "kind": "dont", "title": "Не открывайте порт 2375", "text": "tcp://0.0.0.0:2375 - API Docker без пароля и шифрования. Такие порты в интернете находят боты за минуты и ставят майнеры. Доступ по сети - только порт 2376 с TLS или SSH." },
+        { "kind": "do", "title": "Общий сервер - rootless или sudo", "text": "Если на машину заходят несколько человек, не давайте им группу docker. Либо sudo docker с записью в журнал, либо rootless-режим для каждого." },
+        { "kind": "tip", "title": "Права сокета", "text": "ls -l /var/run/docker.sock покажет srw-rw---- root docker. Писать в него могут root и группа docker, больше никто." }
+      ]
+    },
+    {
+      "type": "example",
+      "title": "daemon.json: настройки службы",
+      "label": "/etc/docker/daemon.json",
+      "code": "{\n  \"data-root\": \"/var/lib/docker\",\n  \"log-driver\": \"local\",\n  \"log-opts\": { \"max-size\": \"20m\", \"max-file\": \"5\" },\n  \"registry-mirrors\": [\"https://mirror.gcr.io\"],\n  \"insecure-registries\": [\"registry.local:5000\"],\n  \"default-address-pools\": [\n    { \"base\": \"10.210.0.0/16\", \"size\": 24 }\n  ],\n  \"features\": { \"buildkit\": true },\n  \"live-restore\": true\n}",
+      "note": "Файла может не быть вовсе - тогда служба берёт значения по умолчанию. Одна лишняя запятая, и dockerd не стартует. Проверка до перезапуска: sudo dockerd --validate --config-file /etc/docker/daemon.json. Применить: sudo systemctl restart docker. Настройки журналов действуют только на контейнеры, созданные после этого."
+    },
+    {
+      "type": "compare",
+      "title": "Ключи daemon.json",
+      "cols": ["Ключ", "Что делает", "Когда нужен"],
+      "rows": [
+        ["data-root", "Папка для образов, контейнеров и томов. По умолчанию /var/lib/docker", "Системный диск мал, данные надо держать на другом"],
+        ["log-driver, log-opts", "Куда и как пишутся журналы контейнеров. local сжимает и ротирует, json-file без log-opts растёт без конца", "Всегда: иначе журналы съедят диск"],
+        ["registry-mirrors", "Зеркало Docker Hub: docker pull идёт сначала туда", "Лимиты Docker Hub на скачивания, медленный интернет"],
+        ["insecure-registries", "Разрешить реестр без HTTPS", "Только реестр во внутренней сети. В интернете - никогда"],
+        ["default-address-pools", "Из каких адресов создавать сети контейнеров", "Сети Docker (172.17-172.31) совпали с VPN или сетью офиса"],
+        ["features.buildkit", "Сборка через BuildKit: параллельно, с кэшем и секретами", "Включено по умолчанию с версии 23, строка нужна для старых"],
+        ["live-restore", "Контейнеры живут, пока dockerd перезапускается", "Сервер, где обновление Docker не должно ронять сервисы"],
+        ["hosts", "Где слушать API: сокет, порт TCP", "Доступ из Windows или с другой машины"]
+      ]
+    },
+    {
+      "type": "codepair",
+      "title": "Docker из PowerShell без Docker Desktop: TCP с TLS",
+      "left": {
+        "label": "Linux: служба слушает порт 2376",
+        "code": "# 1. убрать -H fd:// из строки запуска,\n#    иначе он спорит с hosts в daemon.json\nsudo systemctl edit docker.service\n#   [Service]\n#   ExecStart=\n#   ExecStart=/usr/bin/dockerd --containerd=/run/containerd/containerd.sock\n\n# 2. добавить в /etc/docker/daemon.json\n#   \"hosts\": [\"unix:///var/run/docker.sock\", \"tcp://127.0.0.1:2376\"],\n#   \"tls\": true,\n#   \"tlsverify\": true,\n#   \"tlscacert\": \"/etc/docker/tls/ca.pem\",\n#   \"tlscert\": \"/etc/docker/tls/server-cert.pem\",\n#   \"tlskey\": \"/etc/docker/tls/server-key.pem\"\n\nsudo systemctl daemon-reload\nsudo systemctl restart docker"
+      },
+      "right": {
+        "label": "Windows: контекст для docker.exe",
+        "code": "# docker.exe без Desktop: архив с download.docker.com/win/static\n$c = \"$env:USERPROFILE\\.docker\\wsl\"\ndocker context create wsl-engine --docker \"host=tcp://127.0.0.1:2376,ca=$c\\ca.pem,cert=$c\\cert.pem,key=$c\\key.pem\"\ndocker context use wsl-engine\ndocker ps\n\n# разово, не переключая контекст\ndocker --context default ps"
+      },
+      "note": "Сертификаты создают командой openssl по инструкции Docker «Protect the Docker daemon socket». Ключ клиента лежит только в профиле Windows. Без TLS любой процесс Windows получил бы root в Linux. Проще всего вообще без порта: wsl docker ps из PowerShell. Для сервера порт не нужен: docker context create srv --docker \"host=ssh://user@srv\" ходит через SSH."
+    },
+    {
+      "type": "cheatsheet",
+      "title": "Шпаргалка",
+      "items": [
+        { "group": "Служба", "cmd": "systemctl status docker", "text": "Работает ли служба и что она писала последним" },
+        { "cmd": "sudo systemctl start docker", "text": "Запустить службу" },
+        { "cmd": "sudo systemctl restart docker", "text": "Перезапустить, чтобы применить daemon.json" },
+        { "cmd": "sudo systemctl stop docker.socket docker.service", "text": "Остановить полностью. Без docker.socket служба проснётся от следующей команды docker" },
+        { "cmd": "sudo systemctl enable docker", "text": "Запускать службу при старте системы" },
+        { "cmd": "sudo systemctl disable docker", "text": "Не запускать при старте системы" },
+        { "cmd": "sudo systemctl edit docker.service", "text": "Поправить параметры запуска службы, не трогая файл пакета" },
+        { "cmd": "sudo dockerd --validate --config-file /etc/docker/daemon.json", "text": "Проверить daemon.json до перезапуска" },
+        { "group": "Журналы", "cmd": "journalctl -u docker -f", "text": "Смотреть журнал службы вживую, выход Ctrl+C" },
+        { "cmd": "journalctl -u docker -n 100 --no-pager", "text": "Последние 100 строк журнала" },
+        { "cmd": "journalctl -u docker --since \"1 hour ago\"", "text": "Журнал за последний час" },
+        { "cmd": "journalctl -u containerd -b", "text": "Журнал containerd с последнего старта системы" },
+        { "group": "Состояние", "cmd": "docker version", "text": "Версии клиента и службы, версия API" },
+        { "cmd": "docker info", "text": "Всё о службе: драйвер хранения, папка данных, число контейнеров" },
+        { "cmd": "docker info -f '{{.DockerRootDir}} {{.Driver}}'", "text": "Только папку данных и драйвер хранения" },
+        { "cmd": "docker events", "text": "События вживую: запуск, остановка, падения контейнеров" },
+        { "group": "Место на диске", "cmd": "docker system df", "text": "Сколько занимают образы, контейнеры, тома и кэш сборки" },
+        { "cmd": "docker system df -v", "text": "То же по каждому образу, тому и контейнеру" },
+        { "cmd": "docker builder prune -f --filter until=72h", "text": "Удалить кэш сборки старше трёх дней" },
+        { "cmd": "docker image prune -a --filter until=168h", "text": "Удалить неиспользуемые образы старше недели" },
+        { "cmd": "docker container prune", "text": "Удалить остановленные контейнеры" },
+        { "cmd": "docker volume prune", "text": "Удалить безымянные тома без контейнера. С -a - и именованные" },
+        { "cmd": "sudo du -sh /var/lib/docker /var/lib/containerd", "text": "Сколько данных Docker на диске на самом деле" },
+        { "group": "Контексты", "cmd": "docker context ls", "text": "Список контекстов, звёздочка - текущий" },
+        { "cmd": "docker context create srv --docker \"host=ssh://user@srv\"", "text": "Контекст для сервера по SSH" },
+        { "cmd": "docker context use srv", "text": "Все следующие команды идут на сервер" },
+        { "cmd": "docker context use default", "text": "Вернуться к локальной службе" },
+        { "group": "Ресурсы", "cmd": "docker stats", "text": "Память, процессор, сеть каждого контейнера вживую" },
+        { "cmd": "docker update --memory 1g --memory-swap 1g web", "text": "Поменять предел памяти работающему контейнеру" },
+        { "cmd": "docker update --restart unless-stopped web", "text": "Поменять политику перезапуска у существующего контейнера" }
+      ]
+    },
+    {
+      "type": "diagram",
+      "title": "Как образ и контейнер лежат на диске",
+      "nodes": [
+        { "id": "base", "label": "Слой основы", "note": "например debian, только чтение", "icon": "layers" },
+        { "id": "deps", "label": "Слой зависимостей", "note": "только чтение", "icon": "layers" },
+        { "id": "code", "label": "Слой кода", "note": "только чтение", "icon": "layers" },
+        { "id": "upper", "label": "Верхний слой контейнера", "note": "сюда идёт всё, что контейнер пишет", "icon": "file" },
+        { "id": "merged", "label": "Что видит контейнер", "note": "все слои склеены в одну папку", "icon": "folder" }
+      ],
+      "edges": [
+        ["base", "merged", "снизу"],
+        ["deps", "merged", "поверх"],
+        ["code", "merged", "поверх"],
+        ["upper", "merged", "самый верх"]
+      ],
+      "caption": "Драйвер overlay склеивает слои в одну папку. Нижние слои общие для всех контейнеров из этого образа, поэтому десять контейнеров не занимают десять копий. Если контейнер меняет файл из нижнего слоя, файл сначала копируется в его верхний слой. Удалили контейнер - пропал только верхний слой. Данные, которые должны жить дольше, кладут в тома."
+    },
+    {
+      "type": "example",
+      "title": "Куда ушло место",
+      "label": "bash",
+      "code": "docker system df",
+      "outputLabel": "Пример вывода",
+      "output": "TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE\nImages          23        4         14.2GB    11.8GB (83%)\nContainers      6         4         310MB     45MB (14%)\nLocal Volumes   9         5         3.1GB     1.2GB (38%)\nBuild Cache     214       0         6.4GB     6.4GB",
+      "note": "ACTIVE - сколько используется прямо сейчас. RECLAIMABLE - сколько можно удалить без вреда для работающего. Здесь почти 12 ГБ образов лежат без дела, а кэш сборки весь свободен. Образы, тома и контейнеры лежат в /var/lib/docker. Если слои хранит containerd (по умолчанию в новых установках Docker 29 и новее), образы лежат в /var/lib/containerd."
+    },
+    {
+      "type": "rules",
+      "title": "Место на диске: как чистить",
+      "items": [
+        { "kind": "do", "title": "Начинайте с кэша сборки", "text": "docker builder prune удаляет только промежуточные слои сборок. Ничего работающего это не ломает, следующая сборка просто пойдёт дольше." },
+        { "kind": "do", "title": "Образы - по возрасту", "text": "docker image prune -a --filter until=168h удаляет образы старше недели, которые не использует ни один контейнер. Нужный образ скачается снова при следующем запуске." },
+        { "kind": "dont", "title": "Осторожно с томами", "text": "После docker compose down том базы данных ни к чему не подключён. docker volume prune -a или docker system prune -a --volumes удалит его вместе с данными. Перед чисткой томов смотрите docker volume ls." },
+        { "kind": "do", "title": "Ротация журналов", "text": "Драйвер json-file по умолчанию не ограничивает размер. Болтливый контейнер за месяц пишет десятки гигабайт в /var/lib/docker/containers. Задайте log-driver local или log-opts max-size в daemon.json." },
+        { "kind": "tip", "title": "Чистка по расписанию", "text": "На сервере и CI-раннере добавьте задание cron или таймер systemd раз в неделю: docker builder prune -f --filter until=168h и docker image prune -af --filter until=168h." },
+        { "kind": "tip", "title": "В WSL место само не вернётся", "text": "После чистки внутри Linux файл vhdx Windows не уменьшается. Нужны sudo fstrim -av и сжатие диска или разрежённый диск - смотрите урок WSL." },
+        { "kind": "tip", "title": "Перенос данных на другой диск", "text": "Остановите службу, скопируйте sudo rsync -aP /var/lib/docker/ /новое/место/, впишите data-root, запустите. В WSL проще перенести весь дистрибутив: wsl --manage имя --move." }
+      ]
+    },
+    {
+      "type": "anatomy",
+      "title": "Запуск с пределами ресурсов",
+      "parts": [
+        { "text": "docker run -d", "note": "создать контейнер и запустить в фоне" },
+        { "text": "--name api", "note": "имя контейнера" },
+        { "text": "--restart unless-stopped", "note": "поднимать после падения и после старта службы, если вы не остановили его сами" },
+        { "text": "--memory 512m", "note": "не больше 512 МБ памяти. Превысит - ядро убьёт процесс (OOM)" },
+        { "text": "--memory-swap 512m", "note": "столько же вместе со swap, то есть swap не давать" },
+        { "text": "--cpus 1.5", "note": "не больше полутора ядер процессора" },
+        { "text": "--pids-limit 200", "note": "не больше 200 процессов: защита от бесконечного размножения" },
+        { "text": "--log-opt max-size=10m", "note": "журнал этого контейнера не больше 10 МБ на файл" },
+        { "text": "my-api:1.4", "note": "образ с точной версией, а не latest" }
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "Docker Desktop или Docker Engine",
+      "cols": ["", "Docker Desktop", "Docker Engine"],
+      "rows": [
+        ["Что это", "Программа для Windows и Mac с окном и своей виртуальной машиной", "Служба dockerd в вашем Linux"],
+        ["Где работает dockerd", "В служебном дистрибутиве docker-desktop", "В вашем дистрибутиве WSL или на сервере"],
+        ["Память без контейнеров", "Около 1-2 ГБ", "Около 0.3-0.5 ГБ"],
+        ["Лицензия", "На момент 2026 года бесплатно для себя, учёбы, некоммерческих открытых проектов и компаний меньше 250 сотрудников и меньше 10 млн долларов выручки в год. Остальным - платная подписка", "Открытая лицензия Apache 2.0, бесплатно всем"],
+        ["Обновление", "Само, из окна программы", "sudo apt upgrade"],
+        ["Окно, Kubernetes одной кнопкой, расширения", "Есть", "Нет, ставится отдельно"],
+        ["host.docker.internal", "Работает сразу", "Нужно --add-host=host.docker.internal:host-gateway"],
+        ["Команды из PowerShell", "Сразу", "Через контекст или wsl docker"],
+        ["Где данные", "В своём vhdx", "/var/lib/docker в вашем дистрибутиве"],
+        ["Кому подходит", "Быстрый старт, Mac, кто не хочет администрировать Linux", "Серверы, CI-раннеры, экономия памяти, компании сверх лимита лицензии"]
+      ]
+    },
+    {
+      "type": "chart",
+      "title": "Сколько памяти занято, когда контейнеры не запущены",
+      "unit": "гигабайты",
+      "items": [
+        { "label": "Docker Desktop", "value": 1.5, "note": "окно, фоновые службы, свои дистрибутивы" },
+        { "label": "Docker Engine в WSL", "value": 0.4, "note": "dockerd, containerd и сама виртуальная машина" }
+      ],
+      "note": "Числа примерные, сильно зависят от версии и настроек. Запущенные контейнеры добавляют своё в обоих случаях."
+    },
+    {
+      "type": "rules",
+      "title": "Когда служба должна работать, а когда нет",
+      "items": [
+        { "kind": "when", "title": "Нужна всегда", "text": "CI-раннер, база для тестов на весь день, сервер. Тогда sudo systemctl enable docker. В WSL дистрибутив гаснет без открытых окон, даже если служба включена. Чтобы он жил, держат фоновый сеанс: задача Планировщика Windows при входе с командой wsl.exe -d Ubuntu --exec sleep infinity." },
+        { "kind": "when", "title": "Нужна иногда", "text": "Ноутбук, Docker раз в день. sudo systemctl disable docker.service, а docker.socket оставьте включённым: служба поднимется сама при первой команде docker. Память и батарея не тратятся, пока Docker не нужен." },
+        { "kind": "dont", "title": "Не выключайте WSL с работающими базами", "text": "wsl --shutdown обрывает контейнеры без остановки. Сначала docker compose stop, потом wsl --shutdown. Контейнеры с --restart always или unless-stopped поднимутся сами при следующем старте службы, остальные останутся в состоянии Exited." },
+        { "kind": "tip", "title": "live-restore спасает только от перезапуска службы", "text": "С live-restore обновление Docker и systemctl restart docker не роняют контейнеры. Перезагрузку машины или wsl --shutdown он не переживает." },
+        { "kind": "tip", "title": "Освободить память для игр", "text": "sudo systemctl stop docker.socket docker.service, затем wsl --shutdown. Вернуть: открыть дистрибутив и выполнить любую команду docker." }
+      ]
+    },
+    {
+      "type": "rules",
+      "title": "Как работать правильно",
+      "items": [
+        { "kind": "when", "title": "Engine подходит", "text": "Серверы и CI-раннеры: там нет окна, и Desktop не ставят. WSL, если вам удобно в терминале. Компания сверх лимита бесплатной лицензии Desktop." },
+        { "kind": "dont", "title": "Engine не подходит", "text": "macOS: ядра Linux там нет, нужна виртуальная машина - Docker Desktop, Colima или OrbStack. Windows без WSL." },
+        { "kind": "do", "title": "Одна служба на дистрибутив", "text": "Не держите в одном дистрибутиве и Engine, и интеграцию Docker Desktop. docker context ls покажет, куда на самом деле идут команды." },
+        { "kind": "do", "title": "Обновляйте осознанно", "text": "На сервере закрепите версию: sudo apt-mark hold docker-ce docker-ce-cli containerd.io. Обновляйте вручную, прочитав заметки к выпуску, и держите одну версию на машине разработчика, в CI и на сервере." },
+        { "kind": "when", "title": "Rootless", "text": "Общий сервер или контейнеры с чужим кодом. Ставится пакетом docker-ce-rootless-extras и командой dockerd-rootless-setuptool.sh install от обычного пользователя. Ограничения: порты ниже 1024 закрыты без настройки ядра, служба живёт в сеансе пользователя - для работы без входа нужен sudo loginctl enable-linger $USER." },
+        { "kind": "tip", "title": "Контейнеру нужен сервер на хосте", "text": "В Engine имени host.docker.internal нет. Добавьте --add-host=host.docker.internal:host-gateway, в compose - extra_hosts: [\"host.docker.internal:host-gateway\"]." }
+      ]
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: найдите всю цепочку",
+      "task": "Запустите nginx и найдите в списке процессов dockerd, containerd, shim и сам nginx. Выясните, чей потомок nginx.",
+      "steps": [
+        "docker run -d --name demo nginx:alpine",
+        "ps -ef --forest | grep -E 'dockerd|containerd|nginx' | grep -v grep",
+        "Узнайте номер процесса контейнера: docker inspect -f '{{.State.Pid}}' demo",
+        "Посмотрите его родителя: ps -o pid,ppid,cmd -p НОМЕР",
+        "Посмотрите, кто этот родитель: ps -o pid,ppid,cmd -p НОМЕР_РОДИТЕЛЯ",
+        "Уберите за собой: docker rm -f demo"
+      ],
+      "check": "Родитель nginx - containerd-shim-runc-v2, а не dockerd. Родитель shim - процесс 1, то есть systemd. Поэтому перезапуск dockerd или containerd контейнер не убивает.",
+      "hint": "Ключ --forest рисует дерево процессов. Номер в колонке PPID - номер родителя.",
+      "solution": "docker run -d --name demo nginx:alpine\npid=$(docker inspect -f '{{.State.Pid}}' demo)\nps -o pid,ppid,cmd -p $pid\nppid=$(ps -o ppid= -p $pid | tr -d ' ')\nps -o pid,ppid,cmd -p $ppid\ndocker rm -f demo"
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: поговорите со службой без docker",
+      "task": "Спросите у dockerd версию и список контейнеров прямым запросом HTTP в сокет.",
+      "steps": [
+        "curl --unix-socket /var/run/docker.sock http://localhost/version",
+        "Запустите любой контейнер: docker run -d --name demo nginx:alpine",
+        "curl --unix-socket /var/run/docker.sock http://localhost/containers/json | python3 -m json.tool",
+        "Сравните с выводом docker ps",
+        "docker rm -f demo"
+      ],
+      "check": "Первая команда вернула JSON с полями Version и ApiVersion. Во второй виден контейнер demo с теми же данными, что в docker ps.",
+      "hint": "permission denied значит, что вы не в группе docker. Добавьте sudo перед curl или вступите в группу и перезапустите сеанс.",
+      "solution": "curl --unix-socket /var/run/docker.sock http://localhost/version\ndocker run -d --name demo nginx:alpine\ncurl --unix-socket /var/run/docker.sock http://localhost/containers/json | python3 -m json.tool\ndocker ps\ndocker rm -f demo"
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: включите ротацию журналов",
+      "task": "Настройте для всех новых контейнеров журналы с ограничением размера и проверьте, что настройка дошла до контейнера.",
+      "steps": [
+        "docker run -d --name noisy alpine sh -c 'while true; do date; sleep 0.1; done'",
+        "docker inspect -f '{{.HostConfig.LogConfig}}' noisy - увидите json-file без ограничений",
+        "sudo nano /etc/docker/daemon.json, впишите log-driver local и log-opts с max-size 20m и max-file 5",
+        "sudo dockerd --validate --config-file /etc/docker/daemon.json",
+        "sudo systemctl restart docker",
+        "Старый контейнер настройку не получил. Пересоздайте: docker rm -f noisy и снова команда из первого шага",
+        "Повторите docker inspect из второго шага, потом docker rm -f noisy"
+      ],
+      "check": "docker inspect печатает {local map[max-file:5 max-size:20m]}.",
+      "hint": "Если служба не стартовала, смотрите journalctl -u docker -n 30: там будет строка с ошибкой в daemon.json.",
+      "solution": "# /etc/docker/daemon.json\n{\n  \"log-driver\": \"local\",\n  \"log-opts\": { \"max-size\": \"20m\", \"max-file\": \"5\" }\n}\n\nsudo dockerd --validate --config-file /etc/docker/daemon.json\nsudo systemctl restart docker\ndocker rm -f noisy\ndocker run -d --name noisy alpine sh -c 'while true; do date; sleep 0.1; done'\ndocker inspect -f '{{.HostConfig.LogConfig}}' noisy\ndocker rm -f noisy"
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: освободите место",
+      "task": "Найдите, что занимает место, удалите безопасное и посчитайте, сколько вернули.",
+      "steps": [
+        "docker system df - запишите SIZE и RECLAIMABLE",
+        "docker container prune - удалит остановленные контейнеры",
+        "docker builder prune -f",
+        "docker image prune -a --filter until=168h",
+        "Снова docker system df",
+        "Тома не трогайте: сначала docker volume ls и решите по каждому"
+      ],
+      "check": "RECLAIMABLE у Images и Build Cache стал близок к нулю, SIZE уменьшился.",
+      "hint": "Образ не удаляется, пока на него ссылается хоть один контейнер, даже остановленный. Поэтому сначала удаляют контейнеры.",
+      "solution": "docker system df\ndocker container prune -f\ndocker builder prune -f\ndocker image prune -af --filter until=168h\ndocker system df"
+    },
+    {
+      "type": "mistakes",
+      "title": "Что ломается чаще всего",
+      "items": [
+        { "problem": "permission denied while trying to connect to the Docker daemon socket", "fix": "Вы не в группе docker или сеанс не перезапущен. id -nG покажет группы. sudo usermod -aG docker $USER, затем новый сеанс: wsl -t имя или выход и вход." },
+        { "problem": "Cannot connect to the Docker daemon at unix:///var/run/docker.sock", "fix": "Служба не работает. systemctl status docker, потом journalctl -u docker -n 50. Чаще всего ошибка в daemon.json или в WSL не включён systemd." },
+        { "problem": "Служба не стартует: directives are specified both as a flag and in the configuration file: hosts", "fix": "hosts задан и в daemon.json, и ключом -H fd:// в строке запуска. Уберите ключ через sudo systemctl edit docker.service, затем daemon-reload и restart." },
+        { "problem": "Сайты и базы в сети офиса или VPN перестали открываться после запуска контейнеров", "fix": "Сети Docker заняли те же адреса 172.x. Задайте default-address-pools в daemon.json, перезапустите службу и пересоздайте сети: docker compose down и up." },
+        { "problem": "Контейнер не находит host.docker.internal", "fix": "Это имя есть только в Docker Desktop. Добавьте --add-host=host.docker.internal:host-gateway или extra_hosts в compose." },
+        { "problem": "Диск забит, а образов немного", "fix": "Журналы контейнеров без ротации. sudo du -sh /var/lib/docker/containers покажет. Настройте log-driver local и пересоздайте контейнеры." },
+        { "problem": "После перезапуска WSL контейнеры не поднялись", "fix": "У них нет политики перезапуска или служба не включена. docker update --restart unless-stopped имя и sudo systemctl enable docker." },
+        { "problem": "docker в WSL работает, но не с той службой", "fix": "Интеграция Docker Desktop подложила свою команду docker. which docker и docker context ls покажут, куда идут команды. Выключите интеграцию для этого дистрибутива в настройках Desktop." },
+        { "problem": "toomanyrequests: You have reached your pull rate limit", "fix": "Лимит скачиваний Docker Hub. Войдите командой docker login или добавьте registry-mirrors в daemon.json." }
+      ]
+    },
+    {
+      "type": "quiz",
+      "title": "Проверьте себя",
+      "items": [
+        { "q": "Кто на самом деле запускает контейнер после docker run?", "options": ["Сама команда docker", "dockerd через containerd и runc", "Docker Hub"], "answer": 1, "why": "docker только шлёт запрос в сокет. dockerd передаёт работу containerd, тот через shim вызывает runc, а runc просит ядро создать изоляцию." },
+        { "q": "Почему членство в группе docker опасно на общем сервере?", "options": ["Docker начинает работать медленнее", "Участник группы может получить права root на всей машине", "Группа видит чужие пароли от Docker Hub"], "answer": 1, "why": "Через docker run -v /:/host можно подключить весь диск и работать с ним от root." },
+        { "q": "Вы добавили log-opts в daemon.json и перезапустили службу. У старого контейнера журнал всё так же растёт. Почему?", "options": ["Настройки журналов действуют только на новые контейнеры", "Нужно перезагрузить компьютер", "local не умеет ротацию"], "answer": 0, "why": "Настройки журнала записываются в контейнер при создании. Пересоздайте его." },
+        { "q": "Как остановить Docker так, чтобы он не проснулся от следующей команды?", "options": ["sudo systemctl stop docker", "sudo systemctl stop docker.socket docker.service", "docker stop"], "answer": 1, "why": "Пока работает docker.socket, первое обращение к сокету снова запускает службу." },
+        { "q": "Что произойдёт с контейнером с --restart unless-stopped после wsl --shutdown и нового старта службы?", "options": ["Он удалится", "Останется в Exited навсегда", "Служба запустит его снова"], "answer": 2, "why": "unless-stopped поднимает контейнер при старте службы, если вы не останавливали его сами командой docker stop." },
+        { "q": "Какая команда безопасна на машине с базой данных в томе?", "options": ["docker builder prune", "docker system prune -a --volumes", "docker volume prune -a"], "answer": 0, "why": "Кэш сборки не содержит данных. Две другие команды могут удалить том базы, если к нему сейчас не подключён контейнер." },
+        { "q": "Как пользоваться Engine из PowerShell без открытого порта?", "options": ["Никак", "wsl docker ps", "docker --context default ps"], "answer": 1, "why": "wsl выполняет команду docker внутри дистрибутива, а та идёт в локальный сокет. Порт и сертификаты не нужны." }
+      ]
+    },
+    { "type": "project", "title": "Где это в вашем проекте" }
+  ]
+}

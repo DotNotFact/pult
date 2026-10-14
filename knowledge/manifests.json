@@ -1,5 +1,5 @@
 {
-  "_": "Стандартные команды, которые Пульт предлагает, если в папке есть такой файл. В argv подставляются: {file} - найденный файл, {bin} - обёртка (mvnw, gradlew) или программа по умолчанию, {services} - сервисы compose. projectOnly - только для проекта, не для решения (.sln).",
+  "_": "Стандартные команды, которые Пульт предлагает, если в папке есть такой файл. В argv подставляются: {file} - найденный файл, {bin} - обёртка (mvnw, gradlew) или программа по умолчанию, {services} - сервисы compose. projectOnly - только для проекта, не для решения (.sln). ifFileContains - команда, только если в найденном файле есть одна из строк (без учёта регистра): dotnet run - только у программы, а не у библиотеки. solutionMembers: «projectOnly» - у проекта в папке, где рядом или выше по папкам до корня лежит решение, остаются только команды projectOnly: сборку и тесты делает решение.",
   "kinds": [
     { "id": "cargo", "files": ["Cargo.toml"], "stack": "Rust", "skipWorkspaceMembers": true,
       "commands": [
@@ -8,6 +8,7 @@
         { "name": "cargo build --release", "argv": ["cargo", "build", "--release"], "stage": "build" },
         { "name": "cargo test", "argv": ["cargo", "test"], "stage": "check" },
         { "name": "cargo clippy", "argv": ["cargo", "clippy"], "stage": "check" },
+        { "name": "cargo fmt", "argv": ["cargo", "fmt"], "stage": "check" },
         { "name": "cargo fmt --check", "argv": ["cargo", "fmt", "--check"], "stage": "check" },
         { "name": "cargo run", "argv": ["cargo", "run"], "stage": "dev" }
       ] },
@@ -19,14 +20,15 @@
         { "name": "go run", "argv": ["go", "run", "."], "stage": "dev" },
         { "name": "go mod tidy", "argv": ["go", "mod", "tidy"], "stage": "setup" }
       ] },
-    { "id": "dotnet", "ext": [".sln", ".slnx"], "fallbackExt": [".csproj", ".fsproj", ".vbproj"], "stack": ".NET",
+    { "id": "dotnet", "ext": [".sln", ".slnx"], "fallbackExt": [".csproj", ".fsproj", ".vbproj"], "stack": ".NET", "solutionMembers": "projectOnly",
       "commands": [
         { "name": "dotnet restore", "argv": ["dotnet", "restore", "{file}"], "stage": "setup" },
         { "name": "dotnet build", "argv": ["dotnet", "build", "{file}"], "stage": "build" },
         { "name": "dotnet test", "argv": ["dotnet", "test", "{file}"], "stage": "check" },
+        { "name": "dotnet format", "argv": ["dotnet", "format", "{file}"], "stage": "check" },
         { "name": "dotnet format --verify-no-changes", "argv": ["dotnet", "format", "{file}", "--verify-no-changes"], "stage": "check" },
-        { "name": "dotnet run", "argv": ["dotnet", "run", "--project", "{file}"], "stage": "dev", "projectOnly": true },
-        { "name": "dotnet watch", "argv": ["dotnet", "watch", "--project", "{file}"], "stage": "dev", "projectOnly": true },
+        { "name": "dotnet run", "argv": ["dotnet", "run", "--project", "{file}"], "stage": "dev", "projectOnly": true, "ifFileContains": ["<OutputType>Exe", "<OutputType>WinExe", "Microsoft.NET.Sdk.Web", "Microsoft.NET.Sdk.Worker", "Microsoft.NET.Sdk.BlazorWebAssembly"] },
+        { "name": "dotnet watch", "argv": ["dotnet", "watch", "--project", "{file}"], "stage": "dev", "projectOnly": true, "ifFileContains": ["<OutputType>Exe", "<OutputType>WinExe", "Microsoft.NET.Sdk.Web", "Microsoft.NET.Sdk.Worker", "Microsoft.NET.Sdk.BlazorWebAssembly"] },
         { "name": "dotnet clean", "argv": ["dotnet", "clean", "{file}"], "stage": "ops" }
       ] },
     { "id": "maven", "files": ["pom.xml"], "stack": "Maven", "bin": "mvn", "wrapper": ["mvnw.cmd", "mvnw"],
@@ -89,5 +91,9 @@
     ".bat": ["{file}"],
     ".cmd": ["{file}"],
     ".py": ["python", "{file}"]
+  },
+  "scriptFilesSkip": {
+    "_": "Файлы с расширением скрипта, которые не запускают сами: служебные файлы пакетов и тестов. Имя сравнивается без учёта регистра.",
+    "names": ["__init__.py", "__main__.py", "conftest.py"]
   }
 }

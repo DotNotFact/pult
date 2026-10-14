@@ -1,0 +1,8 @@
+{
+  "_": "Порядок уроков: от основ к инфраструктуре и языкам. Отсюда его берут окно, терминал и проверка базы. Новый урок - файл topics/<id>.json и строка здесь.",
+  "order": [
+    "terminal", "git", "github", "node", "package-managers", "typescript", "frontend", "testing", "code-quality", "env",
+    "task-runners", "shell-scripts", "wsl", "docker", "docker-engine", "docker-compose", "ci-cd", "deploy", "databases",
+    "dotnet", "csharp", "rust", "python", "go", "java"
+  ]
+}

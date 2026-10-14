@@ -94,6 +94,34 @@
       ]
     },
     {
+      "type": "rules",
+      "title": "Как работать с Java",
+      "items": [
+        { "kind": "do", "title": "Всегда через wrapper", "text": "./mvnw или ./gradlew, а файлы обёртки (mvnw, .mvn/wrapper, gradlew, gradle/wrapper) - в git. Тогда у всех и в CI одна версия инструмента сборки." },
+        { "kind": "do", "title": "Версия Java - в файле сборки", "text": "maven.compiler.release в pom.xml или toolchain в build.gradle. Сборка с другой Java тогда падает сразу, а не ведёт себя странно." },
+        { "kind": "dont", "title": "target/ и build/ - не в git", "text": "Это результаты сборки, их всегда можно получить заново. В .gitignore их ставят первыми строками." },
+        { "kind": "tip", "title": "Дерево зависимостей", "text": "./mvnw dependency:tree или ./gradlew dependencies показывают, какая библиотека откуда пришла. Так находят две версии одной библиотеки." },
+        { "kind": "when", "title": "Какую Java брать", "text": "Для нового проекта - последнюю LTS: 21 или 25. Старый проект держат на той версии, под которую он собран, и обновляют отдельной задачей." }
+      ]
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: от одного файла до .jar",
+      "task": "Запустите файл .java без сборки, затем получите готовый проект Maven с wrapper, прогоните тесты, соберите .jar и запустите его. Нужны JDK 21 или новее и curl.",
+      "steps": [
+        "java -version: версия 21 или новее",
+        "Создайте Hello.java с методом main и запустите его прямо из исходника: java Hello.java",
+        "Скачайте заготовку проекта: curl https://start.spring.io/starter.zip -d type=maven-project -d javaVersion=21 -d baseDir=demo -o demo.zip",
+        "Распакуйте: tar -xf demo.zip, затем cd demo",
+        "./mvnw test. На Windows: mvnw.cmd test",
+        "./mvnw package и посмотрите папку target",
+        "java -jar target/demo-0.0.1-SNAPSHOT.jar"
+      ],
+      "check": "java Hello.java печатает строку без отдельной компиляции. ./mvnw test заканчивается BUILD SUCCESS и Tests run: 1, Failures: 0. В target лежит demo-0.0.1-SNAPSHOT.jar, а java -jar печатает Started DemoApplication.",
+      "hint": "Первый запуск mvnw долгий: он скачивает Maven и библиотеки. Ошибка release version 21 not supported значит, что java в PATH старше 21: проверьте JAVA_HOME.",
+      "solution": "java -version\n\n// Hello.java\npublic class Hello {\n    public static void main(String[] args) {\n        System.out.println(\"Hello from Java \" + Runtime.version().feature());\n    }\n}\n\njava Hello.java\n\ncurl https://start.spring.io/starter.zip -d type=maven-project -d javaVersion=21 -d baseDir=demo -o demo.zip\ntar -xf demo.zip\ncd demo\n./mvnw test\n./mvnw package\nls target\njava -jar target/demo-0.0.1-SNAPSHOT.jar"
+    },
+    {
       "type": "mistakes",
       "title": "Что ломается чаще всего",
       "items": [
@@ -123,7 +151,7 @@
       "type": "quiz",
       "title": "Проверьте себя",
       "items": [
-        { "q": "Что нужно, чтобы собрать программу на Java?", "options": ["Только JVM", "JDK", "Только Maven"], "answer": 1, "why": "Компилятор javac входит в JDK. Maven и Gradle вызывают его, но сами его не содержат." },
+        { "q": "Что нужно, чтобы собрать программу на Java?", "options": ["Только JVM", "Только Maven", "JDK"], "answer": 2, "why": "Компилятор javac входит в JDK. Maven и Gradle вызывают его, но сами его не содержат." },
         { "q": "Как понять, какой инструмент сборки в проекте?", "options": ["По файлу pom.xml или build.gradle в корне", "По имени папки", "Никак"], "answer": 0, "why": "pom.xml - Maven, build.gradle или build.gradle.kts - Gradle." },
         { "q": "Зачем запускать ./mvnw вместо mvn?", "options": ["Так короче", "Wrapper берёт ту версию Maven, которую выбрал проект", "mvn не умеет собирать"], "answer": 1, "why": "У всех разработчиков и в CI будет одна версия инструмента сборки." },
         { "q": "Где искать готовый .jar после ./gradlew build?", "options": ["target/", "build/libs/", "src/"], "answer": 1, "why": "Gradle кладёт результаты в build/, а Maven - в target/." }

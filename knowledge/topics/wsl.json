@@ -3,60 +3,93 @@
   "title": "WSL",
   "color": "#0078d4",
   "icon": "linux",
-  "level": "основы",
+  "level": "средний",
   "summary": "WSL - настоящий Linux внутри Windows. Без второго компьютера и без перезагрузки можно запускать программы и команды, написанные для Linux.",
-  "detect": { "files": [], "deps": [], "bins": ["wsl"], "stacks": [] },
-  "related": ["docker", "docker-compose", "terminal", "shell-scripts"],
+  "detect": { "files": [], "deps": [], "bins": ["wsl", "wsl.exe", "wslpath"], "stacks": [] },
+  "related": ["docker-engine", "docker", "docker-compose", "terminal", "shell-scripts"],
   "sections": [
     {
       "type": "idea",
       "title": "Зачем это нужно",
-      "text": "Серверы почти всегда работают на Linux. Многие инструменты для разработки тоже пишут сначала для Linux, а Windows поддерживают хуже или никак. WSL (Windows Subsystem for Linux) ставит рядом с Windows настоящий Linux. Вы открываете терминал Ubuntu и работаете так же, как на сервере. Файлы Windows при этом видны из Linux, а файлы Linux - из Windows.",
-      "analogy": "Квартира с отдельной комнатой для гостя из другой страны. Он живёт по своим правилам и говорит на своём языке, но кухня и вход у вас общие."
+      "text": "Серверы почти всегда работают на Linux. Многие инструменты для разработки тоже пишут сначала для Linux, а Windows поддерживают хуже или никак. WSL (Windows Subsystem for Linux) ставит рядом с Windows настоящий Linux. Вы открываете терминал Ubuntu и работаете так же, как на сервере: bash, apt, systemd, Docker. Файлы Windows при этом видны из Linux, а файлы Linux - из Windows. Программы Windows можно запускать из Linux и наоборот.",
+      "analogy": "Квартира с отдельной комнатой для гостя из другой страны. Он живёт по своим правилам и говорит на своём языке, но кухня и вход у вас общие. Его вещи лежат в его комнате, и брать их оттуда быстрее, чем таскать с вашей кухни."
     },
     {
       "type": "diagram",
-      "title": "Как устроено",
+      "title": "Как устроен WSL2",
       "nodes": [
         { "id": "win", "label": "Windows", "note": "ваша основная система", "icon": "windows" },
-        { "id": "vm", "label": "Лёгкая виртуальная машина", "note": "WSL2 запускает её сам", "icon": "chip" },
-        { "id": "kernel", "label": "Ядро Linux", "note": "настоящее, от Microsoft", "icon": "gear" },
-        { "id": "distro", "label": "Дистрибутив", "note": "Ubuntu, Debian и другие", "icon": "linux" },
-        { "id": "disk", "label": "Диск ext4.vhdx", "note": "один файл на диске Windows", "icon": "database" },
-        { "id": "docker", "label": "Docker", "note": "контейнерам нужно ядро Linux", "icon": "box" }
+        { "id": "vm", "label": "Лёгкая виртуальная машина", "note": "одна на все дистрибутивы, стартует за секунду-две", "icon": "chip" },
+        { "id": "kernel", "label": "Ядро Linux", "note": "собрано Microsoft, обновляется через wsl --update", "icon": "gear" },
+        { "id": "distro", "label": "Дистрибутивы", "note": "Ubuntu, Debian: у каждого свои файлы", "icon": "linux" },
+        { "id": "vhdx", "label": "ext4.vhdx", "note": "диск дистрибутива - один файл в Windows", "icon": "database" },
+        { "id": "mnt", "label": "/mnt/c", "note": "диск C через сетевой мост 9P", "icon": "folder" },
+        { "id": "net", "label": "Сеть", "note": "NAT или mirrored", "icon": "globe" }
       ],
       "edges": [
         ["win", "vm", "запускает"],
-        ["vm", "kernel", "внутри"],
+        ["vm", "kernel", "грузит"],
         ["kernel", "distro", "общее для всех"],
-        ["distro", "disk", "файлы лежат в"],
-        ["kernel", "docker", "даёт ядро"]
+        ["distro", "vhdx", "свои файлы"],
+        ["distro", "mnt", "файлы Windows"],
+        ["vm", "net", "выход наружу"]
       ],
-      "caption": "Windows поднимает маленькую виртуальную машину с ядром Linux. На этом ядре работают все установленные дистрибутивы. Файлы каждого дистрибутива лежат в одном большом файле-диске."
+      "caption": "Windows поднимает маленькую виртуальную машину с ядром Linux. На одном ядре работают все дистрибутивы, но каждый видит только свои файлы. Свои файлы дистрибутив хранит в файле-диске vhdx. Файлы Windows приходят к нему по мосту, а это медленнее."
     },
     {
       "type": "terms",
       "title": "Слова, которые надо знать",
       "items": [
-        { "term": "WSL2", "text": "Вторая версия WSL. Работает на настоящем ядре Linux внутри лёгкой виртуальной машины. Первая версия переводила команды Linux в команды Windows и подходила не всем программам. Docker работает только со второй.", "forms": ["WSL", "WSL 2", "Windows Subsystem for Linux"] },
-        { "term": "Дистрибутив", "text": "Сборка Linux с набором программ: Ubuntu, Debian, Fedora. В WSL их можно поставить несколько, каждый живёт отдельно.", "forms": ["дистрибутива", "дистрибутивы", "дистрибутиве", "distro"] },
-        { "term": "vhdx", "text": "Файл виртуального диска. В нём лежат все файлы дистрибутива. Он растёт, когда вы что-то кладёте, но сам не уменьшается, когда удаляете.", "forms": ["ext4.vhdx", "виртуальный диск"] },
-        { "term": ".wslconfig", "text": "Файл настроек WSL в папке пользователя Windows (C:\\Users\\имя\\.wslconfig). Там задают лимит памяти, число процессоров и режим сети. Он живёт на компьютере, а не в проекте.", "forms": [] },
-        { "term": "wsl --shutdown", "text": "Команда, которая останавливает все дистрибутивы и виртуальную машину. Нужна, чтобы применить новые настройки или вернуть Windows занятую память.", "forms": [] },
-        { "term": "NAT", "text": "Режим сети по умолчанию. У Linux свой внутренний адрес, как у отдельного компьютера за роутером. Сервер, запущенный в Linux, всё равно открывается из Windows по localhost.", "forms": [] },
-        { "term": "mirrored", "text": "Зеркальный режим сети. Linux видит те же сетевые подключения, что и Windows, localhost общий в обе стороны, VPN работает лучше. Включается строкой networkingMode=mirrored в .wslconfig, нужна Windows 11.", "forms": ["зеркальный режим"] }
+        { "term": "WSL2", "text": "Вторая версия WSL. Работает на настоящем ядре Linux внутри лёгкой виртуальной машины. Docker и почти все программы Linux работают только со второй версией.", "forms": ["WSL", "WSL 2", "Windows Subsystem for Linux"] },
+        { "term": "WSL1", "text": "Первая версия. Виртуальной машины нет: WSL1 переводит вызовы Linux в вызовы Windows на лету. Быстро работает с файлами на диске C, но не умеет Docker и часть системных функций.", "forms": ["WSL 1"] },
+        { "term": "Дистрибутив", "text": "Сборка Linux с набором программ: Ubuntu, Debian, Fedora. В WSL их можно поставить несколько. Каждый живёт отдельно: свои программы, свои пользователи, свой диск.", "forms": ["дистрибутива", "дистрибутивы", "дистрибутиве", "дистрибутивов", "distro"] },
+        { "term": "vhdx", "text": "Файл виртуального диска. В нём лежат все файлы дистрибутива. Он растёт, когда вы что-то кладёте, но по умолчанию сам не уменьшается, когда удаляете.", "forms": ["ext4.vhdx", "виртуальный диск"] },
+        { "term": "9P", "text": "Сетевой протокол, по которому Linux в WSL2 читает диски Windows. Каждое обращение к файлу в /mnt/c идёт через мост из виртуальной машины в Windows. Для одного файла это незаметно, для тысяч мелких файлов - в разы медленнее. Подключение дисков Windows в WSL называется drvfs.", "forms": ["drvfs", "/mnt/c"] },
+        { "term": "interop", "text": "Связь систем: из Linux можно запускать программы Windows (explorer.exe, code, notepad.exe), а из Windows - команды Linux через wsl. Включено по умолчанию.", "forms": ["взаимодействие с Windows"] },
+        { "term": "wsl --shutdown", "text": "Команда, которая сразу останавливает все дистрибутивы и виртуальную машину. Нужна, чтобы применить .wslconfig или вернуть Windows занятую память. Данные на дисках не трогает, а запущенные процессы обрывает.", "forms": [] }
+      ]
+    },
+    {
+      "type": "terms",
+      "title": "Слова про настройки и сеть",
+      "items": [
+        { "term": ".wslconfig", "text": "Файл настроек всей виртуальной машины WSL в папке пользователя Windows: C:\\Users\\имя\\.wslconfig. Там задают память, процессоры, swap, режим сети. Действует на все дистрибутивы сразу.", "forms": [] },
+        { "term": "wsl.conf", "text": "Файл настроек одного дистрибутива, лежит внутри Linux: /etc/wsl.conf. Там включают systemd, задают пользователя по умолчанию, как подключать диски Windows.", "forms": ["/etc/wsl.conf"] },
+        { "term": "systemd", "text": "Программа, которая первой стартует в Linux и запускает службы: Docker, базы данных, ssh. Служба - программа, которая работает в фоне без окна. Управляют службами командой systemctl. В WSL systemd включают строкой systemd=true в wsl.conf.", "forms": ["systemctl", "служба", "службы", "службу", "служб"] },
+        { "term": "NAT", "text": "Режим сети по умолчанию. У Linux свой внутренний адрес, как у отдельного компьютера за роутером. Сервер, запущенный в Linux, открывается из Windows по localhost: WSL сам пробрасывает такие порты.", "forms": [] },
+        { "term": "mirrored", "text": "Зеркальный режим сети. Linux видит те же сетевые подключения, что и Windows. localhost общий в обе стороны, VPN и IPv6 работают лучше. Включается строкой networkingMode=mirrored в .wslconfig, нужна Windows 11 22H2 или новее.", "forms": ["зеркальный режим", "networkingMode"] },
+        { "term": "portproxy", "text": "Правило Windows: принимать соединения на порту Windows и пересылать их на другой адрес и порт. В режиме NAT так открывают сервер из WSL для других устройств в сети. Настраивается командой netsh interface portproxy.", "forms": ["netsh interface portproxy"] },
+        { "term": "autoMemoryReclaim", "text": "Настройка в разделе [experimental] файла .wslconfig: отдавать Windows память, которую Linux занял под кэш файлов. Значения: disabled - не отдавать, gradual - отдавать постепенно, dropCache - сбрасывать кэш сразу. На момент 2026 года по умолчанию стоит dropCache, в старых версиях WSL возврат был выключен.", "forms": [] },
+        { "term": "Разрежённый диск", "text": "Режим vhdx, при котором место удалённых файлов возвращается Windows само. Включается для существующего дистрибутива командой wsl --manage имя --set-sparse true (дистрибутив должен быть остановлен), для новых - строкой sparseVhd=true в разделе [experimental]. Режим экспериментальный: в части версий WSL отказывается его включать из-за риска повреждения данных.", "forms": ["sparse", "sparseVhd", "--set-sparse"] },
+        { "term": "core.autocrlf", "text": "Настройка git: менять ли переводы строк при сохранении и выдаче файлов. В Linux ставят input: в репозиторий всегда уходит LF, файлы на диске остаются с LF.", "forms": ["autocrlf"] },
+        { "term": "WSL в VS Code", "text": "Расширение VS Code с именем WSL. Окно редактора остаётся в Windows, а файлы, терминал, git и расширения работают внутри Linux. Открывается командой code . из папки проекта в Linux.", "forms": ["Remote WSL", "Remote - WSL", "VS Code Server"] }
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "WSL1 и WSL2",
+      "cols": ["", "WSL1", "WSL2"],
+      "rows": [
+        ["Как работает", "Переводит вызовы Linux в вызовы Windows", "Настоящее ядро Linux в лёгкой виртуальной машине"],
+        ["Docker", "Нет", "Да"],
+        ["Работа с файлами Linux (~)", "Средне", "Быстро, родная файловая система ext4"],
+        ["Работа с файлами на диске C", "Быстрее, чем у WSL2", "Медленно: каждый файл идёт через 9P"],
+        ["Память", "Как у обычных программ Windows", "Виртуальная машина берёт память и отдаёт её не сразу"],
+        ["Сеть", "Общая с Windows", "NAT или mirrored"],
+        ["Когда выбирать", "Проект обязан лежать на диске C, Docker не нужен", "Во всех остальных случаях"]
       ]
     },
     {
       "type": "steps",
-      "title": "Как начать",
+      "title": "Установка и первые шаги",
       "items": [
-        "Откройте PowerShell от имени администратора",
-        "Выполните wsl --install. Команда включит WSL и поставит Ubuntu",
-        "Перезагрузите компьютер, если попросит",
-        "Откройте Ubuntu из меню Пуск и придумайте имя пользователя и пароль для Linux",
+        "Откройте PowerShell от имени администратора и выполните wsl --install. Команда включит WSL и поставит Ubuntu",
+        "Перезагрузите компьютер, если попросит. Если WSL пишет про виртуализацию, включите её в BIOS (Intel VT-x или AMD SVM)",
+        "Откройте Ubuntu из меню Пуск. Придумайте имя и пароль. Пароль спросит sudo - команда, которая выполняет следующую за ней команду от имени администратора Linux (root)",
         "Проверьте wsl -l -v: напротив дистрибутива должна стоять версия 2",
-        "Держите проекты в папке Linux, например ~/projects, а не в /mnt/c: так команды работают в разы быстрее"
+        "Обновите программы: sudo apt update && sudo apt upgrade -y",
+        "Создайте папку для проектов в Linux: mkdir -p ~/projects. Клонируйте проекты туда, а не в /mnt/c",
+        "Другие дистрибутивы: wsl --list --online покажет список, wsl --install -d Debian поставит нужный"
       ]
     },
     {
@@ -66,66 +99,268 @@
       "rows": [
         ["Из Linux", "/mnt/c/Users/имя", "~ то есть /home/имя"],
         ["Из Windows", "C:\\Users\\имя", "\\\\wsl.localhost\\Ubuntu\\home\\имя"],
-        ["Скорость для команд Linux", "Медленно: каждый файл идёт через мост", "Быстро: родной диск Linux"]
-      ]
-    },
-    {
-      "type": "compare",
-      "title": "Docker Desktop или Docker Engine внутри WSL",
-      "cols": ["", "Docker Desktop", "Docker Engine в WSL"],
-      "rows": [
-        ["Что это", "Программа для Windows с окном и настройками", "Обычная служба Docker внутри вашего Ubuntu"],
-        ["Как ставится", "Установщик с сайта Docker", "Командами apt внутри Linux"],
-        ["Откуда запускать команды", "Из Windows и из WSL", "Из WSL. Из Windows - через настройку подключения"],
-        ["Где данные", "В своих дистрибутивах и своём vhdx", "В vhdx вашего дистрибутива"],
-        ["Память", "Больше: окно, служебные дистрибутивы", "Меньше: только сама служба"],
-        ["Лицензия", "Платная для крупных компаний", "Бесплатно для всех"]
+        ["Перевести путь", "wslpath 'C:\\Users\\имя' даст /mnt/c/Users/имя", "wslpath -w ~/projects даст путь для Windows"],
+        ["Скорость для команд Linux", "Медленно: каждый файл идёт через 9P", "Быстро: родной диск Linux"],
+        ["Права файлов (chmod)", "Не сохраняются без опции metadata", "Обычные права Linux"]
       ]
     },
     {
       "type": "chart",
-      "title": "Сколько памяти занято, когда контейнеры не запущены",
-      "unit": "гигабайты",
+      "title": "npm install в проекте среднего размера",
+      "unit": "секунды",
       "items": [
-        { "label": "Docker Desktop", "value": 1.5, "note": "окно, фоновые службы, свои дистрибутивы" },
-        { "label": "Docker Engine в WSL", "value": 0.4, "note": "служба Docker и сама виртуальная машина" }
+        { "label": "WSL2, папка ~/projects", "value": 20, "note": "родной диск ext4" },
+        { "label": "Windows, PowerShell, диск C", "value": 35, "note": "антивирус проверяет каждый файл" },
+        { "label": "WSL2, папка /mnt/c", "value": 120, "note": "тысячи мелких файлов через 9P" }
       ],
-      "note": "Числа примерные, сильно зависят от версии и настроек. Запущенные контейнеры добавляют своё в обоих случаях."
+      "note": "Числа примерные, порядок величин. Зависят от диска, антивируса и числа пакетов. git status и сборки ведут себя так же."
+    },
+    {
+      "type": "cheatsheet",
+      "title": "Шпаргалка (PowerShell, если не сказано иное)",
+      "items": [
+        { "group": "Дистрибутивы", "cmd": "wsl --list --online", "text": "Какие дистрибутивы можно поставить" },
+        { "cmd": "wsl --install -d Ubuntu-24.04", "text": "Поставить конкретный дистрибутив" },
+        { "cmd": "wsl -l -v", "text": "Список установленных: имя, состояние, версия WSL. Звёздочка - дистрибутив по умолчанию" },
+        { "cmd": "wsl --set-default Ubuntu-24.04", "text": "Сделать дистрибутивом по умолчанию" },
+        { "cmd": "wsl --set-version Ubuntu 2", "text": "Перевести дистрибутив с WSL1 на WSL2" },
+        { "cmd": "wsl --unregister Debian", "text": "Удалить дистрибутив вместе со всеми файлами. Без вопросов и без корзины" },
+        { "group": "Запуск", "cmd": "wsl", "text": "Открыть дистрибутив по умолчанию в этом терминале" },
+        { "cmd": "wsl -d Debian", "text": "Открыть конкретный дистрибутив" },
+        { "cmd": "wsl -d Ubuntu -u root", "text": "Войти от имени root, например если забыли пароль своего пользователя" },
+        { "cmd": "wsl --cd ~", "text": "Открыть Linux сразу в домашней папке" },
+        { "cmd": "wsl -- ls -la", "text": "Выполнить одну команду Linux и вернуться в PowerShell" },
+        { "group": "Состояние и остановка", "cmd": "wsl --status", "text": "Дистрибутив и версия по умолчанию" },
+        { "cmd": "wsl --version", "text": "Версии WSL, ядра Linux и Windows" },
+        { "cmd": "wsl -l --running", "text": "Какие дистрибутивы сейчас работают" },
+        { "cmd": "wsl -t Ubuntu", "text": "Остановить один дистрибутив. Нужно после правки wsl.conf" },
+        { "cmd": "wsl --shutdown", "text": "Остановить всё и вернуть память. Нужно после правки .wslconfig" },
+        { "cmd": "wsl --update", "text": "Обновить WSL и ядро Linux" },
+        { "group": "Копии и перенос", "cmd": "wsl --export Ubuntu $env:USERPROFILE\\wsl-backup\\ubuntu.tar", "text": "Сохранить весь дистрибутив в один архив tar" },
+        { "cmd": "wsl --export Ubuntu ubuntu.vhdx --format vhd", "text": "Сохранить копию диска целиком, без упаковки в tar" },
+        { "cmd": "wsl --import Ubuntu-copy D:\\WSL\\Ubuntu-copy ubuntu.tar", "text": "Восстановить архив как новый дистрибутив в указанной папке" },
+        { "cmd": "wsl --manage Ubuntu --move D:\\WSL\\Ubuntu", "text": "Перенести диск дистрибутива в другую папку, например с C на D" },
+        { "cmd": "wsl --manage Ubuntu --set-default-user dev", "text": "Задать, под каким пользователем входить" },
+        { "group": "Диск", "cmd": "wsl --manage Ubuntu --set-sparse true", "text": "Включить разрежённый диск: место после удаления вернётся Windows" },
+        { "cmd": "sudo fstrim -av", "text": "В Linux: отметить свободные блоки, чтобы диск можно было сжать" },
+        { "cmd": "df -h /", "text": "В Linux: сколько места занято и свободно" },
+        { "group": "Между Linux и Windows", "cmd": "explorer.exe .", "text": "В Linux: открыть текущую папку в проводнике" },
+        { "cmd": "code .", "text": "В Linux: открыть папку в VS Code через расширение WSL" },
+        { "cmd": "wslpath -w ~/projects", "text": "В Linux: перевести путь Linux в путь Windows" },
+        { "group": "Сеть", "cmd": "wsl hostname -I", "text": "Внутренний адрес Linux в режиме NAT" },
+        { "cmd": "ip route show default", "text": "В Linux: адрес Windows в режиме NAT стоит после слова via" },
+        { "cmd": "netsh interface portproxy show all", "text": "Какие пересылки портов настроены в Windows" }
+      ]
+    },
+    {
+      "type": "codepair",
+      "title": "Два файла настроек",
+      "left": {
+        "label": ".wslconfig (Windows, C:\\Users\\имя)",
+        "code": "[wsl2]\n# не больше 8 ГБ памяти на всю машину WSL\nmemory=8GB\n# сколько ядер процессора видит Linux\nprocessors=4\n# файл подкачки, 0 - выключить\nswap=4GB\n# сеть как у Windows\nnetworkingMode=mirrored\n# DNS и прокси берутся из Windows\ndnsTunneling=true\nautoProxy=true\n# выключить машину через 60 с простоя (только Windows 11)\nvmIdleTimeout=60000\n\n[experimental]\n# отдавать память кэша Windows\nautoMemoryReclaim=dropCache\n# новые диски - разрежённые\nsparseVhd=true"
+      },
+      "right": {
+        "label": "/etc/wsl.conf (внутри дистрибутива)",
+        "code": "[boot]\n# запускать службы через systemd\nsystemd=true\n\n[user]\n# кем входить по умолчанию\ndefault=dev\n\n[automount]\nenabled=true\nroot=/mnt/\n# права chmod на дисках Windows\noptions=\"metadata,umask=22,fmask=11\"\n\n[interop]\nenabled=true\n# видеть программы Windows в PATH\nappendWindowsPath=true\n\n[network]\n# писать /etc/resolv.conf самому WSL\ngenerateResolvConf=true"
+      },
+      "note": "Строки с # - пояснения, WSL их пропускает. Ключи пишутся точно так, с учётом регистра. Неизвестный ключ WSL покажет предупреждением при старте и пропустит."
+    },
+    {
+      "type": "compare",
+      "title": ".wslconfig или wsl.conf",
+      "cols": ["", ".wslconfig", "/etc/wsl.conf"],
+      "rows": [
+        ["Где лежит", "В папке пользователя Windows", "Внутри дистрибутива"],
+        ["На что действует", "На виртуальную машину и все дистрибутивы", "На один дистрибутив"],
+        ["Что задаёт", "Память, процессоры, swap, сеть, диски по умолчанию", "systemd, пользователь, подключение дисков Windows, PATH Windows"],
+        ["Чем править", "notepad $env:USERPROFILE\\.wslconfig", "sudo nano /etc/wsl.conf"],
+        ["Как применить", "wsl --shutdown и открыть дистрибутив", "wsl -t имя и открыть дистрибутив"]
+      ]
+    },
+    {
+      "type": "rules",
+      "title": "Память, процессор, swap",
+      "items": [
+        { "kind": "do", "title": "Задайте предел памяти", "text": "По умолчанию WSL2 может занять половину памяти компьютера. Если в Linux идут Docker и сборки, а в Windows ещё браузер и IDE, ставьте memory= на треть или половину. На 32 ГБ обычно хватает 8-12 ГБ." },
+        { "kind": "tip", "title": "Почему память не возвращается", "text": "Linux держит прочитанные файлы в памяти как кэш. Для Windows эта память занята процессом VmmemWSL. autoMemoryReclaim=gradual отдаёт кэш постепенно, dropCache - сразу. Если память не возвращается, проверьте, что режим не выключен строкой disabled." },
+        { "kind": "tip", "title": "swap", "text": "Swap - файл на диске Windows, куда Linux выгружает память при нехватке. По умолчанию он равен четверти памяти компьютера, с округлением вверх до гигабайта. swap=0 выключает его: тогда при нехватке Linux сразу убивает самый жадный процесс." },
+        { "kind": "when", "title": "processors", "text": "По умолчанию Linux видит все ядра. Ограничивайте, если сборка в WSL замораживает Windows: например processors=6 из 8." },
+        { "kind": "tip", "title": "Сколько занято на самом деле", "text": "В Windows: процесс VmmemWSL в диспетчере задач. В Linux: free -h, строка Mem. Если в Linux used мало, а VmmemWSL много, это кэш, и его вернёт autoMemoryReclaim или wsl --shutdown." }
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "Сеть: NAT или mirrored",
+      "cols": ["", "NAT (по умолчанию)", "mirrored"],
+      "rows": [
+        ["Адрес Linux", "Свой, вида 172.x.x.x, меняется после перезапуска", "Тот же, что у Windows"],
+        ["Сервер в Linux из Windows", "localhost работает: WSL пробрасывает порт сам (localhostForwarding)", "localhost работает напрямую"],
+        ["Сервер в Windows из Linux", "По адресу Windows из ip route show default", "По localhost"],
+        ["Доступ с других устройств в сети", "Нужен portproxy и правило брандмауэра", "Нужно только правило брандмауэра Hyper-V"],
+        ["VPN", "Часто обрывает связь Linux с интернетом", "Работает, особенно с dnsTunneling=true"],
+        ["IPv6", "Нет", "Да"],
+        ["Нужна Windows", "10 или 11", "11 версии 22H2 или новее"]
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Открыть сервер из WSL телефону в той же сети (режим NAT)",
+      "label": "PowerShell от имени администратора",
+      "code": "# внутренний адрес Linux\n$ip = (wsl hostname -I).Trim().Split(' ')[0]\n\n# порт 3000 Windows ведёт в порт 3000 Linux\nnetsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=3000 connectaddress=$ip connectport=3000\n\n# разрешить входящие соединения на 3000\nNew-NetFirewallRule -DisplayName \"WSL 3000\" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow\n\n# посмотреть и убрать\nnetsh interface portproxy show all\nnetsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=3000",
+      "note": "Сервер в Linux должен слушать 0.0.0.0, а не только 127.0.0.1. Адрес Linux меняется после wsl --shutdown, правило portproxy после этого надо пересоздать. В режиме mirrored portproxy не нужен: достаточно правила New-NetFirewallHyperVRule с VMCreatorId WSL {40E0AC32-46A5-438A-A0B2-2B479E8F2E90}."
+    },
+    {
+      "type": "codepair",
+      "title": "Переводы строк и git",
+      "left": {
+        "label": "bash, внутри Linux",
+        "code": "# в репозиторий и на диск - только LF\ngit config --global core.autocrlf input\n\n# на /mnt/c не следить за правами файлов\ngit config core.fileMode false\n\n# найти файлы с CRLF\ngrep -rlI $'\\r' --exclude-dir=.git .\n\n# починить один файл\nsed -i 's/\\r$//' scripts/start.sh"
+      },
+      "right": {
+        "label": ".gitattributes в корне проекта",
+        "code": "# git сам решает, текст это или нет\n* text=auto eol=lf\n\n# скрипты для Windows - с CRLF\n*.ps1 text eol=crlf\n*.cmd text eol=crlf\n\n# скрипты для Linux - только LF\n*.sh text eol=lf"
+      },
+      "note": "Windows заканчивает строки двумя символами CRLF, Linux - одним LF. Лишний \\r в скрипте bash даёт ошибку bad interpreter. .gitattributes действует на всех, кто клонирует проект, а core.autocrlf - только на ваш компьютер. Один проект - один git: если git из Windows и git из Linux работают с одной папкой, они спорят о переводах строк и правах, и git status показывает изменёнными все файлы."
+    },
+    {
+      "type": "steps",
+      "title": "VS Code и WSL",
+      "items": [
+        "Поставьте VS Code в Windows. В Linux его ставить не нужно",
+        "Поставьте расширение WSL от Microsoft (ms-vscode-remote.remote-wsl)",
+        "В терминале Linux перейдите в проект: cd ~/projects/my-app",
+        "Выполните code . - при первом запуске VS Code поставит в Linux свою серверную часть в папку ~/.vscode-server",
+        "Слева внизу должно быть написано WSL: Ubuntu. Это значит, что файлы, терминал и git работают в Linux",
+        "Расширения вроде ESLint ставятся заново, с пометкой «в WSL»: они должны работать там же, где код",
+        "Не открывайте папку \\\\wsl.localhost\\... через Файл - Открыть: тогда git и расширения работают из Windows, медленно и с путаницей в переводах строк"
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Диск: как вернуть место",
+      "items": [
+        "В Linux удалите лишнее: кэши, старые node_modules, образы Docker (docker system prune)",
+        "Выполните sudo fstrim -av: Linux сообщит диску, какие блоки свободны",
+        "Найдите файл диска. PowerShell: Get-ChildItem HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss | ForEach-Object { Get-ItemProperty $_.PSPath } | Select-Object DistributionName, BasePath. Файл ext4.vhdx лежит в папке BasePath",
+        "Выполните wsl --shutdown. Сжимать можно только выключенный диск",
+        "Если есть модуль Hyper-V (Windows Pro): Optimize-VHD -Path \"путь\\ext4.vhdx\" -Mode Full в PowerShell от администратора",
+        "Если его нет: diskpart, затем по очереди select vdisk file=\"путь\\ext4.vhdx\", attach vdisk readonly, compact vdisk, detach vdisk, exit",
+        "Чтобы не делать это снова: wsl --manage Ubuntu --set-sparse true. Если WSL откажет и напишет про риск повреждения данных, в вашей версии этот режим выключен, сжимайте вручную"
+      ]
+    },
+    {
+      "type": "rules",
+      "title": "Когда выключать WSL",
+      "items": [
+        { "kind": "tip", "title": "WSL выключается сам", "text": "Дистрибутив останавливается, когда закрыт последний сеанс (окно терминала, VS Code, команда wsl) и прошло instanceIdleTimeout: по умолчанию 15 секунд, задаётся в разделе [general] файла .wslconfig, -1 отключает. Службы systemd сеансом не считаются. Виртуальная машина гаснет, когда все дистрибутивы стоят дольше vmIdleTimeout (по умолчанию 60 секунд, только Windows 11). Выключать WSL каждый вечер руками не нужно." },
+        { "kind": "when", "title": "wsl --shutdown нужен", "text": "После правки .wslconfig. Когда VmmemWSL держит память, а она нужна Windows: игра, тяжёлый редактор видео. Перед сжатием vhdx. Когда сеть или DNS в Linux сломались после смены Wi-Fi или VPN." },
+        { "kind": "tip", "title": "Один дистрибутив - wsl -t", "text": "После правки wsl.conf хватает wsl -t имя: остальные дистрибутивы продолжат работать." },
+        { "kind": "dont", "title": "Не обрывайте базы данных", "text": "wsl --shutdown обрывает все процессы сразу. База данных или Docker в этот момент могут писать на диск. Сначала остановите их: docker compose stop или sudo systemctl stop docker, потом выключайте WSL." },
+        { "kind": "tip", "title": "Что переживает выключение", "text": "Все файлы на дисках остаются. Пропадают запущенные процессы и открытые сеансы. В режиме NAT правила portproxy продолжают смотреть на старый адрес Linux." }
+      ]
+    },
+    {
+      "type": "rules",
+      "title": "Как работать правильно",
+      "items": [
+        { "kind": "when", "title": "WSL подходит", "text": "Проект на Node.js, Python, Go, Rust, где инструменты пишут сначала для Linux. Нужны Docker, bash-скрипты, тот же набор программ, что на сервере. Docker без Docker Desktop разобран в уроке «Docker Engine»." },
+        { "kind": "dont", "title": "WSL не нужен", "text": "Программы для Windows с окнами: .NET для Windows, игры на DirectX. Их собирают и запускают в самой Windows." },
+        { "kind": "do", "title": "Проекты в ~/projects", "text": "Код, node_modules и сборки держите на диске Linux. В /mnt/c кладите только то, что нужно открывать программами Windows." },
+        { "kind": "do", "title": "Инструменты ставьте в Linux", "text": "node, python, git ставьте внутри дистрибутива. Если в Linux вызывается node.exe из Windows через PATH, это медленно и ломает пути." },
+        { "kind": "do", "title": "Делайте резервные копии", "text": "Дистрибутив - один файл. Повреждённый vhdx или случайный wsl --unregister уносит всё. Раз в неделю wsl --export, а код - в git на сервере." },
+        { "kind": "tip", "title": "Видеокарта и CUDA", "text": "Драйвер NVIDIA для Windows уже даёт Linux доступ к видеокарте. Драйвер Linux внутри WSL ставить нельзя: он сломает связку. Проверка: nvidia-smi в Linux. Для CUDA ставят пакет cuda-toolkit для WSL-Ubuntu, без драйвера." },
+        { "kind": "tip", "title": "Медленный автокомплит", "text": "WSL дописывает папки PATH Windows в PATH Linux, и поиск команд идёт по сотням папок через 9P. appendWindowsPath=false в wsl.conf ускоряет оболочку, но code и explorer.exe тогда вызывают по полному пути." }
+      ]
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: почувствуйте разницу в скорости",
+      "task": "Создайте пять тысяч мелких файлов на диске Windows и на диске Linux и сравните время.",
+      "steps": [
+        "Откройте Ubuntu",
+        "mkdir -p /mnt/c/Users/ИМЯ/wsl-test && cd /mnt/c/Users/ИМЯ/wsl-test, где ИМЯ - имя пользователя Windows",
+        "time (for i in $(seq 1 5000); do echo $i > f$i.txt; done)",
+        "mkdir -p ~/wsl-test && cd ~/wsl-test",
+        "Повторите ту же команду time",
+        "Сравните строку real в двух ответах"
+      ],
+      "check": "На диске Linux real в несколько раз меньше, чем на /mnt/c.",
+      "hint": "Имя пользователя Windows покажет ls /mnt/c/Users.",
+      "solution": "mkdir -p /mnt/c/Users/ИМЯ/wsl-test && cd /mnt/c/Users/ИМЯ/wsl-test\ntime (for i in $(seq 1 5000); do echo $i > f$i.txt; done)\nmkdir -p ~/wsl-test && cd ~/wsl-test\ntime (for i in $(seq 1 5000); do echo $i > f$i.txt; done)\n# убрать за собой\ncd ~ && rm -rf ~/wsl-test /mnt/c/Users/ИМЯ/wsl-test"
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: ограничьте память",
+      "task": "Поставьте WSL предел памяти 4 ГБ и убедитесь, что Linux его видит.",
+      "steps": [
+        "В Linux выполните free -h и запомните число total в строке Mem",
+        "В PowerShell откройте файл: notepad $env:USERPROFILE\\.wslconfig",
+        "Впишите раздел [wsl2] и строку memory=4GB, сохраните",
+        "Выполните wsl --shutdown",
+        "Откройте Ubuntu и снова выполните free -h"
+      ],
+      "check": "total в строке Mem теперь около 3.8Gi.",
+      "hint": "Блокнот любит дописывать .txt. Проверьте имя файла: dir $env:USERPROFILE\\.wslconfig. Если файла с таким именем нет, переименуйте.",
+      "solution": "[wsl2]\nmemory=4GB\n\n# потом в PowerShell\nwsl --shutdown\nwsl free -h\n\n# вернуть как было: удалить строку memory и снова wsl --shutdown"
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: резервная копия и восстановление",
+      "task": "Сохраните дистрибутив в архив и поднимите из него копию рядом с оригиналом.",
+      "steps": [
+        "Узнайте точное имя дистрибутива: wsl -l -v",
+        "Остановите его: wsl -t Ubuntu",
+        "Создайте папку для копий: mkdir $env:USERPROFILE\\wsl-backup",
+        "wsl --export Ubuntu $env:USERPROFILE\\wsl-backup\\ubuntu.tar",
+        "wsl --import Ubuntu-test $env:USERPROFILE\\wsl\\Ubuntu-test $env:USERPROFILE\\wsl-backup\\ubuntu.tar",
+        "wsl -d Ubuntu-test, внутри ls /home - там ваш пользователь и его файлы",
+        "Выйдите (exit) и удалите копию: wsl --unregister Ubuntu-test"
+      ],
+      "check": "wsl -l -v показывал оба дистрибутива, после unregister остался только оригинал. Архив ubuntu.tar остался в wsl-backup.",
+      "hint": "Импортированный дистрибутив входит под root. Чтобы входить своим пользователем: wsl --manage Ubuntu-test --set-default-user имя. Перед unregister дважды проверьте имя: эта команда удаляет без вопросов.",
+      "solution": "wsl -t Ubuntu\nmkdir $env:USERPROFILE\\wsl-backup\nwsl --export Ubuntu $env:USERPROFILE\\wsl-backup\\ubuntu.tar\nwsl --import Ubuntu-test $env:USERPROFILE\\wsl\\Ubuntu-test $env:USERPROFILE\\wsl-backup\\ubuntu.tar\nwsl -l -v\nwsl -d Ubuntu-test -- ls /home\nwsl --unregister Ubuntu-test"
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: включите systemd",
+      "task": "Убедитесь, что в дистрибутиве работает systemd, и посмотрите запущенные службы.",
+      "steps": [
+        "В Linux выполните ps -p 1 -o comm= - команда печатает имя самого первого процесса",
+        "Если ответ systemd, он уже включён, переходите к последнему шагу",
+        "Иначе: sudo nano /etc/wsl.conf, впишите [boot] и строку systemd=true, сохраните",
+        "В PowerShell: wsl -t Ubuntu, затем снова откройте Ubuntu",
+        "systemctl list-units --type=service --state=running"
+      ],
+      "check": "ps -p 1 -o comm= печатает systemd, а последняя команда показывает список служб, например cron.service.",
+      "hint": "Если systemctl пишет System has not been booted with systemd, дистрибутив не перезапустился или WSL старый: выполните wsl --update.",
+      "solution": "# /etc/wsl.conf\n[boot]\nsystemd=true\n\n# PowerShell\nwsl -t Ubuntu\nwsl -- ps -p 1 -o comm=\nwsl -- systemctl list-units --type=service --state=running"
     },
     {
       "type": "mistakes",
       "title": "Что ломается чаще всего",
       "items": [
-        { "problem": "WSL забирает половину памяти и не отдаёт", "fix": "По умолчанию WSL2 может занять до половины памяти компьютера. Задайте предел в .wslconfig: строка memory=8GB в разделе [wsl2]. Потом выполните wsl --shutdown." },
-        { "problem": "Место на диске C пропадает, хотя файлы в Linux удалены", "fix": "Файл vhdx сам не сжимается. Включите автосжатие командой wsl --manage Ubuntu --set-sparse true или сожмите диск вручную, когда WSL выключен." },
-        { "problem": "npm install и git в проекте работают очень медленно", "fix": "Проект лежит в /mnt/c, и каждый файл идёт через мост между системами. Перенесите проект в папку Linux, например ~/projects." },
-        { "problem": "Настройки в .wslconfig не применились", "fix": "WSL читает файл только при старте. Выполните wsl --shutdown и откройте дистрибутив заново." },
-        { "problem": "Из Linux не открываются сайты при включённом VPN", "fix": "В режиме NAT VPN часто не доходит до Linux. Попробуйте networkingMode=mirrored в .wslconfig." },
-        { "problem": "Скрипт из Windows падает с ошибкой bad interpreter или \\r", "fix": "Файл сохранён с переводами строк Windows (CRLF). Сохраните его с LF или настройте git: core.autocrlf=input." }
-      ]
-    },
-    {
-      "type": "cheatsheet",
-      "title": "Шпаргалка (команды для PowerShell)",
-      "items": [
-        { "cmd": "wsl --install", "text": "Включить WSL и поставить Ubuntu" },
-        { "cmd": "wsl -l -v", "text": "Список дистрибутивов, их состояние и версия WSL" },
-        { "cmd": "wsl", "text": "Открыть дистрибутив по умолчанию прямо в этом терминале" },
-        { "cmd": "wsl -d Debian", "text": "Открыть конкретный дистрибутив" },
-        { "cmd": "wsl --shutdown", "text": "Выключить все дистрибутивы и вернуть память" },
-        { "cmd": "wsl --update", "text": "Обновить WSL и ядро Linux" },
-        { "cmd": "wsl --status", "text": "Версия по умолчанию и состояние WSL" },
-        { "cmd": "explorer.exe .", "text": "Из Linux: открыть текущую папку в проводнике Windows" }
+        { "problem": "WSL забирает много памяти и не отдаёт", "fix": "Задайте memory= в разделе [wsl2] файла .wslconfig и autoMemoryReclaim=dropCache в разделе [experimental]. Потом wsl --shutdown." },
+        { "problem": "Место на диске C пропадает, хотя файлы в Linux удалены", "fix": "Файл vhdx сам не сжимается. Выполните sudo fstrim -av, затем сожмите диск через Optimize-VHD или diskpart, или включите разрежённый диск: wsl --manage Ubuntu --set-sparse true." },
+        { "problem": "npm install и git в проекте работают очень медленно", "fix": "Проект лежит в /mnt/c, и каждый файл идёт через 9P. Перенесите проект в ~/projects." },
+        { "problem": "Настройки в .wslconfig не применились", "fix": "WSL читает файл только при старте машины. Выполните wsl --shutdown. Проверьте имя: не .wslconfig.txt. Проверьте, что ключи стоят под заголовком [wsl2]." },
+        { "problem": "Из Linux не открываются сайты при включённом VPN", "fix": "В режиме NAT VPN часто не пускает Linux в сеть. Включите networkingMode=mirrored и dnsTunneling=true в .wslconfig." },
+        { "problem": "Скрипт падает с ошибкой bad interpreter или $'\\r': command not found", "fix": "Файл сохранён с переводами строк Windows (CRLF). Исправьте командой sed -i 's/\\r$//' файл и добавьте в .gitattributes строку *.sh text eol=lf." },
+        { "problem": "systemctl: System has not been booted with systemd", "fix": "Включите systemd=true в разделе [boot] файла /etc/wsl.conf и перезапустите дистрибутив: wsl -t имя." },
+        { "problem": "WslRegisterDistribution failed или ошибка 0x80370102", "fix": "Виртуализация выключена. Включите Intel VT-x или AMD SVM в BIOS и компонент Windows «Платформа виртуальной машины»." },
+        { "problem": "Телефон в той же Wi-Fi не открывает сервер из WSL", "fix": "В режиме NAT сеть Linux не видна снаружи. Настройте portproxy и правило брандмауэра или перейдите на mirrored. Сервер должен слушать 0.0.0.0." }
       ]
     },
     {
       "type": "quiz",
       "title": "Проверьте себя",
       "items": [
-        { "q": "Где проект будет работать быстрее, если команды запускаются в Linux?", "options": ["В /mnt/c/Users/имя/projects", "В ~/projects", "Без разницы"], "answer": 1, "why": "~/projects лежит на родном диске Linux. Файлы из /mnt/c идут через мост между системами, это медленно." },
-        { "q": "Зачем нужна команда wsl --shutdown?", "options": ["Удалить Linux", "Остановить WSL, чтобы применить настройки и освободить память", "Выключить Windows"], "answer": 1, "why": "Она останавливает все дистрибутивы и виртуальную машину. Данные при этом не удаляются." },
-        { "q": "Чем Docker Engine в WSL отличается от Docker Desktop?", "options": ["Engine работает без окна внутри дистрибутива и берёт меньше памяти", "Engine не умеет запускать контейнеры", "Ничем"], "answer": 0, "why": "Это одна и та же служба Docker. Desktop добавляет к ней окно, настройки и свои служебные дистрибутивы." },
-        { "q": "Почему место на диске не вернулось после удаления файлов в Linux?", "options": ["Файлы не удалились", "Файл диска vhdx не уменьшается сам", "Windows так считает свободное место"], "answer": 1, "why": "vhdx растёт по мере надобности, но сжимать его нужно отдельно." }
+        { "q": "Где проект будет работать быстрее, если команды запускаются в Linux?", "options": ["В /mnt/c/Users/имя/projects", "В ~/projects", "Без разницы"], "answer": 1, "why": "~/projects лежит на родном диске Linux. Файлы из /mnt/c идут через 9P, это в разы медленнее." },
+        { "q": "Вы поменяли memory в .wslconfig. Что сделать, чтобы настройка заработала?", "options": ["wsl --shutdown и открыть дистрибутив", "Обязательно перезагрузить Windows", "wsl -t Ubuntu"], "answer": 0, "why": ".wslconfig настраивает всю виртуальную машину. Её надо выключить целиком. wsl -t останавливает один дистрибутив, машина продолжает работать." },
+        { "q": "Где включают systemd?", "options": ["В .wslconfig, раздел [wsl2]", "Командой wsl --install", "В /etc/wsl.conf, раздел [boot]"], "answer": 2, "why": "systemd - настройка конкретного дистрибутива, поэтому она живёт в его wsl.conf." },
+        { "q": "Почему место на диске не вернулось после удаления файлов в Linux?", "options": ["Файл vhdx не уменьшается сам", "Файлы не удалились", "Windows так считает свободное место"], "answer": 0, "why": "vhdx растёт по мере надобности, но сжимать его нужно отдельно или включить разрежённый режим." },
+        { "q": "Что случится с запущенной базой данных при wsl --shutdown?", "options": ["Она аккуратно сохранится и остановится", "Процесс оборвётся, и база при следующем старте будет восстанавливаться после сбоя", "Она продолжит работать в фоне"], "answer": 1, "why": "wsl --shutdown выключает машину сразу. Базы и Docker останавливайте до этого." },
+        { "q": "Чем режим mirrored удобнее NAT?", "options": ["Linux быстрее работает с диском C", "Не нужен .wslconfig", "localhost общий в обе стороны, VPN и IPv6 работают"], "answer": 2, "why": "В mirrored Linux видит сеть так же, как Windows. Скорость дисков от режима сети не зависит." },
+        { "q": "Как сделать резервную копию всего дистрибутива?", "options": ["Скопировать папку /home", "wsl --export Ubuntu файл.tar", "git push"], "answer": 1, "why": "wsl --export сохраняет весь дистрибутив: программы, настройки, файлы. Восстанавливают его через wsl --import." }
       ]
     },
     { "type": "project", "title": "Где это в вашем проекте" }

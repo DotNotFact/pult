@@ -69,7 +69,7 @@
       "title": "Как запустить чужой проект на Node",
       "items": [
         "Установите Node LTS с nodejs.org или через nvm.",
-        "Проверьте: node -v печатает версию, например v22.11.0.",
+        "Проверьте: node -v печатает версию, например v24.11.0.",
         "Откройте терминал в папке проекта.",
         "Посмотрите, какой lock-файл лежит в папке, и возьмите тот же менеджер пакетов: npm, pnpm, yarn или bun.",
         "Выполните npm install. Появится папка node_modules.",
@@ -98,6 +98,33 @@
         ["Окно, кнопки, document", "есть", "нет"],
         ["Для чего", "интерфейс сайта", "серверы, сборка, тесты, скрипты"]
       ]
+    },
+    {
+      "type": "rules",
+      "title": "Как работать с Node",
+      "items": [
+        { "kind": "do", "title": "Версию Node - в файл", "text": "Запишите её в .nvmrc или в поле engines файла package.json. Тогда коллеги (nvm use), CI (node-version-file в setup-node) и сервер возьмут одну и ту же версию." },
+        { "kind": "do", "title": "Только LTS", "text": "Для работы берут чётные версии с долгой поддержкой: 22 или 24. Нечётные живут полгода и годятся для пробы нового." },
+        { "kind": "dont", "title": "Не ставьте инструменты глобально", "text": "npm install -g привязывает проект к вашему компьютеру: у коллеги другая версия или её нет вовсе. Кладите инструменты в devDependencies и вызывайте через scripts или npx." },
+        { "kind": "when", "title": "npm ci или npm install", "text": "npm ci - после клонирования и в CI: ставит строго по lock-файлу и начинает с пустой node_modules. npm install - когда добавляете или обновляете пакеты." },
+        { "kind": "tip", "title": "Встроенное вместо пакетов", "text": "node --watch перезапускает программу после правки, node --env-file=.env читает переменные. Для этого больше не нужны nodemon и dotenv." }
+      ]
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: сервер и скрипты",
+      "task": "Создайте проект с маленьким сервером, скриптами start и dev и запустите его на другом порту через переменную окружения.",
+      "steps": [
+        "mkdir node-lab, cd node-lab, npm init -y",
+        "Добавьте скрипты: npm pkg set scripts.start=\"node server.js\" и npm pkg set scripts.dev=\"node --watch server.js\"",
+        "Создайте server.js: сервер слушает порт из PORT или 3000 и отвечает текстом",
+        "npm run dev и откройте http://localhost:3000",
+        "Поменяйте текст ответа, сохраните файл и обновите страницу",
+        "Остановите Ctrl+C и запустите на порту 4000: bash - PORT=4000 npm start, PowerShell - $env:PORT = 4000; npm start"
+      ],
+      "check": "После правки в терминале видна строка о перезапуске, страница показывает новый текст. http://localhost:4000 отвечает, когда сервер запущен с PORT=4000.",
+      "hint": "EADDRINUSE значит, что порт занят прошлым запуском: остановите его. Если в браузере старый текст, проверьте, что запущен именно npm run dev, а не npm start.",
+      "solution": "mkdir node-lab && cd node-lab\nnpm init -y\nnpm pkg set scripts.start=\"node server.js\"\nnpm pkg set scripts.dev=\"node --watch server.js\"\n\n// server.js\nconst http = require(\"node:http\");\nconst port = Number(process.env.PORT) || 3000;\nhttp\n  .createServer((req, res) => res.end(\"hello from node\\n\"))\n  .listen(port, () => console.log(`http://localhost:${port}`));\n\nnpm run dev\n\n# другой порт, bash\nPORT=4000 npm start\n# другой порт, PowerShell\n$env:PORT = 4000; npm start"
     },
     {
       "type": "mistakes",
@@ -129,9 +156,9 @@
       "type": "quiz",
       "title": "Проверьте себя",
       "items": [
-        { "q": "Зачем проекту с package.json нужен Node?", "options": ["Чтобы открыть README", "Чтобы выполнять JavaScript: сервер, сборку, тесты", "Чтобы работал git", "Он не нужен"], "answer": 1, "why": "package.json означает проект на JavaScript или TypeScript. Его команды выполняет Node." },
-        { "q": "Почему node_modules не кладут в git?", "options": ["Это секрет", "Папка огромная и восстанавливается командой install", "Git не умеет хранить папки", "Так требует закон"], "answer": 1, "why": "Список пакетов и их версии уже есть в package.json и lock-файле. По ним install соберёт папку заново." },
-        { "q": "Что сделает npm run build?", "options": ["Установит пакет build", "Выполнит строку из раздела scripts с именем build", "Удалит папку build", "Обновит Node"], "answer": 1, "why": "npm run берёт команду из scripts по имени. Что именно она делает, видно в package.json." },
+        { "q": "Зачем проекту с package.json нужен Node?", "options": ["Чтобы открыть README", "Чтобы работал git", "Чтобы выполнять JavaScript: сервер, сборку, тесты", "Он не нужен"], "answer": 2, "why": "package.json означает проект на JavaScript или TypeScript. Его команды выполняет Node." },
+        { "q": "Почему node_modules не кладут в git?", "options": ["Папка огромная и восстанавливается командой install", "Это секрет", "Git не умеет хранить папки", "Так требует закон"], "answer": 0, "why": "Список пакетов и их версии уже есть в package.json и lock-файле. По ним install соберёт папку заново." },
+        { "q": "Что сделает npm run build?", "options": ["Установит пакет build", "Удалит папку build", "Обновит Node", "Выполнит строку из раздела scripts с именем build"], "answer": 3, "why": "npm run берёт команду из scripts по имени. Что именно она делает, видно в package.json." },
         { "q": "Какую версию Node ставить для работы?", "options": ["Самую первую", "LTS", "Любую нечётную", "Ту, что стоит на соседнем компьютере"], "answer": 1, "why": "LTS получает исправления долго, и под неё проверено большинство пакетов." }
       ]
     },

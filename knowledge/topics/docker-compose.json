@@ -3,128 +3,932 @@
   "title": "Docker Compose",
   "color": "#1d63ed",
   "icon": "layers",
-  "level": "основы",
-  "summary": "Docker Compose запускает несколько контейнеров одной командой по описанию из одного файла: сайт, сервер, базу и всё, что им нужно.",
-  "detect": { "files": ["compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"], "deps": [], "bins": ["docker compose", "docker-compose"], "stacks": ["Docker Compose"] },
-  "related": ["docker", "wsl", "databases", "env"],
+  "level": "средний",
+  "summary": "Docker Compose описывает в одном файле все контейнеры приложения: сервер, базу, кэш, задачи. Поднимает, обновляет и убирает их одной командой.",
+  "detect": {
+    "files": [
+      "compose.yaml",
+      "compose.yml",
+      "docker-compose.yml",
+      "docker-compose.yaml"
+    ],
+    "deps": [],
+    "bins": [
+      "docker compose",
+      "docker-compose"
+    ],
+    "stacks": [
+      "Docker Compose"
+    ]
+  },
+  "related": [
+    "docker",
+    "docker-engine",
+    "wsl",
+    "databases",
+    "env",
+    "ci-cd"
+  ],
   "sections": [
     {
       "type": "idea",
       "title": "Зачем это нужно",
-      "text": "Настоящее приложение редко состоит из одной программы. Обычно это сайт, сервер с данными и база. Запускать каждый контейнер своей длинной командой неудобно и легко ошибиться. Compose описывает все части в одном файле. Дальше хватает одной команды, чтобы поднять всё вместе, и одной, чтобы всё остановить.",
-      "analogy": "Ноты для оркестра. Каждый музыкант знает свою партию, а дирижёр по одним нотам запускает всех сразу. Файл compose - это ноты, команда up - взмах палочки."
+      "text": "Настоящее приложение редко состоит из одной программы. Обычно это сервер, база, кэш, фоновые задачи и миграции. Каждый контейнер можно запустить своей длинной командой docker run, но таких команд пять, у каждой десяток ключей, и порядок важен. Compose описывает всё в одном файле: что запускать, с какими настройками, кто от кого зависит. Файл лежит в git, и любой участник поднимает то же самое одной командой.",
+      "analogy": "Ноты для оркестра. Каждый музыкант знает свою партию, а дирижёр по одним нотам запускает всех сразу и в нужном порядке. Файл compose - ноты, команда up - взмах палочки."
     },
     {
       "type": "diagram",
       "title": "Как устроено",
       "nodes": [
-        { "id": "file", "label": "compose.yaml", "note": "описание всех частей", "icon": "file" },
-        { "id": "web", "label": "web", "note": "сайт, открыт наружу", "icon": "window" },
-        { "id": "api", "label": "api", "note": "сервер с данными", "icon": "server" },
-        { "id": "db", "label": "db", "note": "база данных", "icon": "database" },
-        { "id": "net", "label": "Сеть", "note": "сервисы видят друг друга по имени", "icon": "link" },
-        { "id": "vol", "label": "Том", "note": "файлы базы на диске", "icon": "folder" }
+        {
+          "id": "file",
+          "label": "compose.yaml",
+          "note": "описание всех частей",
+          "icon": "file"
+        },
+        {
+          "id": "env",
+          "label": ".env",
+          "note": "значения переменных",
+          "icon": "key"
+        },
+        {
+          "id": "cli",
+          "label": "docker compose",
+          "note": "читает, сравнивает, создаёт",
+          "icon": "terminal"
+        },
+        {
+          "id": "net",
+          "label": "Сеть проекта",
+          "note": "сервисы видят друг друга по имени",
+          "icon": "link"
+        },
+        {
+          "id": "svc",
+          "label": "Контейнеры",
+          "note": "api, db, redis",
+          "icon": "box"
+        },
+        {
+          "id": "vol",
+          "label": "Тома",
+          "note": "данные базы",
+          "icon": "database"
+        }
       ],
       "edges": [
-        ["file", "web", "описывает"],
-        ["file", "api", "описывает"],
-        ["file", "db", "описывает"],
-        ["web", "net", "ходит в api"],
-        ["api", "net", "ходит в db"],
-        ["db", "vol", "хранит данные"]
+        [
+          "file",
+          "cli",
+          "описание"
+        ],
+        [
+          "env",
+          "cli",
+          "переменные"
+        ],
+        [
+          "cli",
+          "net",
+          "создаёт"
+        ],
+        [
+          "cli",
+          "vol",
+          "создаёт"
+        ],
+        [
+          "cli",
+          "svc",
+          "создаёт и запускает"
+        ],
+        [
+          "svc",
+          "vol",
+          "пишут данные"
+        ]
       ],
-      "caption": "Один файл описывает три сервиса. Compose создаёт для них общую сеть и том. Внутри сети api обращается к базе просто по имени db."
+      "caption": "Compose читает файл и переменные, собирает итоговое описание и через Docker создаёт сеть, тома и контейнеры. Внутри сети сервис api обращается к базе по имени db."
     },
     {
       "type": "terms",
       "title": "Слова, которые надо знать",
       "items": [
-        { "term": "Сервис", "text": "Одна часть приложения в файле compose: web, api, db. Для каждого сервиса Compose запускает контейнер.", "forms": ["сервиса", "сервисы", "сервисов", "service", "services"] },
-        { "term": "Compose-файл", "text": "Файл compose.yaml или docker-compose.yml в корне проекта. В нём перечислены сервисы, их образы, порты, тома и переменные.", "forms": ["compose.yaml", "docker-compose.yml"] },
-        { "term": "Проект", "text": "Набор контейнеров, сетей и томов одного compose-файла. По умолчанию называется как папка. Имя проекта стоит в начале имён контейнеров и томов.", "forms": ["проекта"] },
-        { "term": "Сеть", "text": "Compose сам создаёт сеть для сервисов проекта. В ней сервисы обращаются друг к другу по имени: адрес базы - db, а не localhost.", "forms": ["сети", "network", "networks"] },
-        { "term": "Том", "text": "Хранилище данных, которое переживает перезапуск и удаление контейнеров. Описывается в разделе volumes.", "forms": ["тома", "томе", "volume", "volumes"] },
-        { "term": "depends_on", "text": "Порядок запуска: сервис стартует после тех, от кого зависит. Сам по себе не ждёт, пока база будет готова принимать запросы. Для этого нужна проверка здоровья: healthcheck и condition: service_healthy.", "forms": [] },
-        { "term": "healthcheck", "text": "Команда, которой Compose проверяет, что сервис не просто запущен, а работает. Пока проверка не прошла, сервис считается неготовым.", "forms": ["проверка здоровья"] }
+        {
+          "term": "Сервис",
+          "text": "Одна часть приложения в compose-файле: api, db, redis. Для сервиса Compose запускает один контейнер или несколько одинаковых.",
+          "forms": [
+            "сервиса",
+            "сервисы",
+            "сервисов",
+            "сервису",
+            "сервисом",
+            "service",
+            "services"
+          ]
+        },
+        {
+          "term": "Compose-файл",
+          "text": "Файл compose.yaml в корне проекта. Старое имя docker-compose.yml тоже читается. Формат - YAML: вложенность задают отступы пробелами.",
+          "forms": [
+            "compose.yaml",
+            "compose.yml",
+            "docker-compose.yml",
+            "compose-файла",
+            "compose-файле"
+          ]
+        },
+        {
+          "term": "Проект Compose",
+          "text": "Все контейнеры, сети и тома одного запуска. Имя проекта по умолчанию - имя папки. Его задают полем name, ключом -p или переменной COMPOSE_PROJECT_NAME. Имя стоит в начале имён: my-app-api-1, my-app_db-data.",
+          "forms": [
+            "проекта Compose",
+            "имя проекта",
+            "имени проекта",
+            "COMPOSE_PROJECT_NAME"
+          ]
+        },
+        {
+          "term": "depends_on",
+          "text": "Список, от кого зависит сервис. Compose запускает зависимости раньше. С условием condition он ещё и ждёт: запуска, здоровья или успешного завершения.",
+          "forms": [
+            "condition",
+            "service_healthy",
+            "service_completed_successfully"
+          ]
+        },
+        {
+          "term": "Профиль Compose",
+          "text": "Метка у сервиса: profiles: [\"debug\"]. Такой сервис стартует, только если профиль включён ключом --profile. Сервисы без профиля стартуют всегда.",
+          "forms": [
+            "profiles",
+            "--profile",
+            "COMPOSE_PROFILES"
+          ]
+        },
+        {
+          "term": "Интерполяция",
+          "text": "Подстановка переменных в compose-файл: вместо ${DB_PASSWORD} Compose ставит значение из окружения терминала или из файла .env.",
+          "forms": [
+            "подстановка переменных",
+            "подстановки переменных"
+          ]
+        },
+        {
+          "term": "Файл переопределения",
+          "text": "Второй compose-файл, который дописывает или меняет первый. compose.override.yaml подхватывается сам, остальные указывают ключом -f.",
+          "forms": [
+            "compose.override.yaml",
+            "override",
+            "файла переопределения"
+          ]
+        },
+        {
+          "term": "Сервис-задача",
+          "text": "Сервис, который выполняет работу и завершается: миграции, наполнение базы, тесты. Ему ставят restart: \"no\", а ждут его через service_completed_successfully.",
+          "forms": [
+            "сервиса-задачи",
+            "одноразовый сервис",
+            "one-off"
+          ]
+        },
+        {
+          "term": "develop.watch",
+          "text": "Раздел сервиса, который говорит Compose следить за файлами: копировать правки в контейнер, перезапускать его или пересобирать образ.",
+          "forms": [
+            "watch",
+            "compose watch"
+          ]
+        }
       ]
     },
     {
+      "type": "idea",
+      "title": "Что Compose делает внутри",
+      "text": "Compose - программа-клиент без своего сервера. На каждую команду он заново читает compose.yaml и файлы переопределения, подставляет переменные и получает итоговое описание. Его печатает docker compose config. Дальше он идёт в Docker и смотрит, что уже есть. Каждый созданный объект он помечает метками: имя проекта, имя сервиса и отпечаток настроек сервиса. При повторном up он сравнивает отпечаток из файла с отпечатком на контейнере. Совпал - контейнер не трогает. Не совпал - пересоздаёт только этот сервис. Отдельного файла состояния нет: состояние - это метки на контейнерах. Поэтому если сменить имя папки или проекта, Compose не узнает старые контейнеры и тома и создаст новые, пустые.",
+      "analogy": "Завхоз со списком. Каждый раз он берёт свежий список, обходит склад и смотрит бирки на коробках. Бирка совпадает - коробку не трогает. Не совпадает - меняет коробку. Чужие бирки для него как пустое место."
+    },
+    {
       "type": "example",
-      "title": "Сайт, сервер и база в одном файле",
-      "code": "services:\n  web:\n    build: ./web\n    ports:\n      - \"8080:80\"\n    depends_on:\n      - api\n\n  api:\n    build: ./api\n    environment:\n      DATABASE_URL: postgres://app:secret@db:5432/app\n    depends_on:\n      db:\n        condition: service_healthy\n\n  db:\n    image: postgres:17\n    environment:\n      POSTGRES_USER: app\n      POSTGRES_PASSWORD: secret\n    volumes:\n      - db-data:/var/lib/postgresql/data\n    healthcheck:\n      test: [\"CMD\", \"pg_isready\", \"-U\", \"app\"]\n      interval: 5s\n\nvolumes:\n  db-data:",
-      "note": "web и api собираются из своих папок, db берётся готовым образом. Наружу открыт только сайт на порту 8080. api находит базу по адресу db:5432. api ждёт, пока проверка здоровья базы пройдёт. Файлы базы лежат в томе db-data. Пароль здесь для примера: настоящие пароли хранят в файле .env, который не попадает в git."
+      "title": "Устройство compose.yaml",
+      "label": "compose.yaml",
+      "code": "name: my-app                 # имя проекта, иначе - имя папки\n\nservices:                    # части приложения\n  api:\n    build: ./api             # собрать из ./api/Dockerfile\n    image: my-app/api:dev    # как назвать собранный образ\n    environment:             # переменные внутри контейнера\n      DATABASE_URL: postgres://app:${DB_PASSWORD}@db:5432/app\n    ports:\n      - \"127.0.0.1:8080:3000\"\n    depends_on: [db]\n    networks: [back]\n\n  db:\n    image: postgres:17       # готовый образ из реестра\n    volumes:\n      - db-data:/var/lib/postgresql/data\n    networks: [back]\n\nnetworks:                    # без этого раздела будет одна сеть default\n  back: {}\n\nvolumes:                     # именованные тома проекта\n  db-data: {}",
+      "note": "Верхних разделов четыре: name, services, networks, volumes. Главный - services, остальные нужны, когда хочется больше одной сети или именованные тома. У сервиса либо build (собрать из папки), либо image (взять готовый), либо оба: тогда собранный образ получит это имя. Без раздела networks Compose создаёт одну сеть my-app_default и включает в неё всех. Строку version в начале больше не пишут: Compose её пропускает и предупреждает."
     },
     {
       "type": "anatomy",
       "title": "Разбор команды запуска",
       "parts": [
-        { "text": "docker compose", "note": "Compose встроен в Docker. Старое написание через дефис - docker-compose" },
-        { "text": "up", "note": "создать сеть, тома и контейнеры и запустить всё" },
-        { "text": "-d", "note": "в фоне: терминал свободен, логи смотрят отдельно" },
-        { "text": "--build", "note": "сначала пересобрать образы сервисов, у которых есть build" },
-        { "text": "api", "note": "необязательно: поднять только этот сервис и тех, от кого он зависит" }
+        {
+          "text": "docker compose",
+          "note": "Compose встроен в Docker. Старая отдельная программа писалась через дефис: docker-compose"
+        },
+        {
+          "text": "-p shop",
+          "note": "имя проекта. Без ключа берётся name из файла или имя папки"
+        },
+        {
+          "text": "-f compose.yaml -f compose.prod.yaml",
+          "note": "какие файлы читать и в каком порядке. Следующий дописывает предыдущий"
+        },
+        {
+          "text": "--profile debug",
+          "note": "включить сервисы с профилем debug"
+        },
+        {
+          "text": "up",
+          "note": "создать сеть, тома и контейнеры, запустить, пересоздать изменённое"
+        },
+        {
+          "text": "-d",
+          "note": "в фоне: терминал свободен, журнал смотрят через logs"
+        },
+        {
+          "text": "--build",
+          "note": "сначала пересобрать образы сервисов с build"
+        },
+        {
+          "text": "--wait",
+          "note": "вернуть терминал, когда сервисы запущены и прошли проверку здоровья. Сервис-задача, который уже завершился, --wait может счесть ошибкой, если его не ждут через service_completed_successfully"
+        },
+        {
+          "text": "api",
+          "note": "необязательно: поднять только api и его зависимости"
+        }
       ]
     },
     {
-      "type": "steps",
-      "title": "Как работать с проектом на Compose",
-      "items": [
-        "Откройте терминал в папке, где лежит compose.yaml",
-        "Запустите docker compose up -d. В первый раз Docker скачает и соберёт образы, это займёт время",
-        "Проверьте docker compose ps: у каждого сервиса должно быть состояние running или healthy",
-        "Если что-то не так, смотрите docker compose logs -f и имя сервиса",
-        "Поправили код сервиса со сборкой - запустите docker compose up -d --build",
-        "Закончили работу - docker compose down. Данные в томах при этом сохранятся"
-      ]
+      "type": "diagram",
+      "title": "Порядок запуска с условиями",
+      "nodes": [
+        {
+          "id": "db",
+          "label": "db",
+          "note": "ждём healthy",
+          "icon": "database"
+        },
+        {
+          "id": "redis",
+          "label": "redis",
+          "note": "ждём healthy",
+          "icon": "bolt"
+        },
+        {
+          "id": "migrate",
+          "label": "migrate",
+          "note": "ждём выход с кодом 0",
+          "icon": "list"
+        },
+        {
+          "id": "api",
+          "label": "api",
+          "note": "стартует последним",
+          "icon": "server"
+        }
+      ],
+      "edges": [
+        [
+          "db",
+          "migrate",
+          "service_healthy"
+        ],
+        [
+          "migrate",
+          "api",
+          "service_completed_successfully"
+        ],
+        [
+          "redis",
+          "api",
+          "service_healthy"
+        ]
+      ],
+      "caption": "Compose запускает db и redis, ждёт, пока их проверки здоровья пройдут. Потом запускает migrate и ждёт, пока он завершится с кодом 0. Только после этого стартует api. Если миграция упала, api не запустится, и up закончится ошибкой."
     },
     {
       "type": "compare",
-      "title": "stop, down и down -v",
-      "cols": ["Команда", "Контейнеры", "Сеть", "Тома с данными"],
+      "title": "Условия depends_on",
+      "cols": [
+        "Условие",
+        "Чего ждёт Compose",
+        "Когда брать"
+      ],
       "rows": [
-        ["docker compose stop", "Остановлены, но не удалены", "Остаётся", "Остаются"],
-        ["docker compose down", "Остановлены и удалены", "Удалена", "Остаются"],
-        ["docker compose down -v", "Остановлены и удалены", "Удалена", "Удалены вместе с данными"]
+        [
+          "depends_on: [db] или service_started",
+          "Контейнер db создан и запущен. Готовность программы не проверяется",
+          "Порядок важен, а клиент сам умеет переподключаться"
+        ],
+        [
+          "service_healthy",
+          "Проверка здоровья db вернула успех",
+          "База, очередь, кэш: всё, что принимает соединения не сразу"
+        ],
+        [
+          "service_completed_successfully",
+          "Сервис завершился с кодом 0",
+          "Миграции, наполнение базы, сборка файлов перед стартом"
+        ],
+        [
+          "restart: true внутри условия",
+          "Перезапустить зависимый сервис, если db пересоздали через Compose",
+          "Клиент не переживает перезапуск базы"
+        ]
+      ]
+    },
+    {
+      "type": "example",
+      "title": ".env и подстановка переменных",
+      "label": ".env, compose.yaml и команда",
+      "code": "# .env рядом с compose.yaml\nDB_PASSWORD=change-me\nAPI_PORT=8080\n\n# compose.yaml\nservices:\n  api:\n    image: my-app/api:${API_TAG:-dev}\n    ports:\n      - \"127.0.0.1:${API_PORT:-8080}:3000\"\n    environment:\n      DATABASE_URL: postgres://app:${DB_PASSWORD:?задайте DB_PASSWORD}@db:5432/app\n      LOG_LEVEL: info\n    env_file:\n      - ./api/api.env\n\n# api/api.env\nSMTP_HOST=mail.local\n\n# проверить, что подставилось\ndocker compose config",
+      "outputLabel": "Что покажет docker compose config",
+      "output": "services:\n  api:\n    image: my-app/api:dev\n    ports:\n      - mode: ingress\n        host_ip: 127.0.0.1\n        target: 3000\n        published: \"8080\"\n        protocol: tcp\n    environment:\n      DATABASE_URL: postgres://app:change-me@db:5432/app\n      LOG_LEVEL: info\n      SMTP_HOST: mail.local",
+      "note": "${VAR} - значение переменной. ${VAR:-dev} - значение или dev, если переменная пуста или не задана. ${VAR:?текст} - остановиться с этим текстом, если переменной нет. $$ - знак доллара как есть. Значения берутся из окружения терминала, затем из .env рядом с compose-файлом. Переменная из терминала сильнее .env. Ключ --env-file .env.test читает другой файл вместо .env. SMTP_HOST в выводе пришёл из api.env через env_file."
+    },
+    {
+      "type": "compare",
+      "title": "Откуда приходят переменные",
+      "cols": [
+        "Где задано",
+        "Кто читает",
+        "Попадает в контейнер"
+      ],
+      "rows": [
+        [
+          ".env рядом с compose.yaml",
+          "Compose, для подстановки ${...} в файл",
+          "Нет, только то, что вы подставили"
+        ],
+        [
+          "Окружение терминала",
+          "Compose, для подстановки. Сильнее .env",
+          "Нет, только то, что вы подставили"
+        ],
+        [
+          "env_file: [api.env]",
+          "Контейнер",
+          "Да, все строки файла"
+        ],
+        [
+          "environment:",
+          "Контейнер. Сильнее env_file",
+          "Да"
+        ],
+        [
+          "docker compose run -e KEY=v",
+          "Контейнер одного разового запуска. Сильнее всех",
+          "Да"
+        ],
+        [
+          "ENV в Dockerfile",
+          "Контейнер. Слабее всех",
+          "Да, если не перекрыто"
+        ]
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Профили: необязательные сервисы",
+      "label": "compose.yaml и команды",
+      "code": "services:\n  api:\n    build: ./api                 # без profiles: стартует всегда\n  db:\n    image: postgres:17\n\n  adminer:\n    image: adminer:5\n    profiles: [\"debug\"]          # только с --profile debug\n    ports:\n      - \"127.0.0.1:8090:8080\"\n\n  seed:\n    build: ./api\n    command: [\"node\", \"seed.js\"]\n    profiles: [\"tools\"]          # разовая задача\n\n# обычный запуск: api и db\ndocker compose up -d\n# плюс панель базы\ndocker compose --profile debug up -d\n# разовая задача: профиль включается сам, раз сервис назван явно\ndocker compose run --rm seed",
+      "note": "Профили убирают из обычного запуска то, что нужно не всем и не всегда: панели баз, отладчики, генераторы данных, тесты. Профиль включают ключом --profile или переменной COMPOSE_PROFILES=debug,tools. Если сервис без профиля зависит от сервиса с профилем, а профиль выключен, Compose остановится с ошибкой."
+    },
+    {
+      "type": "codepair",
+      "title": "Основной файл и файл переопределения",
+      "left": {
+        "label": "compose.yaml",
+        "code": "# compose.yaml - как на сервере\nservices:\n  api:\n    build: ./api\n    environment:\n      NODE_ENV: production\n    ports:\n      - \"127.0.0.1:8080:3000\"\n    restart: unless-stopped\n\n  db:\n    image: postgres:17\n    volumes:\n      - db-data:/var/lib/postgresql/data\n\nvolumes:\n  db-data: {}"
+      },
+      "right": {
+        "label": "compose.override.yaml",
+        "code": "# compose.override.yaml - только для разработки\nservices:\n  api:\n    environment:\n      NODE_ENV: development\n    command: [\"node\", \"--watch\", \"server.js\"]\n    volumes:\n      - ./api:/app\n      - /app/node_modules\n    restart: \"no\"\n\n  db:\n    ports:\n      - \"127.0.0.1:5432:5432\"   # базу видно с компьютера\n\n# docker compose up -d\n#   читает compose.yaml + compose.override.yaml\n# docker compose -f compose.yaml -f compose.prod.yaml up -d\n#   читает только названные, override пропускает"
+      },
+      "note": "Основной файл описывает сборку как на сервере. Override добавляет удобства разработки: код с компьютера внутри контейнера, перезапуск при правке, открытый порт базы. Правила слияния: одиночные значения заменяются, environment сливается по ключам, а списки ports и volumes складываются. Убрать унаследованный порт можно только тегом !reset: ports: !reset []. Строка /app/node_modules - анонимный том: он закрывает папку node_modules образа от bind mount кода. Проверить итог: docker compose config."
+    },
+    {
+      "type": "example",
+      "title": "watch: правка кода без пересборки",
+      "label": "compose.yaml и команды",
+      "code": "services:\n  api:\n    build: ./api\n    command: [\"node\", \"--watch\", \"server.js\"]\n    develop:\n      watch:\n        - action: sync           # скопировать правку в контейнер\n          path: ./api\n          target: /app\n          ignore:\n            - node_modules/\n            - package.json\n            - package-lock.json\n        - action: rebuild        # пересобрать образ и пересоздать контейнер\n          path: ./api/package.json\n\n# запуск с наблюдением\ndocker compose up --watch\n# или отдельно, когда сервисы уже подняты\ndocker compose watch",
+      "note": "sync копирует изменённые файлы в контейнер. Перезапуск программы делает она сама, здесь node --watch. sync+restart копирует и перезапускает контейнер: для конфигов, которые программа читает только при старте. rebuild пересобирает образ и пересоздаёт контейнер: для списка зависимостей. В отличие от bind mount, watch работает быстро и на Windows с macOS: он копирует только изменённые файлы. watch рассчитан на сервисы с build: за сервисом только с image Compose не следит, а rebuild без build нечем делать."
+    },
+    {
+      "type": "example",
+      "title": "Сервис для сервера: перезапуск, лимиты, журналы",
+      "label": "compose.yaml",
+      "code": "x-logging: &logging              # общий кусок, поля x- Compose пропускает\n  driver: json-file\n  options:\n    max-size: \"10m\"\n    max-file: \"3\"\n\nservices:\n  api:\n    image: registry.example.com/my-app/api:1.4.2\n    pull_policy: always            # always | missing | never | build\n    restart: unless-stopped        # \"no\" | always | on-failure:5 | unless-stopped\n    init: true                     # tini первым процессом\n    stop_grace_period: 30s         # сколько ждать после SIGTERM\n    read_only: true\n    tmpfs: [/tmp]\n    cap_drop: [ALL]\n    deploy:\n      resources:\n        limits:\n          memory: 512M\n          cpus: \"1.0\"\n    logging: *logging\n\n  worker:\n    image: registry.example.com/my-app/worker:1.4.2\n    restart: unless-stopped\n    logging: *logging",
+      "note": "Поля x- Compose пропускает, их используют для общих кусков: &logging объявляет кусок, *logging вставляет. pull_policy: always скачивает образ при каждом up, missing - только если его нет, never - работает только с локальным, build - всегда собирает. \"no\" в restart берите в кавычки: без кавычек YAML читает no как false. Лимиты из deploy.resources Compose применяет и без кластера."
+    },
+    {
+      "type": "compare",
+      "title": "restart, stop, down и down -v",
+      "cols": [
+        "Команда",
+        "Контейнеры",
+        "Сеть",
+        "Тома с данными",
+        "Когда"
+      ],
+      "rows": [
+        [
+          "docker compose restart api",
+          "Перезапуск тех же контейнеров. Правки файла не применяются",
+          "Остаётся",
+          "Остаются",
+          "Программа зависла"
+        ],
+        [
+          "docker compose up -d",
+          "Пересоздаёт только изменённые",
+          "Остаётся",
+          "Остаются",
+          "Поменяли compose.yaml или образ"
+        ],
+        [
+          "docker compose stop",
+          "Остановлены, не удалены",
+          "Остаётся",
+          "Остаются",
+          "Перерыв, освободить память"
+        ],
+        [
+          "docker compose down",
+          "Остановлены и удалены",
+          "Удалена",
+          "Остаются",
+          "Закончили работу, сменили сеть или порты"
+        ],
+        [
+          "docker compose down -v",
+          "Остановлены и удалены",
+          "Удалена",
+          "Удалены вместе с данными",
+          "Нужна чистая база: тесты, CI"
+        ],
+        [
+          "docker compose down --rmi local",
+          "Остановлены и удалены",
+          "Удалена",
+          "Остаются",
+          "Плюс удалить образы, собранные проектом"
+        ]
+      ]
+    },
+    {
+      "type": "rules",
+      "title": "Эксплуатация",
+      "items": [
+        {
+          "kind": "do",
+          "title": "На ноутбуке - stop, а не держать всё запущенным",
+          "text": "Стек из базы, кэша и сервера ест гигабайт памяти и больше. Закончили работу - docker compose stop или down. Тома останутся, завтра up поднимет всё как было."
+        },
+        {
+          "kind": "tip",
+          "title": "stop или down",
+          "text": "stop быстрее и ничего не удаляет: контейнеры продолжат с того же места. down убирает контейнеры и сеть: нужен, когда поменялись сеть, порты или имена, и чтобы не копились старые контейнеры."
+        },
+        {
+          "kind": "dont",
+          "title": "down -v только осознанно",
+          "text": "Ключ -v удаляет именованные тома проекта, то есть базу. Вернуть данные можно только из резервной копии. В CI и для тестов это правильно, на рабочем стенде - почти никогда."
+        },
+        {
+          "kind": "do",
+          "title": "Политика перезапуска у каждого долгого сервиса",
+          "text": "restart: unless-stopped для сервисов на сервере: поднимутся после падения и после перезагрузки. restart: \"no\" для задач вроде миграций. Без политики упавший сервис так и останется лежать."
+        },
+        {
+          "kind": "do",
+          "title": "Лимиты памяти тяжёлым сервисам",
+          "text": "deploy.resources.limits.memory у базы, поиска, сборщиков. Иначе один сервис съест память всего ноутбука или сервера."
+        },
+        {
+          "kind": "do",
+          "title": "Задайте имя проекта явно",
+          "text": "Поле name в compose.yaml. Тогда переименование или копия папки не создадут второй набор пустых томов."
+        },
+        {
+          "kind": "tip",
+          "title": "Обновление на сервере",
+          "text": "docker compose pull, затем docker compose up -d. Compose пересоздаст только сервисы с новым образом. Короткий простой при пересоздании есть: Compose не умеет выкладку без перерыва."
+        },
+        {
+          "kind": "do",
+          "title": "Убирайте за собой",
+          "text": "docker compose down --remove-orphans убирает контейнеры сервисов, которых уже нет в файле. Старые образы и кэш сборки чистит docker image prune и docker builder prune (урок Docker)."
+        }
+      ]
+    },
+    {
+      "type": "practice",
+      "title": "Полный стек: api, PostgreSQL, Redis и миграции",
+      "task": "Соберите стек из четырёх сервисов: база, кэш, задача миграции и сервер на Node.js. Сервер стартует только после здоровых базы и кэша и успешной миграции. Пароль базы берётся из .env.",
+      "steps": [
+        "Создайте папку notes, в ней .env с DB_PASSWORD и API_PORT",
+        "Сделайте migrations/001_init.sql: таблица notes и одна строка, повторный запуск не должен ничего ломать",
+        "Сделайте api: package.json с пакетами pg и redis, server.js, Dockerfile, .dockerignore",
+        "Опишите в compose.yaml сервисы db и redis с проверками здоровья, migrate как задачу на образе postgres:17 и api с тремя условиями depends_on",
+        "Проверьте файл: docker compose config",
+        "Поднимите: docker compose up -d --build",
+        "Посмотрите docker compose ps -a и откройте localhost:8080 несколько раз",
+        "Сделайте docker compose down и снова up -d: строки в базе на месте"
+      ],
+      "check": "docker compose ps -a показывает db, redis и api в состоянии healthy, а migrate - Exited (0). curl http://localhost:8080 возвращает JSON с notes: [\"first note\"], и hits растёт с каждым запросом. После down и up строка first note на месте и не задвоилась.",
+      "hint": "Если api не стартует, смотрите docker compose logs migrate: ошибка миграции останавливает всю цепочку. Ошибка required variable DB_PASSWORD is missing значит, что .env лежит не рядом с compose.yaml. Пароль со знаками @ и : ломает DATABASE_URL: возьмите пароль из букв и цифр.",
+      "solution": "# .env\nDB_PASSWORD=change-me\nAPI_PORT=8080\n\n# compose.yaml\nname: notes\n\nservices:\n  db:\n    image: postgres:17\n    environment:\n      POSTGRES_USER: app\n      POSTGRES_PASSWORD: ${DB_PASSWORD:?задайте DB_PASSWORD в .env}\n      POSTGRES_DB: app\n    volumes:\n      - db-data:/var/lib/postgresql/data\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U app -d app\"]\n      interval: 5s\n      timeout: 3s\n      retries: 10\n    restart: unless-stopped\n\n  redis:\n    image: redis:7.4-alpine\n    healthcheck:\n      test: [\"CMD\", \"redis-cli\", \"ping\"]\n      interval: 5s\n      timeout: 3s\n      retries: 10\n    restart: unless-stopped\n\n  migrate:\n    image: postgres:17\n    environment:\n      PGPASSWORD: ${DB_PASSWORD}\n    volumes:\n      - ./migrations:/migrations:ro\n    command: [\"psql\", \"-h\", \"db\", \"-U\", \"app\", \"-d\", \"app\",\n              \"-v\", \"ON_ERROR_STOP=1\", \"-f\", \"/migrations/001_init.sql\"]\n    depends_on:\n      db:\n        condition: service_healthy\n    restart: \"no\"\n\n  api:\n    build: ./api\n    environment:\n      DATABASE_URL: postgres://app:${DB_PASSWORD}@db:5432/app\n      REDIS_URL: redis://redis:6379\n    ports:\n      - \"127.0.0.1:${API_PORT:-8080}:3000\"\n    depends_on:\n      db:\n        condition: service_healthy\n      redis:\n        condition: service_healthy\n      migrate:\n        condition: service_completed_successfully\n    healthcheck:\n      test: [\"CMD\", \"wget\", \"-qO-\", \"http://127.0.0.1:3000/health\"]\n      interval: 10s\n      timeout: 3s\n      start_period: 10s\n      retries: 3\n    init: true\n    restart: unless-stopped\n\nvolumes:\n  db-data: {}\n\n# migrations/001_init.sql\ncreate table if not exists notes (id serial primary key, text text not null);\ninsert into notes (text) select 'first note'\n  where not exists (select 1 from notes);\n\n# api/package.json\n{\n  \"name\": \"notes-api\",\n  \"version\": \"1.0.0\",\n  \"dependencies\": { \"pg\": \"^8.13.0\", \"redis\": \"^4.7.0\" }\n}\n\n# api/server.js\nconst http = require('node:http');\nconst { Pool } = require('pg');\nconst { createClient } = require('redis');\n\nconst db = new Pool({ connectionString: process.env.DATABASE_URL });\nconst cache = createClient({ url: process.env.REDIS_URL });\n\nasync function main() {\n  await cache.connect();\n  const server = http.createServer(async (req, res) => {\n    if (req.url === '/health') { res.end('ok'); return; }\n    const hits = await cache.incr('hits');\n    const { rows } = await db.query('select text from notes order by id');\n    res.setHeader('content-type', 'application/json');\n    res.end(JSON.stringify({ hits, notes: rows.map((r) => r.text) }));\n  });\n  server.listen(3000);\n  process.on('SIGTERM', () => server.close(() => process.exit(0)));\n}\nmain();\n\n# api/Dockerfile\nFROM node:24-alpine\nWORKDIR /app\nCOPY package.json ./\nRUN npm install --omit=dev\nCOPY server.js ./\nUSER node\nEXPOSE 3000\nCMD [\"node\", \"server.js\"]\n\n# api/.dockerignore\nnode_modules\n\n# команды\ndocker compose up -d --build\ndocker compose ps -a\ncurl http://localhost:8080\ndocker compose logs migrate"
+    },
+    {
+      "type": "practice",
+      "title": "Режим разработки: override и watch",
+      "task": "Не меняя compose.yaml из прошлого задания, добавьте режим разработки: правка server.js попадает в контейнер за секунду без пересборки, порт базы открыт для своего компьютера.",
+      "steps": [
+        "Создайте compose.override.yaml рядом с compose.yaml",
+        "Для api задайте command с node --watch и раздел develop.watch: sync папки ./api в /app без node_modules и package.json, rebuild при правке package.json",
+        "Для db опубликуйте порт 5432 только на 127.0.0.1",
+        "Посмотрите итог: docker compose config",
+        "Запустите docker compose up --watch",
+        "Поменяйте текст ответа в server.js и сделайте curl"
+      ],
+      "check": "В журнале появляется строка о синхронизации файла и перезапуске node. curl сразу отдаёт новый ответ, образ не пересобирался. docker compose -f compose.yaml config не показывает ни watch, ни порта базы: без override всё как на сервере.",
+      "hint": "Если правка не доезжает, проверьте path и target: путь в target - папка внутри контейнера, где лежит server.js, то есть /app. watch рассчитан на сервисы с build.",
+      "solution": "# compose.override.yaml\nservices:\n  api:\n    command: [\"node\", \"--watch\", \"server.js\"]\n    environment:\n      NODE_ENV: development\n    develop:\n      watch:\n        - action: sync\n          path: ./api\n          target: /app\n          ignore:\n            - node_modules/\n            - package.json\n        - action: rebuild\n          path: ./api/package.json\n\n  db:\n    ports:\n      - \"127.0.0.1:5432:5432\"\n\n# команды\ndocker compose config | grep -A3 \"command:\"\ndocker compose up --watch\n# в другом терминале, после правки server.js\ncurl http://localhost:8080"
+    },
+    {
+      "type": "practice",
+      "title": "Две копии стека и необязательные сервисы",
+      "task": "Поднимите рядом с основной копией вторую, тестовую, со своим портом и своей базой. Добавьте панель базы, которая стартует только по профилю. Уберите тестовую копию, не задев основную.",
+      "steps": [
+        "Добавьте в compose.yaml сервис adminer с profiles: [\"debug\"] и портом 127.0.0.1:8090",
+        "Создайте .env.test с другим паролем и API_PORT=8081",
+        "Поднимите вторую копию: docker compose -p notes-test --env-file .env.test up -d --build",
+        "Сравните docker compose ls и docker volume ls: у копий разные тома",
+        "Включите панель у основной копии: docker compose --profile debug up -d",
+        "Запустите миграцию ещё раз разово: docker compose run --rm migrate",
+        "Удалите тестовую копию вместе с данными: docker compose -p notes-test down -v"
+      ],
+      "check": "Пока обе копии работают, localhost:8080 и localhost:8081 отвечают независимо. docker volume ls показывает notes_db-data и notes-test_db-data. После down -v для notes-test основная копия работает, её строки в базе на месте.",
+      "hint": "Ключ -p сильнее поля name в файле. Без -p вторая команда пересоздала бы контейнеры основной копии с новыми настройками.",
+      "solution": "# compose.yaml: добавить сервис\n  adminer:\n    image: adminer:5\n    profiles: [\"debug\"]\n    ports:\n      - \"127.0.0.1:8090:8080\"\n    depends_on:\n      - db\n\n# .env.test\nDB_PASSWORD=test-only\nAPI_PORT=8081\n\n# вторая копия рядом с первой\ndocker compose -p notes-test --env-file .env.test up -d --build\ndocker compose ls\ndocker volume ls --filter name=notes\ncurl http://localhost:8081\n\n# панель базы только у основной копии\ndocker compose --profile debug up -d\n# сервер: db, пользователь app, пароль из .env\n\n# разовые команды\ndocker compose run --rm migrate\ndocker compose exec db psql -U app -d app -c \"select * from notes;\"\n\n# убрать тестовую копию целиком, основную не трогая\ndocker compose -p notes-test down -v\ndocker compose --profile debug stop adminer"
+    },
+    {
+      "type": "example",
+      "title": "Compose в CI",
+      "label": "compose.yaml (фрагмент) и ci.sh",
+      "code": "# compose.yaml: проверка, которая живёт только в профиле test\n  tests:\n    image: curlimages/curl:8.11.1\n    profiles: [\"test\"]\n    command: [\"curl\", \"-fsS\", \"http://api:3000/\"]\n    depends_on:\n      api:\n        condition: service_healthy\n\n# ci.sh: одинаков для GitLab CI, GitHub Actions и любого раннера с Docker\nset -eu\nexport COMPOSE_PROJECT_NAME=\"ci-${CI_JOB_ID:-local}\"\nexport DB_PASSWORD=ci-only\n\ncleanup() {\n  docker compose logs --no-color > compose.log || true\n  docker compose down -v --remove-orphans\n}\ntrap cleanup EXIT\n\ndocker compose config --quiet\ndocker compose build --pull\ndocker compose run --rm tests",
+      "note": "Имя проекта с номером джобы не даёт двум джобам на одном раннере делить контейнеры и тома. run --rm tests поднимает всю цепочку зависимостей с их условиями, запускает проверку и возвращает её код выхода: упала проверка - упала джоба. trap снимает журналы и убирает всё, даже если проверка упала. down -v здесь правильный: база в CI одноразовая. build --pull обновляет базовые образы. Чтобы не упереться в лимит Docker Hub, войдите в реестр или берите образы из зеркала."
+    },
+    {
+      "type": "compare",
+      "title": "Compose и Kubernetes",
+      "cols": [
+        "",
+        "Docker Compose",
+        "Kubernetes"
+      ],
+      "rows": [
+        [
+          "Сколько машин",
+          "Одна",
+          "Кластер из многих машин"
+        ],
+        [
+          "Упал контейнер",
+          "Перезапуск по политике на той же машине",
+          "Перезапуск, а при падении машины - перенос на другую"
+        ],
+        [
+          "Обновление",
+          "Пересоздание контейнера, короткий перерыв",
+          "Постепенная замена без перерыва, откат одной командой"
+        ],
+        [
+          "Масштаб под нагрузку",
+          "Вручную: --scale api=3",
+          "Автоматически по нагрузке"
+        ],
+        [
+          "Балансировка",
+          "DNS по имени внутри сети, снаружи - свой веб-сервер",
+          "Встроена: Service и Ingress"
+        ],
+        [
+          "Описание",
+          "Один compose.yaml",
+          "Много файлов: Deployment, Service, Ingress, ConfigMap"
+        ],
+        [
+          "Сколько учить",
+          "Часы",
+          "Недели и месяцы"
+        ],
+        [
+          "Кто обслуживает",
+          "Разработчик",
+          "Обычно отдельный человек или облачный сервис"
+        ]
+      ]
+    },
+    {
+      "type": "rules",
+      "title": "Когда Compose, а когда пора дальше",
+      "items": [
+        {
+          "kind": "when",
+          "title": "Compose для разработки",
+          "text": "Почти всегда: база, кэш, очередь и сервисы проекта одной командой, одинаково у всех участников."
+        },
+        {
+          "kind": "when",
+          "title": "Compose для сервера",
+          "text": "Одна машина держит нагрузку, короткий перерыв при обновлении допустим, отдельного человека на инфраструктуру нет. Так работает много небольших продуктов."
+        },
+        {
+          "kind": "when",
+          "title": "Пора в Kubernetes",
+          "text": "Одной машины не хватает или её отказ недопустим. Нужна выкладка без перерыва и автомасштабирование. Сервисов десятки, и их ведут разные группы людей."
+        },
+        {
+          "kind": "dont",
+          "title": "Не переезжайте заранее",
+          "text": "Kubernetes добавляет работу каждый день: обновления кластера, сеть, хранилища, права. Если перечисленных причин нет, он стоит дороже, чем даёт."
+        },
+        {
+          "kind": "tip",
+          "title": "Промежуточные шаги",
+          "text": "Управляемый облачный сервис запуска контейнеров или Docker Swarm, который понимает почти тот же compose.yaml. Образы и Dockerfile при любом переезде остаются те же."
+        }
       ]
     },
     {
       "type": "mistakes",
       "title": "Что ломается чаще всего",
       "items": [
-        { "problem": "После down -v база пустая", "fix": "Ключ -v удаляет тома, а с ними все данные базы. Вернуть их можно только из резервной копии. Для обычной остановки хватает down без ключей." },
-        { "problem": "api не может подключиться к базе по localhost", "fix": "Внутри сети Compose у каждого сервиса свой localhost. Пишите имя сервиса: db:5432." },
-        { "problem": "api падает при старте, потому что база ещё не готова", "fix": "depends_on без условий ждёт только запуска контейнера. Добавьте базе healthcheck, а в api - condition: service_healthy." },
-        { "problem": "Поправил код, а изменений не видно", "fix": "Контейнер работает со старым образом. Запустите docker compose up -d --build." },
-        { "problem": "port is already allocated", "fix": "Порт занят другой программой или контейнером другого проекта. Поменяйте левое число в ports или остановите того, кто занял порт." },
-        { "problem": "Команда docker-compose не найдена", "fix": "В новых версиях Docker Compose встроен в Docker и пишется через пробел: docker compose." }
+        {
+          "problem": "После down -v база пустая",
+          "fix": "Ключ -v удалил тома вместе с данными. Вернуть - только из резервной копии. Для обычной остановки хватает down или stop."
+        },
+        {
+          "problem": "После переименования папки база пустая",
+          "fix": "Имя проекта взялось из новой папки, и Compose создал новые тома. Старые на месте: docker volume ls. Задайте name в compose.yaml со старым именем."
+        },
+        {
+          "problem": "api не подключается к базе по localhost",
+          "fix": "В контейнере localhost - он сам. Пишите имя сервиса: db:5432."
+        },
+        {
+          "problem": "api падает при старте: база ещё не готова",
+          "fix": "depends_on без условия ждёт только запуска контейнера. Добавьте базе healthcheck, а в api - condition: service_healthy."
+        },
+        {
+          "problem": "Поправил compose.yaml, сделал restart - ничего не поменялось",
+          "fix": "restart перезапускает те же контейнеры со старыми настройками. Применяет правки docker compose up -d."
+        },
+        {
+          "problem": "Поправил код, а изменений не видно",
+          "fix": "Контейнер работает со старым образом. docker compose up -d --build, а для разработки - watch."
+        },
+        {
+          "problem": "Переменная не подставилась, в config пусто",
+          "fix": ".env лежит не рядом с compose.yaml, или вы запускаете из другой папки с -f. Проверьте docker compose config --environment."
+        },
+        {
+          "problem": "Порт из override не убирается",
+          "fix": "Списки ports складываются, а не заменяются. Используйте ports: !reset [] или вынесите порты из основного файла."
+        },
+        {
+          "problem": "restart: no не работает",
+          "fix": "Без кавычек YAML читает no как false. Пишите restart: \"no\"."
+        },
+        {
+          "problem": "--scale api=3 падает с port is already allocated",
+          "fix": "Три копии не могут занять один порт компьютера. Уберите публикацию порта у масштабируемого сервиса и поставьте перед ним балансировщик, или публикуйте без левого числа."
+        },
+        {
+          "problem": "Команда docker-compose не найдена",
+          "fix": "Compose v2 встроен в Docker и пишется через пробел: docker compose. Отдельная программа docker-compose устарела."
+        }
       ]
     },
     {
       "type": "cheatsheet",
       "title": "Шпаргалка",
       "items": [
-        { "cmd": "docker compose up -d", "text": "Поднять все сервисы в фоне" },
-        { "cmd": "docker compose up -d --build", "text": "Пересобрать образы и поднять" },
-        { "cmd": "docker compose ps", "text": "Какие сервисы работают и в каком состоянии" },
-        { "cmd": "docker compose logs -f api", "text": "Смотреть вывод сервиса api, пока не нажмёте Ctrl+C" },
-        { "cmd": "docker compose exec db psql -U app", "text": "Выполнить команду внутри работающего сервиса db" },
-        { "cmd": "docker compose restart api", "text": "Перезапустить один сервис" },
-        { "cmd": "docker compose stop", "text": "Остановить, ничего не удаляя" },
-        { "cmd": "docker compose down", "text": "Остановить и удалить контейнеры и сеть. Тома остаются" },
-        { "cmd": "docker compose down -v", "text": "То же плюс удалить тома. Данные базы пропадут" },
-        { "cmd": "docker compose config", "text": "Показать итоговый файл с подставленными переменными" }
+        {
+          "group": "Запуск и обновление",
+          "cmd": "docker compose up -d",
+          "text": "Поднять всё в фоне, пересоздать изменённое"
+        },
+        {
+          "cmd": "docker compose up -d --build",
+          "text": "Пересобрать образы и поднять"
+        },
+        {
+          "cmd": "docker compose up -d --wait",
+          "text": "Поднять и дождаться проверок здоровья. Удобно в скриптах и CI"
+        },
+        {
+          "cmd": "docker compose up -d --force-recreate api",
+          "text": "Пересоздать контейнер, даже если настройки не менялись"
+        },
+        {
+          "cmd": "docker compose up --watch",
+          "text": "Поднять и следить за файлами по develop.watch"
+        },
+        {
+          "cmd": "docker compose pull",
+          "text": "Скачать свежие образы сервисов"
+        },
+        {
+          "cmd": "docker compose build --pull api",
+          "text": "Пересобрать api, обновив базовый образ"
+        },
+        {
+          "group": "Смотреть",
+          "cmd": "docker compose ps -a",
+          "text": "Сервисы, состояние, здоровье, коды выхода"
+        },
+        {
+          "cmd": "docker compose logs -f --tail 100 api",
+          "text": "Журнал api: последние 100 строк и дальше"
+        },
+        {
+          "cmd": "docker compose top",
+          "text": "Процессы во всех контейнерах проекта"
+        },
+        {
+          "cmd": "docker compose stats",
+          "text": "Память и процессор контейнеров проекта"
+        },
+        {
+          "cmd": "docker compose ls",
+          "text": "Все проекты Compose на компьютере"
+        },
+        {
+          "group": "Внутри контейнеров",
+          "cmd": "docker compose exec db psql -U app -d app",
+          "text": "Команда в работающем контейнере db"
+        },
+        {
+          "cmd": "docker compose run --rm api npm test",
+          "text": "Разовый контейнер сервиса api со своей командой"
+        },
+        {
+          "cmd": "docker compose run --rm --no-deps api sh",
+          "text": "Разовый терминал без запуска зависимостей"
+        },
+        {
+          "cmd": "docker compose cp api:/app/logs ./logs",
+          "text": "Скопировать файлы из контейнера"
+        },
+        {
+          "group": "Остановка",
+          "cmd": "docker compose restart api",
+          "text": "Перезапустить тот же контейнер, без правок файла"
+        },
+        {
+          "cmd": "docker compose stop",
+          "text": "Остановить, ничего не удаляя"
+        },
+        {
+          "cmd": "docker compose down",
+          "text": "Удалить контейнеры и сеть. Тома остаются"
+        },
+        {
+          "cmd": "docker compose down --remove-orphans",
+          "text": "Плюс контейнеры сервисов, убранных из файла"
+        },
+        {
+          "cmd": "docker compose down -v",
+          "text": "Плюс тома. Данные базы пропадут"
+        },
+        {
+          "group": "Файлы и настройки",
+          "cmd": "docker compose config",
+          "text": "Итоговый файл после слияния и подстановки"
+        },
+        {
+          "cmd": "docker compose config --services",
+          "text": "Только имена сервисов"
+        },
+        {
+          "cmd": "docker compose config --environment",
+          "text": "Какие переменные Compose видит для подстановки"
+        },
+        {
+          "cmd": "docker compose -f compose.yaml -f compose.prod.yaml up -d",
+          "text": "Поднять с другим набором файлов"
+        },
+        {
+          "cmd": "docker compose -p my-app-test up -d",
+          "text": "Отдельная копия стека под другим именем"
+        },
+        {
+          "cmd": "docker compose --profile debug up -d",
+          "text": "Включить сервисы профиля debug"
+        },
+        {
+          "group": "Масштаб",
+          "cmd": "docker compose up -d --scale worker=3",
+          "text": "Три копии сервиса worker"
+        },
+        {
+          "cmd": "docker compose scale worker=1",
+          "text": "Вернуть одну копию"
+        }
       ]
     },
     {
       "type": "quiz",
       "title": "Проверьте себя",
       "items": [
-        { "q": "Что сделает docker compose down -v?", "options": ["Остановит контейнеры, данные останутся", "Удалит контейнеры, сеть и тома с данными", "Покажет версию Compose"], "answer": 1, "why": "Ключ -v добавляет к удалению тома. Данные базы, которые в них лежали, пропадут." },
-        { "q": "Как сервис api должен обращаться к сервису db?", "options": ["localhost:5432", "db:5432", "127.0.0.1:5432"], "answer": 1, "why": "В общей сети Compose сервисы находят друг друга по имени. localhost внутри контейнера - это сам контейнер." },
-        { "q": "depends_on без условий гарантирует, что база готова принимать запросы?", "options": ["Да", "Нет, только что контейнер базы запущен"], "answer": 1, "why": "Готовность проверяет healthcheck. Чтобы ждать её, нужно condition: service_healthy." },
-        { "q": "Как увидеть, почему сервис упал?", "options": ["docker compose logs имя-сервиса", "docker compose down", "docker compose config"], "answer": 0, "why": "logs показывает вывод программы внутри контейнера, там обычно и написана причина." }
+        {
+          "q": "Что сделает docker compose down -v?",
+          "options": [
+            "Остановит контейнеры, данные останутся",
+            "Покажет версию Compose",
+            "Удалит контейнеры, сеть и тома с данными"
+          ],
+          "answer": 2,
+          "why": "Ключ -v добавляет к удалению именованные тома проекта. Данные базы в них пропадут."
+        },
+        {
+          "q": "Как api должен обращаться к сервису db?",
+          "options": [
+            "db:5432",
+            "localhost:5432",
+            "127.0.0.1:5432"
+          ],
+          "answer": 0,
+          "why": "В сети проекта сервисы находят друг друга по имени. localhost внутри контейнера - сам контейнер."
+        },
+        {
+          "q": "Миграции должны пройти до старта api. Какое условие поставить у api на сервис migrate?",
+          "options": [
+            "service_completed_successfully",
+            "service_started",
+            "service_healthy"
+          ],
+          "answer": 0,
+          "why": "Миграция - задача, она завершается. Нужно дождаться её выхода с кодом 0."
+        },
+        {
+          "q": "Поменяли environment у api в compose.yaml. Какая команда применит правку?",
+          "options": [
+            "docker compose restart api",
+            "docker compose up -d",
+            "docker compose start api"
+          ],
+          "answer": 1,
+          "why": "up сравнивает настройки с контейнером и пересоздаёт изменённый сервис. restart и start работают со старым контейнером."
+        },
+        {
+          "q": "Откуда Compose берёт значение для ${DB_PASSWORD} в compose.yaml?",
+          "options": [
+            "Из окружения терминала и файла .env рядом с compose.yaml",
+            "Из env_file сервиса",
+            "Из Dockerfile"
+          ],
+          "answer": 0,
+          "why": "env_file передаёт переменные в контейнер, но не участвует в подстановке в сам файл."
+        },
+        {
+          "q": "Сервис adminer помечен profiles: [\"debug\"]. Что сделает docker compose up -d?",
+          "options": [
+            "Запустит adminer со всеми",
+            "Выдаст ошибку",
+            "Не запустит adminer"
+          ],
+          "answer": 2,
+          "why": "Сервис с профилем стартует, только если профиль включён: --profile debug или COMPOSE_PROFILES."
+        },
+        {
+          "q": "Зачем в CI задавать имя проекта с номером джобы?",
+          "options": [
+            "Так быстрее",
+            "Чтобы параллельные джобы на одном раннере не делили контейнеры и тома",
+            "Без этого Compose не работает в CI"
+          ],
+          "answer": 1,
+          "why": "Имя проекта - часть имён всех объектов. Одинаковое имя у двух джоб значит общие контейнеры и общая база."
+        },
+        {
+          "q": "Когда стоит переезжать с Compose на Kubernetes?",
+          "options": [
+            "Когда одной машины мало или нужен выпуск без перерыва",
+            "Как только сервисов больше трёх",
+            "Сразу, на будущее"
+          ],
+          "answer": 0,
+          "why": "Kubernetes решает задачи многих машин и выкладки без простоя. Без них он добавляет работу и не даёт пользы."
+        }
       ]
     },
-    { "type": "project", "title": "Где это в вашем проекте" }
+    {
+      "type": "project",
+      "title": "Где это в вашем проекте"
+    }
   ]
 }

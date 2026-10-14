@@ -37,7 +37,7 @@
       "title": "Слова, которые надо знать",
       "items": [
         { "term": "Интерпретатор", "text": "Программа python, которая читает файл .py и выполняет его. На Windows его часто вызывают командой py, на Linux и macOS - python3.", "forms": ["интерпретатора", "python", "python3"] },
-        { "term": "venv", "text": "Виртуальное окружение: отдельная папка (обычно .venv) со своей копией библиотек для одного проекта. В git не кладётся.", "forms": [".venv", "виртуальное окружение", "окружение"] },
+        { "term": "venv", "text": "Виртуальное окружение: отдельная папка (обычно .venv) со своей копией библиотек для одного проекта. В git не кладётся.", "forms": [".venv", "виртуальное окружение", "виртуального окружения"] },
         { "term": "pip", "text": "Стандартный установщик библиотек. pip install requests ставит библиотеку requests.", "forms": ["pip3"] },
         { "term": "PyPI", "text": "Python Package Index - общий склад библиотек для Python, pypi.org.", "forms": [] },
         { "term": "requirements.txt", "text": "Простой список библиотек и версий, по одной на строку. Ставится командой pip install -r requirements.txt.", "forms": [] },
@@ -87,6 +87,34 @@
       ]
     },
     {
+      "type": "rules",
+      "title": "Как работать с Python",
+      "items": [
+        { "kind": "do", "title": "Своё окружение у каждого проекта", "text": "Папка .venv внутри проекта и строка .venv в .gitignore. Включайте окружение перед работой или запускайте команды через uv run." },
+        { "kind": "do", "title": "Точные версии - в файле", "text": "uv.lock или poetry.lock лежат в git. В requirements.txt версии фиксируют через ==, например из pip freeze." },
+        { "kind": "dont", "title": "Не ставьте библиотеки через sudo pip", "text": "Так ломается Python, на котором работает сама система. Новые Linux сами откажут с ошибкой externally-managed-environment. Ставьте только в окружение проекта." },
+        { "kind": "tip", "title": "python -m pip", "text": "Так pip точно принадлежит тому Python, который вы вызвали. Голый pip может оказаться от другой версии." },
+        { "kind": "when", "title": "pip, poetry или uv", "text": "В старом проекте - тот инструмент, чей файл уже лежит в папке. Новый проект - uv: он быстрее и сам создаёт окружение." }
+      ]
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: проект на uv с тестами и проверкой",
+      "task": "Создайте проект через uv, добавьте pytest и ruff для разработки, напишите функцию с тестами и прогоните тесты и линтер.",
+      "steps": [
+        "Поставьте uv по инструкции с docs.astral.sh/uv и проверьте: uv --version",
+        "uv init prices, cd prices",
+        "uv add --dev pytest ruff",
+        "Создайте prices.py с функцией total",
+        "Создайте test_prices.py с двумя тестами",
+        "uv run pytest",
+        "uv run ruff check . и uv run ruff format --check ."
+      ],
+      "check": "pytest печатает 2 passed. В папке появились .venv и uv.lock, а в pyproject.toml - группа dev с pytest и ruff. ruff check пишет All checks passed!",
+      "hint": "Включать окружение не нужно: uv run сам запускает команду внутри .venv. Если ruff format --check ругается, выполните uv run ruff format . и посмотрите, что он поменял.",
+      "solution": "uv init prices\ncd prices\nuv add --dev pytest ruff\n\n# prices.py\ndef total(prices: list[int]) -> int:\n    return sum(prices)\n\n# test_prices.py\nfrom prices import total\n\n\ndef test_total_sums_items():\n    assert total([100, 50]) == 150\n\n\ndef test_total_empty_is_zero():\n    assert total([]) == 0\n\nuv run pytest\nuv run ruff check .\nuv run ruff format --check ."
+    },
+    {
       "type": "mistakes",
       "title": "Что ломается чаще всего",
       "items": [
@@ -101,16 +129,16 @@
       "type": "cheatsheet",
       "title": "Шпаргалка",
       "items": [
-        { "cmd": "python -m venv .venv", "text": "Создать окружение проекта" },
+        { "group": "Окружение", "cmd": "python -m venv .venv", "text": "Создать окружение проекта" },
         { "cmd": "source .venv/bin/activate", "text": "Включить окружение в Linux и macOS" },
         { "cmd": ".venv\\Scripts\\activate", "text": "Включить окружение в Windows" },
-        { "cmd": "pip install -r requirements.txt", "text": "Поставить библиотеки по списку" },
+        { "group": "pip", "cmd": "pip install -r requirements.txt", "text": "Поставить библиотеки по списку" },
         { "cmd": "pip freeze > requirements.txt", "text": "Записать установленные библиотеки с версиями в файл" },
-        { "cmd": "uv sync", "text": "Создать окружение и поставить всё по pyproject.toml и uv.lock" },
+        { "group": "uv и poetry", "cmd": "uv sync", "text": "Создать окружение и поставить всё по pyproject.toml и uv.lock" },
         { "cmd": "uv add httpx", "text": "Добавить библиотеку в проект" },
         { "cmd": "uv run pytest", "text": "Запустить команду внутри окружения проекта" },
         { "cmd": "poetry install", "text": "Поставить всё по poetry.lock" },
-        { "cmd": "pytest -x", "text": "Запустить тесты и остановиться на первом красном" },
+        { "group": "Тесты и проверки", "cmd": "pytest -x", "text": "Запустить тесты и остановиться на первом красном" },
         { "cmd": "ruff check --fix", "text": "Найти ошибки и исправить то, что можно автоматически" },
         { "cmd": "ruff format", "text": "Оформить код по правилам" }
       ]
@@ -119,7 +147,7 @@
       "type": "quiz",
       "title": "Проверьте себя",
       "items": [
-        { "q": "Зачем нужен venv?", "options": ["Чтобы Python работал быстрее", "Чтобы у каждого проекта были свои библиотеки и версии", "Чтобы прятать код"], "answer": 1, "why": "Без окружения все проекты делят одни библиотеки, и обновление для одного ломает другой." },
+        { "q": "Зачем нужен venv?", "options": ["Чтобы Python работал быстрее", "Чтобы прятать код", "Чтобы у каждого проекта были свои библиотеки и версии"], "answer": 2, "why": "Без окружения все проекты делят одни библиотеки, и обновление для одного ломает другой." },
         { "q": "Как pytest понимает, что функция - это тест?", "options": ["По имени, которое начинается с test_", "По комментарию над ней", "Никак, надо перечислить вручную"], "answer": 0, "why": "pytest ищет файлы test_*.py и функции test_* сам." },
         { "q": "Что делает uv sync?", "options": ["Отправляет код на сервер", "Создаёт окружение и ставит библиотеки по файлам проекта", "Удаляет окружение"], "answer": 1, "why": "uv сам создаёт .venv и ставит туда точные версии из uv.lock." },
         { "q": "Нужно ли класть папку .venv в git?", "options": ["Да", "Нет"], "answer": 1, "why": "Её можно в любой момент создать заново по списку библиотек. В git хранят только pyproject.toml, requirements.txt и lock-файлы." }

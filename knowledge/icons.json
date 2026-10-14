@@ -42,5 +42,9 @@
   "refresh": "M20 11a8 8 0 1 0-2.3 5.7 M20 4v7h-7",
   "grid": "M4 4h7v7H4z M13 4h7v7h-7z M4 13h7v7H4z M13 13h7v7h-7z",
   "history": "M3 12a9 9 0 1 0 3-6.7 M3 4v5h5 M12 7v5l3 3",
-  "learn": "M2 9l10-5 10 5-10 5z M6 11v5c3 2 9 2 12 0v-5 M22 9v6"
+  "learn": "M2 9l10-5 10 5-10 5z M6 11v5c3 2 9 2 12 0v-5 M22 9v6",
+  "grip": "M9 6h.01 M15 6h.01 M9 12h.01 M15 12h.01 M9 18h.01 M15 18h.01",
+  "chevron": "M6 9l6 6 6-6",
+  "more": "M5 12h.01 M12 12h.01 M19 12h.01",
+  "blocks": "M4 4h16v6H4z M4 14h7v6H4z M15 14h5v6h-5z"
 }

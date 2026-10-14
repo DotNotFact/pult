@@ -41,7 +41,7 @@
         { "flag": "-ldflags", "text": "Ключи компоновщика: например вписать версию в программу" },
         { "flag": "-mod", "text": "Как обращаться с go.mod: readonly, vendor, mod" }
       ],
-      "help": "help"
+      "help": ["{bin} help {sub}", "{bin} help"]
     },
     {
       "id": "gofmt",

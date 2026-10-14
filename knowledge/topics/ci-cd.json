@@ -3,16 +3,26 @@
   "title": "CI/CD",
   "color": "#fc6d26",
   "icon": "pipeline",
-  "level": "основы",
-  "summary": "CI/CD - робот, который после каждой отправки кода сам собирает проект, гоняет проверки и, если всё зелёное, выкладывает новую версию.",
-  "detect": { "files": [".gitlab-ci.yml", ".github/workflows", "Jenkinsfile", "azure-pipelines.yml"], "deps": [], "bins": ["glab"], "stacks": [] },
-  "related": ["git", "testing", "code-quality", "docker", "deploy"],
+  "level": "средний",
+  "summary": "CI/CD - робот, который после каждой отправки кода сам собирает проект, гоняет проверки и, если всё зелёное, выкладывает новую версию. Урок про GitLab CI и GitHub Actions.",
+  "detect": { "files": [".gitlab-ci.yml", ".github/workflows", "Jenkinsfile", "azure-pipelines.yml"], "deps": [], "bins": ["glab", "gitlab-runner"], "stacks": [] },
+  "related": ["git", "github", "testing", "code-quality", "docker", "deploy"],
   "sections": [
     {
       "type": "idea",
       "title": "Зачем это нужно",
-      "text": "Человек забывает запустить тесты, торопится, у него на компьютере стоит не та версия. Ошибка уходит дальше, и её находят пользователи. CI (непрерывная интеграция) - это проверки, которые запускаются сами на каждую отправку кода. CD (непрерывная доставка) - выкладка, которая тоже идёт сама, когда проверки прошли. Робот делает одно и то же каждый раз и записывает, что получилось.",
+      "text": "Человек забывает запустить тесты, торопится, у него на компьютере стоит не та версия. Ошибка уходит дальше, и её находят пользователи. CI (непрерывная интеграция) - проверки, которые запускаются сами на каждую отправку кода. CD - следующий шаг: готовая версия собирается для выкладки, а иногда сразу выкладывается на сервер. Робот делает одно и то же каждый раз и записывает, что получилось. Вся настройка лежит в файле рядом с кодом: .gitlab-ci.yml для GitLab, .github/workflows/*.yml для GitHub.",
       "analogy": "Конвейер на заводе с контролем качества. Деталь проходит станции по порядку: сборка, проверка, упаковка. Брак останавливает ленту на той станции, где его нашли, и до покупателя он не доходит."
+    },
+    {
+      "type": "compare",
+      "title": "CI, доставка и развёртывание - в чём разница",
+      "cols": ["", "Что делает робот", "Кто решает выкладку", "Когда подходит"],
+      "rows": [
+        ["CI, непрерывная интеграция", "Собирает и проверяет каждый коммит", "Выкладки нет", "Всегда, с первого дня проекта"],
+        ["Continuous Delivery, непрерывная доставка", "Плюс готовит версию к выкладке: образ, архив, сборку", "Человек нажимает кнопку", "Выкладку надо согласовать или выбрать время"],
+        ["Continuous Deployment, непрерывное развёртывание", "Плюс сам выкладывает на сервер", "Никто: каждый зелёный main уходит к пользователям", "Тестам доверяют, откат быстрый"]
+      ]
     },
     {
       "type": "diagram",
@@ -32,46 +42,27 @@
         ["build", "test", "если зелёное"],
         ["test", "deploy", "если зелёное"]
       ],
-      "caption": "Отправка кода запускает пайплайн. Раннер выполняет этапы по порядку. Красный этап останавливает всё, что идёт после него."
+      "caption": "Отправка кода запускает пайплайн. Раннер выполняет джобы. Красная джоба останавливает всё, что от неё зависит."
     },
     {
       "type": "terms",
       "title": "Слова, которые надо знать",
       "items": [
         { "term": "CI", "text": "Continuous Integration, непрерывная интеграция. Каждую отправку кода автоматически собирают и проверяют.", "forms": ["непрерывная интеграция"] },
-        { "term": "CD", "text": "Continuous Delivery или Deployment. Проверенный код автоматически готовят к выкладке или сразу выкладывают на сервер.", "forms": ["непрерывная доставка"] },
-        { "term": "Пайплайн", "text": "Один запуск всех проверок для одного коммита. Состоит из этапов и джобов.", "forms": ["пайплайна", "пайплайны", "пайплайне", "pipeline", "workflow"] },
-        { "term": "Этап", "text": "Группа джобов: build, test, deploy. Этапы идут по очереди, джобы внутри одного этапа - одновременно.", "forms": ["этапа", "этапы", "stage", "stages"] },
-        { "term": "Джоба", "text": "Одна задача пайплайна: собрать проект, прогнать тесты, проверить стиль. У каждой свой лог и свой результат.", "forms": ["джоб", "джобы", "джобу", "job", "jobs"] },
-        { "term": "Раннер", "text": "Компьютер, который выполняет джобы. Бывает общий от GitLab или GitHub, бывает свой. Нет свободного раннера - пайплайн стоит в очереди.", "forms": ["раннера", "раннеры", "runner"] },
-        { "term": "Артефакт", "text": "Файлы, которые джоба сохраняет после себя: собранная программа, отчёт тестов. Следующие этапы и люди могут их скачать.", "forms": ["артефакты", "артефактов", "artifacts"] },
-        { "term": "Кэш", "text": "Файлы, которые переносятся между запусками для скорости, например скачанные зависимости. Может пропасть в любой момент, на него нельзя полагаться как на результат.", "forms": ["кэша", "cache"] },
+        { "term": "CD", "text": "Continuous Delivery (доставка) или Continuous Deployment (развёртывание). В первом случае робот готовит версию, а выкладывает человек. Во втором робот выкладывает сам.", "forms": ["непрерывная доставка", "непрерывное развёртывание", "Continuous Delivery", "Continuous Deployment"] },
+        { "term": "Пайплайн", "text": "Один запуск всех проверок для одного коммита. Состоит из этапов и джоб. В GitHub Actions файл с пайплайном называется workflow.", "forms": ["пайплайна", "пайплайны", "пайплайне", "пайплайнов", "pipeline", "workflow"] },
+        { "term": "Этап", "text": "Группа джоб в GitLab: build, test, deploy. Этапы идут по очереди, джобы внутри одного этапа - одновременно.", "forms": ["этапа", "этапы", "stages"] },
+        { "term": "Джоба", "text": "Одна задача пайплайна: собрать проект, прогнать тесты, проверить стиль. У каждой свой лог и свой результат.", "forms": ["джоб", "джобы", "джобу", "джобой", "job", "jobs"] },
+        { "term": "Раннер", "text": "Программа на машине, которая забирает джобы и выполняет их. Бывает общий от GitLab или GitHub, бывает свой. Нет свободного раннера - джоба стоит в очереди.", "forms": ["раннера", "раннеры", "раннеров", "раннере", "runner"] },
+        { "term": "Артефакт", "text": "Файлы, которые джоба сохраняет после себя: собранная программа, отчёт тестов. Следующие джобы и люди могут их скачать.", "forms": ["артефакты", "артефактов", "артефактом", "artifacts"] },
+        { "term": "Кэш", "text": "Файлы, которые переносятся между запусками ради скорости, например скачанные зависимости. Может пропасть в любой момент, на него нельзя полагаться как на результат.", "forms": ["кэша", "кэшем", "cache"] },
         { "term": "Триггер", "text": "Событие, которое запускает пайплайн: push в ветку, открытие merge request или pull request, расписание, ручной запуск.", "forms": ["триггеры", "trigger"] }
       ]
     },
     {
       "type": "steps",
       "title": "Что происходит после git push",
-      "items": [
-        "GitLab или GitHub получает коммит и читает файл настроек пайплайна",
-        "Правила в файле решают, какие джобы нужны для этой ветки и этого события",
-        "Свободный раннер забирает джобу, скачивает код и запускает её в чистой среде, часто в контейнере",
-        "Джоба выполняет команды по очереди. Любая команда с ошибкой делает джобу красной",
-        "Когда все джобы этапа зелёные, начинается следующий этап",
-        "Итог виден у коммита и в merge request: зелёная галочка или красный крестик"
-      ]
-    },
-    {
-      "type": "example",
-      "title": "GitLab CI: файл .gitlab-ci.yml",
-      "code": "stages:\n  - build\n  - test\n\nbuild:\n  stage: build\n  image: node:22\n  script:\n    - npm ci\n    - npm run build\n  artifacts:\n    paths:\n      - dist/\n\ntest:\n  stage: test\n  image: node:22\n  script:\n    - npm ci\n    - npm test\n  rules:\n    - if: $CI_PIPELINE_SOURCE == \"merge_request_event\"\n    - if: $CI_COMMIT_BRANCH == \"main\"",
-      "note": "Два этапа по порядку. Джоба build собирает сайт и сохраняет папку dist как артефакт. Джоба test запускается только для merge request и для ветки main. Файл лежит в корне проекта."
-    },
-    {
-      "type": "example",
-      "title": "GitHub Actions: файл .github/workflows/ci.yml",
-      "code": "name: CI\non:\n  push:\n    branches: [main]\n  pull_request:\n\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 22\n      - run: npm ci\n      - run: npm test",
-      "note": "on - триггеры: отправка в main и любой pull request. runs-on - на каком раннере. uses подключает готовое действие: скачать код, поставить Node.js. run выполняет команду. Файлов в папке .github/workflows может быть несколько, каждый - свой пайплайн."
+      "items": ["GitLab или GitHub получает коммит и читает файл настроек пайплайна из этого же коммита.", "Правила в файле решают, нужен ли пайплайн вообще и какие джобы в нём будут для этой ветки и этого события.", "Джобы встают в очередь на сервере. Раннер сам раз в несколько секунд спрашивает сервер, нет ли работы с его метками.", "Раннер забирает джобу, скачивает код и запускает команды в чистой среде, чаще всего в новом контейнере.", "Перед командами раннер достаёт кэш и артефакты прошлых джоб, после команд - сохраняет новые.", "Любая команда, которая вернула код выхода не 0, делает джобу красной. Остальные команды этой джобы не выполняются.", "Джоба стартует, когда готовы все, от кого она зависит. Красная джоба отменяет зависимые от неё.", "Итог виден у коммита и в merge request или pull request: зелёная галочка или красный крестик."]
     },
     {
       "type": "anatomy",
@@ -79,62 +70,286 @@
       "parts": [
         { "text": "test:", "note": "имя джобы, его видно в списке пайплайна" },
         { "text": "stage: test", "note": "к какому этапу относится" },
-        { "text": "image: node:22", "note": "в каком контейнере выполнять команды" },
+        { "text": "image: node:24", "note": "в каком контейнере выполнять команды" },
+        { "text": "needs: [build]", "note": "кого ждать: старт сразу после build, без ожидания всего этапа" },
         { "text": "script: npm test", "note": "команды. Ошибка любой из них - джоба красная" },
         { "text": "rules: if merge_request", "note": "когда джобу запускать, а когда пропустить" },
-        { "text": "artifacts: dist/", "note": "что сохранить после джобы" }
+        { "text": "artifacts: dist/", "note": "что сохранить после джобы" },
+        { "text": "tags: [docker]", "note": "на каком раннере выполнять" }
+      ]
+    },
+    {
+      "type": "terms",
+      "title": "Слова посложнее",
+      "items": [
+        { "term": "needs", "text": "Список джоб, которых ждёт эта джоба. Она стартует, как только они готовы, а не после всего этапа. Пайплайн становится графом зависимостей (DAG), а не очередью этапов. needs: [] - стартовать сразу.", "forms": ["DAG"] },
+        { "term": "Матрица", "text": "Одна джоба, запущенная несколько раз с разными значениями: версии Node.js, системы. В GitLab parallel:matrix, в GitHub strategy.matrix.", "forms": ["матрица", "матрицы", "матрицей", "matrix"] },
+        { "term": "Ручная джоба", "text": "Джоба с when: manual. Пайплайн доходит до неё и ждёт, пока человек нажмёт кнопку запуска. Так делают ворота перед выкладкой.", "forms": ["ручную джобу", "ручной джобы", "when: manual"] },
+        { "term": "MR-пайплайн", "text": "Пайплайн, запущенный для merge request, а не просто для ветки. Его результат показывается прямо в MR. В GitLab у него CI_PIPELINE_SOURCE равен merge_request_event.", "forms": ["merge_request_event", "пайплайн для MR"] },
+        { "term": "workflow:rules", "text": "Правила GitLab для всего пайплайна: создавать ли его вообще. Нужны, чтобы на один коммит не шли два пайплайна - для ветки и для MR.", "forms": [] },
+        { "term": "Executor", "text": "Способ, которым раннер GitLab выполняет джобу: docker - в новом контейнере, shell - прямо в системе машины, kubernetes - в кластере.", "forms": ["executor", "экзекьютор"] },
+        { "term": "Метки раннера", "text": "Слова (tags), по которым джоба выбирает раннер: docker, linux, gpu. Джоба с меткой, которой нет ни у одного раннера, висит в очереди.", "forms": ["метки раннера", "метку раннера", "меткам раннера"] },
+        { "term": "interruptible", "text": "Пометка джобы: её можно прервать, если в ту же ветку пришёл новый коммит. В GitHub похожее делает concurrency с cancel-in-progress.", "forms": ["cancel-in-progress"] },
+        { "term": "resource_group", "text": "Имя общего ресурса в GitLab. Джобы с одним resource_group идут строго по одной, даже из разных пайплайнов. Так две выкладки не пишут на сервер одновременно.", "forms": [] },
+        { "term": "dind", "text": "Docker in Docker: рядом с джобой запускается отдельный Docker в контейнере, и джоба собирает образы в нём.", "forms": ["docker:dind", "Docker in Docker"] },
+        { "term": "Маскированная переменная", "text": "Переменная CI с флагом Masked: её значение заменяется на [MASKED] в логе. Флаг Protected добавляет: переменная видна только в защищённых ветках и тегах.", "forms": ["masked", "protected-переменная"] }
+      ]
+    },
+    {
+      "type": "codepair",
+      "title": "Один и тот же пайплайн в GitLab и GitHub",
+      "left": { "label": ".gitlab-ci.yml", "code": "stages: [test, build]\n\ntest:\n  stage: test\n  image: node:24\n  script:\n    - npm ci\n    - npm test\n\nbuild:\n  stage: build\n  image: node:24\n  needs: [test]\n  script:\n    - npm ci\n    - npm run build\n  artifacts:\n    paths: [dist/]\n    expire_in: 1 week\n  rules:\n    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH" },
+      "right": { "label": ".github/workflows/ci.yml", "code": "name: CI\non:\n  push:\n    branches: [main]\n  pull_request:\n\npermissions:\n  contents: read\n\njobs:\n  test:\n    runs-on: ubuntu-latest\n    container: node:24\n    steps:\n      - uses: actions/checkout@v7\n      - run: npm ci\n      - run: npm test\n\n  build:\n    runs-on: ubuntu-latest\n    container: node:24\n    needs: test\n    if: github.ref == 'refs/heads/main'\n    steps:\n      - uses: actions/checkout@v7\n      - run: npm ci\n      - run: npm run build\n      - uses: actions/upload-artifact@v7\n        with:\n          name: dist\n          path: dist/\n          retention-days: 7" },
+      "note": "GitLab сам скачивает код в джобу, в GitHub это шаг actions/checkout. image в GitLab - то же, что container в GitHub. Порядок в GitLab задают этапы и needs, в GitHub только needs: без него все джобы идут одновременно. rules в GitLab и if в GitHub решают, запускать ли джобу. permissions в GitHub урезает права ключа джобы до чтения. Переменные с CI_ GitLab заполняет сам: CI_DEFAULT_BRANCH - имя главной ветки, CI_PIPELINE_SOURCE - что запустило пайплайн."
+    },
+    {
+      "type": "compare",
+      "title": "GitLab CI и GitHub Actions: что как называется",
+      "cols": ["", "GitLab CI", "GitHub Actions"],
+      "rows": [
+        ["Где файл", ".gitlab-ci.yml в корне", "Любой .yml в .github/workflows"],
+        ["Порядок", "stages по очереди, needs для графа", "Все джобы сразу, порядок только через needs"],
+        ["Команды", "script: список команд", "steps: шаги run и готовые действия uses"],
+        ["Где выполняется", "image: образ, tags: раннер", "runs-on: тип машины, container: образ"],
+        ["Условия", "rules: if, changes, when", "if: выражение, on: paths и branches"],
+        ["Матрица", "parallel: matrix", "strategy: matrix"],
+        ["Отмена устаревших", "interruptible и workflow: auto_cancel", "concurrency и cancel-in-progress"],
+        ["Ворота перед выкладкой", "when: manual, protected environments", "environment с required reviewers"],
+        ["Очередь выкладок", "resource_group", "concurrency с постоянным group"],
+        ["Секреты", "Settings > CI/CD > Variables", "Settings > Secrets and variables > Actions"],
+        ["Свой раннер", "GitLab Runner", "Self-hosted runner"],
+        ["Командная строка", "glab ci", "gh run, gh workflow"]
+      ]
+    },
+    {
+      "type": "diagram",
+      "title": "Как раннер получает работу",
+      "nodes": [
+        { "id": "server", "label": "GitLab или GitHub", "note": "создаёт джобы", "icon": "cloud" },
+        { "id": "queue", "label": "Очередь", "note": "джобы ждут раннер", "icon": "list" },
+        { "id": "runner", "label": "Раннер", "note": "спрашивает: есть работа?", "icon": "server" },
+        { "id": "exec", "label": "Executor", "note": "docker или shell", "icon": "gear" },
+        { "id": "box", "label": "Контейнер джобы", "note": "чистая среда", "icon": "box" },
+        { "id": "log", "label": "Лог и статус", "note": "уходят на сервер", "icon": "file" }
+      ],
+      "edges": [
+        ["server", "queue", "кладёт джобу"],
+        ["queue", "runner", "раннер забирает по меткам"],
+        ["runner", "exec", "передаёт"],
+        ["exec", "box", "запускает"],
+        ["box", "log", "пишет"],
+        ["log", "server", "отправляет"]
+      ],
+      "caption": "Раннер сам ходит к серверу за работой. Поэтому ему не нужен входящий порт, а выключенный раннер просто не забирает джобы: они висят в очереди. Сколько джоб раннер GitLab берёт одновременно, задаёт concurrent в config.toml. Раннер GitHub берёт одну джобу за раз."
+    },
+    {
+      "type": "compare",
+      "title": "Docker в CI: три способа собрать образ",
+      "cols": ["Способ", "Как устроено", "Плюсы", "Минусы"],
+      "rows": [
+        ["dind (Docker in Docker)", "services: docker:28-dind, рядом с джобой свой Docker", "Каждая джоба изолирована, чистый Docker", "Нужен privileged-режим раннера. Кэш слоёв пропадает после джобы"],
+        ["Проброс сокета", "Раннер отдаёт джобе /var/run/docker.sock своей машины", "Быстро, слои остаются между джобами", "Джоба получает полный доступ к Docker машины. Только для своего доверенного кода"],
+        ["Без демона: buildah, BuildKit без root", "Образ собирается программой без Docker-демона", "Не нужен privileged, безопаснее", "Своя настройка. kaniko Google архивировал в июне 2025 года, живут только его форки, например от Chainguard"]
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Сборка образа в GitLab через dind",
+      "label": ".gitlab-ci.yml",
+      "code": "build-image:\n  stage: build\n  image: docker:28\n  services:\n    - docker:28-dind\n  variables:\n    DOCKER_TLS_CERTDIR: \"/certs\"\n  before_script:\n    - echo \"$CI_REGISTRY_PASSWORD\" | docker login -u \"$CI_REGISTRY_USER\" --password-stdin \"$CI_REGISTRY\"\n  script:\n    - docker pull \"$CI_REGISTRY_IMAGE:latest\" || true\n    - docker build --cache-from \"$CI_REGISTRY_IMAGE:latest\" --build-arg BUILDKIT_INLINE_CACHE=1 -t \"$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA\" -t \"$CI_REGISTRY_IMAGE:latest\" .\n    - docker push \"$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA\"\n    - docker push \"$CI_REGISTRY_IMAGE:latest\"\n  rules:\n    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH",
+      "note": "services поднимает Docker рядом с джобой. DOCKER_TLS_CERTDIR включает шифрованную связь с ним. Вход в реестр GitLab - по переменным, которые GitLab создаёт сам, пароль в файле не пишется. --cache-from берёт слои из прошлого образа: неизменные шаги Dockerfile не собираются заново. Образ помечается коротким хешем коммита, чтобы любую версию можно было вернуть."
+    },
+    {
+      "type": "rules",
+      "title": "Docker в CI: как правильно",
+      "items": [
+        { "kind": "do", "title": "Свои образы - из своего реестра", "text": "Docker Hub ограничивает число скачиваний: на момент 2026 года без входа - 100 за 6 часов с одного адреса. Общий раннер упирается в лимит, и джобы падают с toomanyrequests. Входите в Docker Hub из CI или копируйте нужные образы в реестр GitLab или GitHub (ghcr.io)." },
+        { "kind": "do", "title": "Точная версия образа", "text": "Пишите node:24.11 или node:24, а не node:latest. latest меняется без предупреждения, и вчерашний зелёный пайплайн сегодня падает." },
+        { "kind": "tip", "title": "Не скачивать образ каждый раз", "text": "Для своего раннера в config.toml поставьте pull_policy = [\"if-not-present\"]: образ, который уже есть на машине, не скачивается заново. Это экономит время и лимит Docker Hub." },
+        { "kind": "dont", "title": "Не пробрасывайте сокет чужому коду", "text": "С доступом к docker.sock джоба может запустить контейнер с правами root на всей машине раннера. Это допустимо только для своего кода на своём раннере." },
+        { "kind": "when", "title": "Когда нужен dind", "text": "Когда джоба собирает образ или запускает контейнеры для тестов, а раннер общий или изолированный. Если образ уже собран, тестам он нужен как image или services, а не через dind." }
+      ]
+    },
+    {
+      "type": "chart",
+      "title": "Куда уходит время пайплайна (пример)",
+      "unit": "мин",
+      "items": [
+        { "label": "Этапы по очереди, без кэша", "value": 12, "note": "каждая джоба заново качает зависимости и ждёт весь этап" },
+        { "label": "Плюс кэш по lock-файлу", "value": 8, "note": "зависимости берутся из кэша, пока lock-файл не менялся" },
+        { "label": "Плюс needs вместо этапов", "value": 5, "note": "джобы стартуют сразу, как готово нужное" },
+        { "label": "Плюс образ с готовыми инструментами", "value": 4, "note": "не ставить программы в каждой джобе" }
+      ],
+      "note": "Числа условные, для проекта средней величины. Свой пайплайн замерьте сами: время каждой джобы видно на странице пайплайна."
+    },
+    {
+      "type": "rules",
+      "title": "Как ускорить пайплайн",
+      "items": [
+        { "kind": "do", "title": "Ключ кэша - от lock-файла", "text": "GitLab: cache: key: files: [package-lock.json]. GitHub: key с hashFiles('**/package-lock.json') или cache: npm в setup-node. Зависимости поменялись - кэш новый. Не поменялись - берётся старый." },
+        { "kind": "do", "title": "needs вместо ожидания этапа", "text": "Джоба стартует, как только готовы те, от кого она зависит. Линтер и тесты, которым ничего не нужно, ставьте с needs: [] - они начнут сразу." },
+        { "kind": "do", "title": "Проверки - interruptible", "text": "Пришёл новый коммит в ту же ветку - старый пайплайн уже никому не нужен. GitLab: interruptible: true и workflow: auto_cancel: on_new_commit: interruptible. GitHub: concurrency с cancel-in-progress: true." },
+        { "kind": "dont", "title": "Не прерывайте выкладку", "text": "Выкладке ставьте interruptible: false, а в GitHub - cancel-in-progress: false. Оборванная на середине выкладка оставляет сервер наполовину в старой версии." },
+        { "kind": "when", "title": "resource_group", "text": "Когда две джобы не должны идти одновременно: выкладка на один сервер, миграция одной базы. Остальные ждут своей очереди, а не пишут поверх друг друга." },
+        { "kind": "dont", "title": "Не собирать одно дважды", "text": "Если сборку сделала одна джоба, другие берут её артефакт или готовый образ, а не собирают заново." },
+        { "kind": "tip", "title": "Артефактам - срок", "text": "Ставьте expire_in в GitLab и retention-days в GitHub. Без срока артефакты копятся и съедают место." },
+        { "kind": "tip", "title": "Запускать только нужное", "text": "GitLab: rules: changes: [docs/**]. GitHub: on: push: paths. Правка документации не обязана гнать сборку образов." }
+      ]
+    },
+    {
+      "type": "rules",
+      "title": "Перезапуск, отмена и опрос статуса",
+      "items": [
+        { "kind": "when", "title": "Перезапустить одну джобу", "text": "Упала одна джоба, и причина не в коде: сеть, раннер, лимит Docker Hub. glab ci retry <джоба> или gh run rerun <id> --failed. Зелёные джобы при этом не повторяются." },
+        { "kind": "when", "title": "Новый пайплайн целиком", "text": "Поменялись код, файл пайплайна или переменные. Новый коммит запустит пайплайн сам. Ручной перезапуск всего пайплайна гонит заново уже зелёное и занимает раннер." },
+        { "kind": "do", "title": "Отменяйте лишнее", "text": "Отправили три коммита подряд - нужен только последний пайплайн. Вручную: glab ci cancel pipeline <id> или gh run cancel <id>. Лучше автоматически: interruptible в GitLab, concurrency в GitHub." },
+        { "kind": "dont", "title": "Не опрашивайте API в цикле", "text": "Цикл вида «спроси статус, подожди 5 секунд, повтори» - сотни пустых запросов. Они съедают лимит запросов. Массовые вызовы из скриптов и ИИ-агентов похожи на злоупотребление: токен или аккаунт могут заблокировать." },
+        { "kind": "do", "title": "Один запрос, когда ждёте результат", "text": "Проверьте статус один раз: glab ci list --ref <ветка> или gh run list --branch <ветка>. Для автоматики - уведомление: письмо или вебхук (сервис сам шлёт запрос на ваш адрес, когда пайплайн закончился)." },
+        { "kind": "tip", "title": "watch тоже опрашивает", "text": "gh run watch спрашивает сервер раз в 3 секунды, glab ci status --live - тоже часто. Для долгого пайплайна ставьте gh run watch <id> --interval 60 или не держите терминал на ожидании." }
       ]
     },
     {
       "type": "compare",
-      "title": "GitLab CI и GitHub Actions",
-      "cols": ["", "GitLab CI", "GitHub Actions"],
+      "title": "Красный пайплайн: чьё это падение",
+      "cols": ["Что в логе", "Чьё", "Что делать"],
       "rows": [
-        ["Где файл", ".gitlab-ci.yml в корне", "Любой .yml в .github/workflows"],
-        ["Порядок", "Этапы stages идут по очереди", "Джобы идут одновременно, порядок задают через needs"],
-        ["Команды", "script: список команд", "steps: шаги run и готовые действия uses"],
-        ["Где выполняется", "image: образ контейнера", "runs-on: тип машины"],
-        ["Проверка перед слиянием", "merge request", "pull request"],
-        ["Свой раннер", "GitLab Runner", "Self-hosted runner"]
+        ["Джоба долго в pending или queued, «no active runners», «Waiting for a runner»", "Раннер выключен или нет раннера с такими метками", "Включить машину и раннер, сверить tags и runs-on"],
+        ["«Job failed (system failure)», runner_system_failure", "Раннер или его машина", "Перезапустить джобу. Повторяется - чинить раннер"],
+        ["«Cannot connect to the Docker daemon»", "Docker на раннере упал или dind не успел подняться", "Проверить Docker, перезапустить джобу"],
+        ["Много джоб красные разом, причины разные", "Почти всегда машина: Docker, раннер, сеть", "Смотреть машину, а не код"],
+        ["«Could not resolve host», «TLS handshake timeout», ECONNRESET", "Сеть", "Перезапустить джобу. Часто - повтор внутри сетевого шага"],
+        ["«toomanyrequests: You have reached your pull rate limit»", "Лимит Docker Hub", "Вход в Docker Hub из CI, свои копии образов"],
+        ["ci_quota_exceeded, «spending limit»", "Кончились минуты тарифа", "Свой раннер или оплата"],
+        ["exit code 137, «Killed»", "Не хватило памяти", "Меньше джоб одновременно или больше памяти"],
+        ["Ошибка теста, компиляции, линтера", "Код", "Читать первую ошибку, чинить код или тест"]
       ]
+    },
+    {
+      "type": "steps",
+      "title": "Как разобрать красный пайплайн",
+      "items": ["Посмотрите, какие джобы красные: glab ci view или gh run view <id>.", "Красных много и они не связаны по смыслу - ищите причину в машине. Красная одна - чаще всего код.", "Откройте лог только упавшего: glab ci trace <джоба> или gh run view <id> --log-failed.", "Ищите первую ошибку сверху, а не последнюю строку. Последняя строка часто только итог: «exit code 1».", "Сверьте с таблицей выше: чьё падение.", "Не код - перезапустите одну джобу. Код - повторите у себя ту же команду, что стоит в script или run.", "Зелёное у себя и красное в CI - ищите разницу окружения: версия языка, переменные, шрифты, часовой пояс, файл не в git."]
+    },
+    {
+      "type": "rules",
+      "title": "Нестабильные тесты и повторы",
+      "items": [
+        { "kind": "dont", "title": "Не ставьте retry на всё подряд", "text": "retry: 2 на каждую джобу делает зелёным тест, который падает раз из пяти. Настоящий баг - гонка, зависимость от времени или порядка - уходит к пользователям, а пайплайн становится медленнее." },
+        { "kind": "do", "title": "Повтор - только на сбой машины", "text": "GitLab: retry: max: 2, when: [runner_system_failure, stuck_or_timeout_failure, scheduler_failure]. Ошибка в коде (script_failure) так не повторяется и остаётся красной." },
+        { "kind": "do", "title": "Сетевой повтор - внутри шага", "text": "Повтор ставят у той команды, что ходит в сеть: curl --retry 3, npm config set fetch-retries 5. Так повторяется скачивание, а не весь тест." },
+        { "kind": "do", "title": "Нестабильный тест - это задача", "text": "Нашли тест, который то красный, то зелёный без правок, - заведите задачу и чините. Ручной перезапуск одной джобы - временная мера, а не режим работы." },
+        { "kind": "when", "title": "allow_failure и continue-on-error", "text": "Только для джобы, которая сознательно не блокирует: пробная проверка, новая версия языка. Не для того, чтобы спрятать красное." }
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Выкладка с воротами и окружением (GitLab)",
+      "label": ".gitlab-ci.yml",
+      "code": "deploy-prod:\n  stage: deploy\n  needs: [build]\n  environment:\n    name: production\n    url: https://my-app.example.com\n  resource_group: production\n  interruptible: false\n  rules:\n    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH\n      when: manual\n  script:\n    - ./scripts/deploy.sh \"$CI_COMMIT_SHORT_SHA\"",
+      "note": "environment записывает каждую выкладку в историю окружения (Operate > Environments). when: manual - ворота: джоба ждёт кнопку. resource_group не даёт двум выкладкам идти одновременно. Откат: на странице окружения у прошлой удачной выкладки нажать Rollback - GitLab повторит её джобу со старым коммитом. Ещё один способ - git revert и обычный пайплайн. Одобрение несколькими людьми (protected environments) есть в платных тарифах GitLab."
+    },
+    {
+      "type": "rules",
+      "title": "Свой раннер, секреты и защита main",
+      "items": [
+        { "kind": "when", "title": "Когда нужен свой раннер", "text": "Кончаются бесплатные минуты, нужна машина с большой памятью или GPU, нужен доступ во внутреннюю сеть. Свой раннер ставится на свою машину: gitlab-runner register или скрипт из настроек GitHub." },
+        { "kind": "do", "title": "Раннер включён, пока идут пайплайны", "text": "Выключенная машина - джобы не падают, а стоят в очереди: pending в GitLab, queued в GitHub. Очередь не вечна: у своего раннера GitHub отменяет джобу, если её не взяли за 24 часа. Уходите надолго - отключите раннер в настройках, чтобы пайплайны не копились." },
+        { "kind": "do", "title": "Следите за диском и Docker", "text": "Старые образы, тома и кэш забивают диск, и тогда падают все джобы разом. Чистка по расписанию: docker system prune -af --filter \"until=72h\". Упал Docker - джобы падают пачкой, это не десять ошибок в коде." },
+        { "kind": "dont", "title": "Не давайте свой раннер открытому репозиторию", "text": "Pull request из чужого форка запустит чужой код на вашей машине. Для открытых проектов - только общие раннеры." },
+        { "kind": "do", "title": "Защитите main", "text": "Прямая отправка запрещена, слияние - только через MR или PR и только на зелёном пайплайне. GitLab: Settings > Repository > Protected branches и Settings > Merge requests > Pipelines must succeed. GitHub: ruleset с обязательными проверками." },
+        { "kind": "do", "title": "Секреты - в переменных CI", "text": "GitLab: Settings > CI/CD > Variables с флагами Masked и Protected. GitHub: Settings > Secrets and variables > Actions или секреты окружения. В файле пайплайна - только имя переменной." },
+        { "kind": "tip", "title": "concurrent по памяти", "text": "concurrent в config.toml раннера GitLab - сколько джоб идут одновременно. Больше, чем выдерживает память машины, - джобы падают с exit code 137." }
+      ]
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: быстрый пайплайн GitLab",
+      "task": "Напишите .gitlab-ci.yml для проекта на Node.js. Линтер и тесты стартуют сразу и идут одновременно. Сборка ждёт обоих и сохраняет dist. Зависимости кэшируются по package-lock.json. На один коммит - один пайплайн: для MR или для ветки, но не оба. Новый коммит отменяет устаревший пайплайн.",
+      "steps": ["Задайте stages: test и build.", "В default вынесите общее: image, interruptible и cache с ключом от package-lock.json.", "Добавьте workflow: rules, чтобы ветка с открытым MR не получала второй пайплайн.", "Джобам lint и test поставьте needs: [] - они не ждут ничего.", "Джобе build поставьте needs: [lint, test] и artifacts со сроком.", "Проверьте файл: glab ci lint."],
+      "check": "glab ci lint пишет, что файл верный. В MR виден один пайплайн. lint и test стартуют одновременно. Второй запуск быстрее: в логе «Successfully extracted cache».",
+      "hint": "Второй пайплайн отсекает правило с $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS и when: never. Кэш npm кладите в папку проекта: GitLab кэширует только пути внутри неё.",
+      "solution": "stages:\n  - test\n  - build\n\nworkflow:\n  rules:\n    - if: $CI_PIPELINE_SOURCE == \"merge_request_event\"\n    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS\n      when: never\n    - if: $CI_COMMIT_BRANCH\n  auto_cancel:\n    on_new_commit: interruptible\n\nvariables:\n  npm_config_cache: \"$CI_PROJECT_DIR/.npm\"\n\ndefault:\n  image: node:24\n  interruptible: true\n  cache:\n    key:\n      files:\n        - package-lock.json\n    paths:\n      - .npm/\n\nlint:\n  stage: test\n  needs: []\n  script:\n    - npm ci --prefer-offline\n    - npm run lint\n\ntest:\n  stage: test\n  needs: []\n  script:\n    - npm ci --prefer-offline\n    - npm test\n\nbuild:\n  stage: build\n  needs: [lint, test]\n  script:\n    - npm ci --prefer-offline\n    - npm run build\n  artifacts:\n    paths:\n      - dist/\n    expire_in: 1 week"
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: проверки на GitHub Actions",
+      "task": "Напишите .github/workflows/ci.yml. Тесты идут на Node.js 22 и 24. Падение на одной версии не отменяет другую. Новый коммит в pull request отменяет старый запуск, а в main - нет. Ключ джобы может только читать репозиторий. Сборка из Node.js 24 сохраняется артефактом на 7 дней.",
+      "steps": ["Триггеры: push в main и pull_request.", "permissions: contents: read на весь файл.", "concurrency: group по ветке, cancel-in-progress только для pull_request.", "strategy: matrix с версиями и fail-fast: false.", "setup-node с cache: npm, затем npm ci и npm test.", "Сборку и upload-artifact - только при matrix.node == 24."],
+      "check": "На вкладке Actions у запуска две джобы: test (22) и test (24). Второй push в PR отменяет первый запуск со статусом cancelled. У запуска есть артефакт dist.",
+      "hint": "cancel-in-progress принимает выражение: ${{ github.event_name == 'pull_request' }}. Условие шага пишется как if: matrix.node == 24.",
+      "solution": "name: CI\non:\n  push:\n    branches: [main]\n  pull_request:\n\npermissions:\n  contents: read\n\nconcurrency:\n  group: ci-${{ github.ref }}\n  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n\njobs:\n  test:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    strategy:\n      fail-fast: false\n      matrix:\n        node: [22, 24]\n    steps:\n      - uses: actions/checkout@v7\n      - uses: actions/setup-node@v7\n        with:\n          node-version: ${{ matrix.node }}\n          cache: npm\n      - run: npm ci\n      - run: npm test\n      - run: npm run build\n        if: matrix.node == 24\n      - uses: actions/upload-artifact@v7\n        if: matrix.node == 24\n        with:\n          name: dist\n          path: dist/\n          retention-days: 7"
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: выкладка с одобрением на GitHub",
+      "task": "Сделайте .github/workflows/deploy.yml. После push в main собирается сайт, затем джоба deploy ждёт одобрения человека и выкладывает. Две выкладки не идут одновременно и не прерывают друг друга. Ключ сервера доступен только джобе выкладки.",
+      "steps": ["В Settings > Environments создайте окружение production и добавьте Required reviewers. В приватном репозитории они есть только в плане Enterprise, для пробы возьмите открытый.", "Секрет DEPLOY_TOKEN положите в это окружение: gh secret set DEPLOY_TOKEN --env production.", "Джоба build собирает и сохраняет dist артефактом.", "Джоба deploy: needs: build, environment: production, скачивает артефакт.", "concurrency: постоянная группа deploy-production, cancel-in-progress: false.", "Добавьте workflow_dispatch, чтобы выкладку можно было запустить кнопкой."],
+      "check": "После push джоба deploy показывает «Waiting for review». После Approve она выкладывает. Второй push во время выкладки ждёт, а не отменяет её. В Settings > Environments видна история выкладок.",
+      "hint": "Откат: найдите прошлый удачный запуск в gh run list --workflow deploy.yml и повторите его выкладку: gh run rerun <id> --job <id джобы>. Повтор берёт тот же старый коммит.",
+      "solution": "name: Deploy\non:\n  push:\n    branches: [main]\n  workflow_dispatch:\n\npermissions:\n  contents: read\n\nconcurrency:\n  group: deploy-production\n  cancel-in-progress: false\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7\n      - uses: actions/setup-node@v7\n        with:\n          node-version: 24\n          cache: npm\n      - run: npm ci\n      - run: npm run build\n      - uses: actions/upload-artifact@v7\n        with:\n          name: dist\n          path: dist/\n\n  deploy:\n    needs: build\n    runs-on: ubuntu-latest\n    environment:\n      name: production\n      url: https://my-app.example.com\n    steps:\n      - uses: actions/checkout@v7\n      - uses: actions/download-artifact@v8\n        with:\n          name: dist\n          path: dist/\n      - run: ./scripts/deploy.sh dist\n        env:\n          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}"
     },
     {
       "type": "mistakes",
       "title": "Что ломается чаще всего",
       "items": [
-        { "problem": "Пайплайн красный, хочется отключить проверку", "fix": "Красная проверка нашла проблему. Если её выключить, проблема никуда не денется и дойдёт до пользователей. Откройте лог красной джобы, найдите первую ошибку и чините код или тест." },
-        { "problem": "У меня работает, а в CI падает", "fix": "В CI чистая среда. Частые причины: файл не закоммичен, другая версия языка, нет переменной окружения, тест зависит от порядка или времени. Сравните версии и окружение." },
-        { "problem": "Пайплайн висит в состоянии pending", "fix": "Нет свободного раннера с подходящими метками или раннер выключен. Проверьте раннеры в настройках проекта." },
-        { "problem": "Пароль записан прямо в файле пайплайна", "fix": "Его видят все, у кого есть доступ к коду. Храните секреты в переменных CI/CD в настройках проекта, в файле пишите только их имена." },
-        { "problem": "Следующий этап не видит собранные файлы", "fix": "Каждая джоба начинает с чистого места. Сохраните файлы как artifacts в той джобе, которая их собрала." },
-        { "problem": "Перезапустил весь пайплайн из-за одной упавшей джобы", "fix": "Можно перезапустить только упавшую джобу. Так не тратится время на то, что уже зелёное." }
+        { "problem": "Пайплайн красный, хочется отключить проверку.", "fix": "Красная проверка нашла проблему. Выключенная проверка её не исправит, и проблема дойдёт до пользователей. Откройте лог красной джобы, найдите первую ошибку и чините код или тест." },
+        { "problem": "У меня работает, а в CI падает.", "fix": "В CI чистая среда. Частые причины: файл не закоммичен, другая версия языка, нет переменной окружения, тест зависит от порядка или времени. Сравните версии и окружение." },
+        { "problem": "Джоба висит в pending или queued.", "fix": "Нет включённого раннера с подходящими метками. Проверьте, включена ли машина раннера и совпадают ли tags в GitLab или runs-on в GitHub." },
+        { "problem": "На каждый коммит в ветке с MR идут два пайплайна.", "fix": "Один для ветки, второй для MR. Добавьте workflow: rules с правилом $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS и when: never." },
+        { "problem": "Ошибка «needs X, but X is not in any previous stage» или «undefined need».", "fix": "Джоба из needs не попала в пайплайн из-за своих rules. Уберите её из needs или напишите needs: [{ job: X, optional: true }]." },
+        { "problem": "Кэш никогда не обновляется или каждый раз пустой.", "fix": "Ключ кэша постоянный или меняется на каждом коммите. Делайте ключ от lock-файла. В GitLab кэшируются только пути внутри папки проекта." },
+        { "problem": "Следующая джоба не видит собранные файлы.", "fix": "Каждая джоба начинает с чистого места. Сохраните файлы как artifacts в той джобе, которая их собрала. Кэш для этого не годится: он может пропасть." },
+        { "problem": "«Cannot connect to the Docker daemon at tcp://docker:2375».", "fix": "Нет services: docker:dind, раннер не в privileged-режиме или настройки TLS не совпадают. С DOCKER_TLS_CERTDIR: \"/certs\" Docker слушает порт 2376." },
+        { "problem": "Пароль записан прямо в файле пайплайна.", "fix": "Его видят все, у кого есть доступ к коду. Смените пароль и храните новый в переменных CI/CD или секретах, в файле пишите только имя переменной." }
       ]
     },
     {
       "type": "cheatsheet",
       "title": "Шпаргалка",
       "items": [
-        { "cmd": "glab ci list", "text": "GitLab: последние пайплайны проекта" },
-        { "cmd": "glab ci view", "text": "GitLab: пайплайн текущей ветки по джобам" },
-        { "cmd": "glab ci trace", "text": "GitLab: лог джобы" },
-        { "cmd": "glab ci lint", "text": "GitLab: проверить .gitlab-ci.yml на ошибки" },
-        { "cmd": "gh run list", "text": "GitHub: последние запуски" },
-        { "cmd": "gh run view --log-failed", "text": "GitHub: показать только логи упавших шагов" },
-        { "cmd": "gh run rerun --failed", "text": "GitHub: перезапустить только упавшие джобы" },
-        { "cmd": "gh workflow run ci.yml", "text": "GitHub: запустить пайплайн вручную" }
+        { "group": "GitLab: glab ci", "cmd": "glab ci list --ref <ветка>", "text": "Пайплайны ветки и их статус" },
+        { "cmd": "glab ci view", "text": "Пайплайн текущей ветки по джобам, с логами" },
+        { "cmd": "glab ci get --merge-request <номер>", "text": "Пайплайн merge request" },
+        { "cmd": "glab ci trace <джоба>", "text": "Лог джобы по имени или id" },
+        { "cmd": "glab ci retry <джоба>", "text": "Перезапустить одну джобу" },
+        { "cmd": "glab ci cancel pipeline <id>", "text": "Отменить пайплайн" },
+        { "cmd": "glab ci run --branch main", "text": "Запустить пайплайн вручную" },
+        { "cmd": "glab job artifact main build", "text": "Скачать артефакты джобы build из последнего пайплайна main" },
+        { "group": "GitHub: gh run и gh workflow", "cmd": "gh run list --branch <ветка>", "text": "Запуски ветки и их статус" },
+        { "cmd": "gh run list --status failure", "text": "Только упавшие запуски" },
+        { "cmd": "gh run view <id>", "text": "Запуск по джобам" },
+        { "cmd": "gh run view <id> --log-failed", "text": "Логи только упавших шагов" },
+        { "cmd": "gh run watch <id> --interval 60", "text": "Следить за запуском, спрашивая сервер раз в минуту" },
+        { "cmd": "gh run rerun <id> --failed", "text": "Перезапустить только упавшие джобы и зависимые от них" },
+        { "cmd": "gh run rerun <id> --job <id джобы>", "text": "Перезапустить одну джобу" },
+        { "cmd": "gh run cancel <id>", "text": "Отменить запуск" },
+        { "cmd": "gh workflow run ci.yml --ref main", "text": "Запустить workflow вручную (нужен workflow_dispatch)" },
+        { "cmd": "gh run download <id> -n dist", "text": "Скачать артефакт dist" },
+        { "cmd": "gh cache list", "text": "Кэши репозитория и их размер" },
+        { "group": "Проверка файла до push", "cmd": "glab ci lint", "text": "Проверить .gitlab-ci.yml на ошибки" },
+        { "cmd": "glab ci lint --dry-run --ref main", "text": "Показать, какие джобы будут в пайплайне ветки main" },
+        { "cmd": "actionlint", "text": "Проверить файлы .github/workflows (отдельная программа)" },
+        { "group": "Свой раннер", "cmd": "gitlab-runner status", "text": "Работает ли служба раннера" },
+        { "cmd": "gitlab-runner verify", "text": "Видит ли GitLab зарегистрированные раннеры" },
+        { "cmd": "docker system prune -af --filter \"until=72h\"", "text": "Убрать на машине раннера образы и контейнеры старше трёх суток" }
       ]
     },
     {
       "type": "quiz",
       "title": "Проверьте себя",
       "items": [
-        { "q": "Что такое раннер?", "options": ["Файл с настройками", "Компьютер, который выполняет джобы", "Самая быстрая джоба"], "answer": 1, "why": "Сервис CI только раздаёт работу. Выполняет её раннер, свой или общий." },
-        { "q": "Как идут джобы одного этапа в GitLab CI?", "options": ["Одновременно", "Строго по одной", "Случайно"], "answer": 0, "why": "Этапы идут по очереди, а джобы внутри этапа запускаются параллельно, если хватает раннеров." },
-        { "q": "Пайплайн красный из-за теста. Что делать?", "options": ["Отключить тест", "Прочитать лог и починить причину", "Слить ветку, всё равно потом починим"], "answer": 1, "why": "Красный тест - найденная ошибка. Отключённый тест её не исправит, а только спрячет." },
-        { "q": "Где GitHub Actions ищет файлы пайплайнов?", "options": ["В корне, файл .gitlab-ci.yml", "В папке .github/workflows", "В package.json"], "answer": 1, "why": "Каждый .yml в .github/workflows - отдельный пайплайн GitHub Actions." },
-        { "q": "Чем артефакт отличается от кэша?", "options": ["Ничем", "Артефакт - результат джобы, кэш - ускорение, которое может пропасть", "Кэш хранится вечно"], "answer": 1, "why": "На артефакты опираются следующие этапы. Кэш только экономит время и не гарантирован." }
+        { "q": "Чем continuous delivery отличается от continuous deployment?", "options": ["Ничем, это одно и то же", "Delivery только для мобильных приложений", "В delivery выкладку запускает человек, в deployment - робот", "Deployment не запускает тесты"], "answer": 2, "why": "Обе готовят проверенную версию. В delivery последний шаг - кнопка у человека, в deployment каждый зелёный main уходит на сервер сам." },
+        { "q": "Что делает needs: [] у джобы в GitLab?", "options": ["Джоба стартует сразу, не дожидаясь прошлых этапов", "Отключает джобу", "Джоба ждёт все этапы", "Удаляет артефакты"], "answer": 0, "why": "Пустой needs значит: ждать некого. Линтер и тесты так стартуют одновременно в начале пайплайна." },
+        { "q": "Одна джоба из десяти упала с «Could not resolve host». Что разумнее?", "options": ["Перезапустить весь пайплайн", "Отключить джобу", "Переписать тесты", "Перезапустить эту джобу"], "answer": 3, "why": "Это сбой сети, а не кода. Повтор одной джобы не гоняет заново девять зелёных." },
+        { "q": "Ставить ли interruptible: true на джобу выкладки?", "options": ["Да, так быстрее", "Нет: оборванная выкладка оставит сервер наполовину старым", "Только по пятницам", "Без разницы"], "answer": 1, "why": "Прерывать можно проверки. Выкладку доводят до конца, а очередь выкладок держат через resource_group или concurrency." },
+        { "q": "Чем артефакт отличается от кэша?", "options": ["Артефакт - результат джобы, кэш - ускорение, которое может пропасть", "Ничем", "Кэш хранится вечно", "Артефакт нельзя скачать"], "answer": 0, "why": "На артефакты опираются следующие джобы. Кэш только экономит время и не гарантирован." },
+        { "q": "Чем плох retry: 2 на всех джобах?", "options": ["Ничем", "Пайплайн станет быстрее", "Тест, который иногда падает из-за бага, станет зелёным, и баг уйдёт к пользователям", "GitLab запрещает retry"], "answer": 2, "why": "Повтор прячет нестабильность. Повторять стоит только сбои машины: runner_system_failure, stuck_or_timeout_failure." },
+        { "q": "Машина со своим раннером выключена. Что с пайплайнами?", "options": ["Падают сразу", "Джобы стоят в очереди и ждут раннер", "Выполняются на общем раннере сами", "Удаляются"], "answer": 1, "why": "Раннер сам забирает работу. Нет раннера - джобы висят в pending или queued, пока он не появится или очередь не истечёт." },
+        { "q": "Как правильно ждать конца долгого пайплайна в скрипте?", "options": ["Спрашивать статус каждые 2 секунды в цикле", "Перезапускать пайплайн, пока не станет зелёным", "Открыть сто вкладок", "Проверить один раз позже или получить уведомление через вебхук"], "answer": 3, "why": "Опрос в цикле съедает лимит запросов и похож на злоупотребление. Уведомление приходит само, когда есть что сообщить." }
       ]
     },
-    { "type": "project", "title": "Где это в вашем проекте" }
+    {
+      "type": "project",
+      "title": "Где это в вашем проекте"
+    }
   ]
 }

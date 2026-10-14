@@ -32,7 +32,8 @@
   },
   "danger": {
     "_": "Имя скрипта, похожее на действие, которое не отменить. Проверяется, если программа сама не сказала, опасна ли команда.",
-    "re": "(?:^|[:\\-_ ./])(?:deploy|publish|prod|production|delete|drop|wipe|purge|force)(?:$|[:\\-_ ./])|^(?:release|push|tag)(?:$|[:\\-_ ./])"
+    "re": "(?:^|[:\\-_ ./])(?:deploy|publish|prod|production|delete|drop|wipe|purge|force)(?:$|[:\\-_ ./])|^(?:release|push|tag)(?:$|[:\\-_ ./])",
+    "except": "(?:^|[:\\-_ ./])(?:notes?|changelog|log|dry[-_]?run|preview|status|check|list|diff)(?:$|[:\\-_ ./])"
   },
   "scriptDirs": ["scripts", "script", "tools", "bin", "ops", "deploy", "ci", "hack", "dev", "automation", ".githooks"],
   "skipDirs": ["node_modules", ".git", "target", "dist", "build", "obj", ".next", ".nuxt", ".svelte-kit", ".venv", "venv", "env", "__pycache__", "coverage", ".gradle", "out", ".idea", ".vs", ".turbo", ".cache", "vendor", "bower_components", ".pnpm-store", "tmp", "temp"],
@@ -40,9 +41,9 @@
   "docExtensions": [".md", ".markdown", ".txt", ".rst", ".adoc", ".org", ""],
   "ciHosts": ["gitlab.com", "github.com"],
   "consoleErrors": {
-    "_": "Как консоль подсвечивает строки вывода",
+    "_": "Как консоль подсвечивает строки вывода. notError снимает подсветку ошибки: итог без ошибок и строки, которыми npm, pnpm и yarn повторяют имя и команду скрипта («> demo@1.0.0 test:fail», «$ node fail.js»)",
     "error": "\\berror\\b|\\berr!|\\bfailed\\b|\\bfailure\\b|\\bfail\\b|exception|fatal|panic|traceback|✗|✖|не удалось|ошибка",
-    "notError": "\\b0 (?:errors?|failed|failures)\\b|no errors|without errors|errors?: 0\\b|0 problems|ошибок нет|без ошибок",
+    "notError": "\\b0 (?:errors?|failed|failures)\\b|no errors|without errors|errors?: 0\\b|0 problems|ошибок нет|без ошибок|^> \\S|^\\$ \\S",
     "warning": "\\bwarn(?:ing)?s?\\b|предупрежд"
   }
 }

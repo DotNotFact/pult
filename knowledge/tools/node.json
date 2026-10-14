@@ -307,7 +307,7 @@
         { "flag": "--target", "text": "Для чего собирать: browser, bun или node" },
         { "flag": "--ignore-scripts", "text": "Не запускать скрипты пакетов при установке" }
       ],
-      "help": "--help"
+      "help": ["{bin} {sub} --help", "{bin} --help"]
     },
     {
       "id": "npx",
@@ -506,7 +506,7 @@
         { "flag": "--frozen", "text": "Падать, если lock-файл пришлось бы менять" },
         { "flag": "--port", "text": "Порт для deno serve" }
       ],
-      "help": "--help"
+      "help": ["{bin} {sub} --help", "{bin} --help"]
     }
   ]
 }

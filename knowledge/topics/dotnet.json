@@ -3,88 +3,216 @@
   "title": ".NET и C#",
   "color": "#512bd4",
   "icon": "chip",
-  "level": "основы",
-  "summary": ".NET - платформа от Microsoft для программ на языке C#: серверов, сайтов, программ для Windows и игр. Всё делается одной командой dotnet.",
-  "detect": { "files": [".sln", ".slnx", ".csproj"], "deps": [], "bins": ["dotnet"], "stacks": [".NET"] },
-  "related": ["testing", "databases", "docker", "ci-cd"],
+  "level": "средний",
+  "summary": ".NET - платформа от Microsoft для программ на C#: серверов, сайтов, программ для Windows и игр. Всё делается одной командой dotnet: создать, собрать, проверить тестами, опубликовать.",
+  "detect": {"files":[".sln",".slnx",".csproj"],"deps":[],"bins":["dotnet"],"stacks":[".NET"]},
+  "related": ["csharp","testing","databases","docker","ci-cd"],
   "sections": [
     {
       "type": "idea",
       "title": "Зачем это нужно",
-      "text": "C# - язык, на котором пишут код. .NET - всё, что нужно, чтобы этот код собрать и запустить: компилятор, библиотеки, среда выполнения. Программа на .NET работает на Windows, Linux и macOS. Команда dotnet умеет создать проект, скачать библиотеки, собрать, запустить и проверить тестами.",
-      "analogy": "C# - это рецепт, а .NET - кухня с плитой, посудой и продуктами. Рецепт без кухни ничего не даёт, а кухня одна на все рецепты."
+      "text": "C# - язык, на котором пишут код. .NET - всё, что нужно, чтобы этот код собрать и запустить: компилятор, библиотеки, среда выполнения. Программа на .NET работает на Windows, Linux и macOS. Команда dotnet создаёт проекты, скачивает библиотеки, собирает, запускает тесты, публикует и выпускает пакеты. Кто знает её ключи и то, как устроена сборка, не тратит часы на ошибки окружения.",
+      "analogy": "C# - это рецепт, а .NET - кухня с плитой, посудой и продуктами. Команда dotnet - повар, который по рецепту готовит, пробует и упаковывает блюдо на вынос."
     },
     {
       "type": "diagram",
-      "title": "Как устроено",
+      "title": "Как собирается проект",
       "nodes": [
-        { "id": "sln", "label": "Solution .sln", "note": "список проектов", "icon": "folder" },
-        { "id": "csproj", "label": "Проект .csproj", "note": "код и его настройки", "icon": "file" },
-        { "id": "nuget", "label": "NuGet", "note": "склад готовых библиотек", "icon": "package" },
-        { "id": "sdk", "label": ".NET SDK", "note": "компилятор и команда dotnet", "icon": "wrench" },
-        { "id": "dll", "label": "Сборка .dll", "note": "результат в bin/", "icon": "cube" },
-        { "id": "runtime", "label": "Runtime", "note": "запускает готовую программу", "icon": "play" }
+        {"id":"props","label":".csproj и .props","note":"что и как собирать","icon":"file"},
+        {"id":"restore","label":"restore","note":"пакеты из NuGet","icon":"package"},
+        {"id":"obj","label":"obj/","note":"project.assets.json и промежуточное","icon":"folder"},
+        {"id":"msbuild","label":"MSBuild и компилятор","note":"dotnet build","icon":"wrench"},
+        {"id":"bin","label":"bin/Debug/net10.0","note":".dll и зависимости","icon":"cube"},
+        {"id":"publish","label":"publish/","note":"готово к выкладке","icon":"rocket"}
       ],
       "edges": [
-        ["sln", "csproj", "содержит"],
-        ["nuget", "csproj", "библиотеки"],
-        ["csproj", "sdk", "dotnet build"],
-        ["sdk", "dll", "собирает"],
-        ["dll", "runtime", "dotnet run"]
+        ["props","restore","читает"],
+        ["restore","obj","пишет"],
+        ["obj","msbuild","список пакетов"],
+        ["msbuild","bin","собирает"],
+        ["bin","publish","dotnet publish"]
       ],
-      "caption": "Solution объединяет проекты. Каждый проект берёт библиотеки из NuGet. SDK собирает код в файл .dll, а runtime его запускает."
+      "caption": "dotnet build сначала делает restore: читает PackageReference, скачивает пакеты в общий кэш (~/.nuget/packages) и записывает итог в obj/project.assets.json. Потом MSBuild выполняет цели сборки: компилятор пишет промежуточные файлы в obj, готовую .dll и копии зависимостей кладёт в bin. publish собирает всё нужное для запуска в одну папку. obj и bin - результат сборки, их можно удалить в любой момент."
     },
     {
       "type": "terms",
       "title": "Слова, которые надо знать",
       "items": [
-        { "term": "C#", "text": "Язык программирования от Microsoft. Читается «си шарп». Файлы с кодом имеют расширение .cs.", "forms": ["си шарп", "csharp", ".cs"] },
-        { "term": ".NET SDK", "text": "Набор для разработчика: компилятор, команда dotnet, шаблоны проектов. Нужен, чтобы собирать программы.", "forms": ["SDK"] },
-        { "term": "Runtime", "text": "Среда выполнения. Нужна, чтобы запускать уже собранную программу. На сервер часто ставят только её, без SDK.", "forms": ["рантайм", "среда выполнения"] },
-        { "term": "Solution", "text": "Файл .sln или новый .slnx. Список проектов, которые открывают и собирают вместе. Сам кода не содержит.", "forms": ["решение", ".sln", ".slnx", "солюшен"] },
-        { "term": "Проект .csproj", "text": "Файл в формате XML. В нём версия .NET (TargetFramework), подключённые библиотеки (PackageReference) и ссылки на другие проекты.", "forms": [".csproj", "csproj"] },
-        { "term": "NuGet", "text": "Склад библиотек для .NET (nuget.org). Команда dotnet add package скачивает библиотеку и записывает её в .csproj.", "forms": ["нугет", "пакет NuGet"] },
-        { "term": "Debug и Release", "text": "Две конфигурации сборки. Debug - для разработки: удобно ставить точки остановки, но работает медленнее. Release - для выкладки: код оптимизирован. По умолчанию собирается Debug.", "forms": ["Debug", "Release", "конфигурация"] },
-        { "term": "Тест", "text": "Маленький метод, который вызывает ваш код и сверяет результат с ожидаемым. Если не совпало - тест красный.", "forms": ["тесты", "теста", "тестов"] },
-        { "term": "Arrange-Act-Assert", "text": "Три части теста. Arrange - подготовить данные. Act - выполнить одно действие. Assert - проверить результат.", "forms": ["AAA"] },
-        { "term": "Интеграционный тест", "text": "Тест, который проверяет код вместе с настоящей базой, сетью или файлами, а не по отдельности.", "forms": ["интеграционные тесты", "интеграционных тестов"] },
-        { "term": "Testcontainers", "text": "Библиотека для тестов. Перед тестом запускает в Docker настоящую базу, после теста удаляет её. Каждый прогон начинается с чистой базы.", "forms": [] }
+        {"term":"C#","text":"Язык программирования от Microsoft. Читается «си шарп». Файлы с кодом имеют расширение .cs.","forms":["си шарп","csharp",".cs"]},
+        {"term":".NET SDK","text":"Набор для разработчика: компилятор, команда dotnet, шаблоны проектов. Нужен, чтобы собирать программы.","forms":["SDK"]},
+        {"term":"Runtime","text":"Среда выполнения. Нужна, чтобы запускать уже собранную программу. На сервер часто ставят только её, без SDK.","forms":["рантайм","среда выполнения"]},
+        {"term":"Solution","text":"Файл .sln или .slnx - список проектов, которые открывают и собирают вместе. Сам кода не содержит. С .NET 10 dotnet new sln создаёт .slnx, короткий XML.","forms":["решение",".sln",".slnx","солюшен"]},
+        {"term":"Проект .csproj","text":"Файл в формате XML. В нём версия .NET (TargetFramework), подключённые библиотеки (PackageReference) и ссылки на другие проекты (ProjectReference).","forms":[".csproj","csproj"]},
+        {"term":"NuGet","text":"Склад библиотек для .NET (nuget.org). dotnet add package скачивает библиотеку и записывает её в .csproj.","forms":["нугет","пакет NuGet"]},
+        {"term":"MSBuild","text":"Система сборки внутри dotnet. Читает .csproj, .props и .targets и выполняет цели: Restore, Build, Publish, Pack.","forms":[]},
+        {"term":"TFM","text":"Короткое имя версии .NET в TargetFramework: net8.0, net10.0, netstandard2.0. Несколько версий сразу - через ; в TargetFrameworks.","forms":["TargetFramework","TargetFrameworks","Target Framework Moniker"]},
+        {"term":"RID","text":"Runtime Identifier - для какой ОС и процессора собирать: win-x64, linux-x64, linux-musl-x64, osx-arm64. Нужен для self-contained и NativeAOT.","forms":["Runtime Identifier","RuntimeIdentifier"]},
+        {"term":"Конфигурация сборки","text":"Debug - для разработки: без оптимизаций, удобно отлаживать. Release - для выкладки. build по умолчанию собирает Debug, а publish и pack с .NET 8 - Release.","forms":["конфигурация","конфигурации"]},
+        {"term":"global.json","text":"Файл в корне репозитория. Закрепляет версию SDK, чтобы у всех и в CI собиралось одним и тем же SDK.","forms":[]},
+        {"term":"Directory.Build.props","text":"Общие настройки для всех проектов в папке и ниже. MSBuild находит ближайший такой файл сам. Пара к нему - Directory.Build.targets.","forms":["Directory.Build.targets"]},
+        {"term":"Центральное управление пакетами","text":"Версии всех пакетов в одном файле Directory.Packages.props. В .csproj остаётся PackageReference без версии.","forms":["Central Package Management","CPM","Directory.Packages.props"]},
+        {"term":"Self-contained","text":"Публикация вместе с runtime. На машину не нужно ставить .NET, но папка весит десятки мегабайт.","forms":["--self-contained","самодостаточная публикация"]},
+        {"term":"Тримминг","text":"Удаление при publish кода, который программа не вызывает. Уменьшает self-contained в разы, но может сломать рефлексию.","forms":["trimming","PublishTrimmed"]},
+        {"term":"ReadyToRun","text":"Машинный код кладётся в .dll заранее, при publish. Старт быстрее, файлы больше, JIT остаётся.","forms":["R2R","PublishReadyToRun"]},
+        {"term":"NativeAOT","text":"Вся программа заранее компилируется в машинный код, без JIT и без runtime рядом. Мгновенный старт и мало памяти, но не всякая библиотека с этим совместима.","forms":["AOT","PublishAot"]},
+        {"term":"Options pattern","text":"Секция настроек связывается с классом и приходит в код через IOptions<T>. Значения можно проверить при старте.","forms":["IOptions","IOptions<T>"]},
+        {"term":"User secrets","text":"Секреты для разработки в файле вне репозитория. Приложение читает их только в окружении Development.","forms":["user-secrets","secrets.json"]},
+        {"term":"Локальный инструмент","text":"Программа для dotnet из NuGet (dotnet-ef, reportgenerator), версия которой записана в .config/dotnet-tools.json. dotnet tool restore ставит всем одно и то же.","forms":["dotnet tool","dotnet-tools.json"]},
+        {"term":"Arrange-Act-Assert","text":"Три части теста. Arrange - подготовить данные. Act - выполнить одно действие. Assert - проверить результат.","forms":["AAA"]},
+        {"term":"Testcontainers","text":"Библиотека для тестов. Перед тестом запускает в Docker настоящую базу, после теста удаляет её. Каждый прогон начинается с чистой базы.","forms":[]}
       ]
     },
     {
       "type": "steps",
-      "title": "Первый проект с тестами",
+      "title": "Решение из трёх проектов с нуля",
+      "items": ["Проверьте SDK: dotnet --info","Создайте решение: dotnet new sln -n Shop. В .NET 10 появится Shop.slnx","API: dotnet new webapi -n Shop.Api -o src/Shop.Api","Библиотека с логикой: dotnet new classlib -n Shop.Core -o src/Shop.Core","Тесты: dotnet new xunit -n Shop.Tests -o tests/Shop.Tests","Добавьте всё в решение: dotnet sln add src/Shop.Api src/Shop.Core tests/Shop.Tests","Свяжите проекты: dotnet add src/Shop.Api reference src/Shop.Core и dotnet add tests/Shop.Tests reference src/Shop.Core","Закрепите SDK: dotnet new globaljson --sdk-version 10.0.100 --roll-forward latestFeature","Добавьте .gitignore: dotnet new gitignore","Соберите и проверьте: dotnet build, затем dotnet test"]
+    },
+    {
+      "type": "cheatsheet",
+      "title": "Команды на каждый день",
       "items": [
-        "Проверьте, что SDK стоит: dotnet --version",
-        "Создайте программу: dotnet new console -n MyApp",
-        "Создайте проект тестов: dotnet new xunit -n MyApp.Tests",
-        "Дайте тестам доступ к программе: dotnet add MyApp.Tests/MyApp.Tests.csproj reference MyApp/MyApp.csproj",
-        "Соберите и запустите: dotnet run --project MyApp",
-        "Запустите тесты: dotnet test"
+        {"cmd":"dotnet new list","text":"Какие шаблоны проектов есть","group":"Создать и связать"},
+        {"cmd":"dotnet new webapi -n Api -o src/Api","text":"Новый проект из шаблона в папку src/Api","group":"Создать и связать"},
+        {"cmd":"dotnet sln add src/Api","text":"Добавить проект в решение","group":"Создать и связать"},
+        {"cmd":"dotnet sln migrate","text":"Сделать .slnx из старого .sln","group":"Создать и связать"},
+        {"cmd":"dotnet add src/Api reference src/Core","text":"Ссылка на другой проект. В .NET 10 то же: dotnet reference add","group":"Создать и связать"},
+        {"cmd":"dotnet add package Serilog","text":"Подключить пакет. В .NET 10 то же: dotnet package add","group":"Создать и связать"},
+        {"cmd":"dotnet restore","text":"Скачать пакеты. build и test делают это сами","group":"Собрать и запустить"},
+        {"cmd":"dotnet build -c Release","text":"Собрать в Release","group":"Собрать и запустить"},
+        {"cmd":"dotnet build -warnaserror","text":"Собрать и считать предупреждения ошибками, как в CI","group":"Собрать и запустить"},
+        {"cmd":"dotnet run --project src/Api -- --urls http://localhost:5050","text":"Запустить. Всё после -- уходит самой программе","group":"Собрать и запустить"},
+        {"cmd":"dotnet watch --project src/Api","text":"Запустить и подхватывать правки на ходу (hot reload)","group":"Собрать и запустить"},
+        {"cmd":"dotnet run app.cs","text":"В .NET 10: запустить один файл .cs без проекта","group":"Собрать и запустить"},
+        {"cmd":"dotnet clean","text":"Удалить результаты сборки из bin и obj","group":"Собрать и запустить"},
+        {"cmd":"dotnet test","text":"Собрать и запустить все тесты решения","group":"Тесты"},
+        {"cmd":"dotnet test --filter \"FullyQualifiedName~Orders\"","text":"Только тесты, в полном имени которых есть Orders","group":"Тесты"},
+        {"cmd":"dotnet test --filter \"Category=Integration\"","text":"Только тесты с [Trait(\"Category\", \"Integration\")]","group":"Тесты"},
+        {"cmd":"dotnet test --logger \"console;verbosity=detailed\"","text":"Печатать каждый тест и его вывод","group":"Тесты"},
+        {"cmd":"dotnet test --logger \"trx;LogFileName=results.trx\"","text":"Отчёт для CI в папку TestResults","group":"Тесты"},
+        {"cmd":"dotnet test --collect \"XPlat Code Coverage\"","text":"Посчитать покрытие: файл coverage.cobertura.xml в TestResults","group":"Тесты"},
+        {"cmd":"dotnet test --blame-hang-timeout 5min","text":"Снять дамп и остановить тест, который завис дольше 5 минут","group":"Тесты"},
+        {"cmd":"dotnet format","text":"Привести оформление кода к правилам .editorconfig","group":"Оформление"},
+        {"cmd":"dotnet format --verify-no-changes","text":"Только проверить, для CI: код ошибки, если есть что править","group":"Оформление"}
+      ]
+    },
+    {
+      "type": "anatomy",
+      "title": "Разбор: тесты для CI одной командой",
+      "parts": [
+        {"text":"dotnet test","note":"собрать и запустить тесты"},
+        {"text":"tests/Shop.Tests","note":"какой проект; без пути - решение в текущей папке"},
+        {"text":"-c Release","note":"собрать так же, как для выкладки"},
+        {"text":"--filter \"FullyQualifiedName~Orders&Category!=Slow\"","note":"тесты про Orders, кроме помеченных Category=Slow"},
+        {"text":"--logger \"trx;LogFileName=results.trx\"","note":"отчёт, который CI показывает списком тестов"},
+        {"text":"--collect \"XPlat Code Coverage\"","note":"покрытие через coverlet.collector, он уже есть в шаблоне xunit"}
       ]
     },
     {
       "type": "example",
-      "title": "Файл проекта MyApp.csproj",
-      "code": "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net8.0</TargetFramework>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n  <ItemGroup>\n    <PackageReference Include=\"Serilog\" Version=\"4.0.0\" />\n  </ItemGroup>\n</Project>",
-      "note": "OutputType Exe - программа, которую можно запустить. TargetFramework - для какой версии .NET собирать. PackageReference - библиотека из NuGet с точной версией."
+      "title": "Directory.Build.props: общее для всех проектов",
+      "label": "Directory.Build.props",
+      "code": "<Project>\n  <PropertyGroup>\n    <TargetFramework>net10.0</TargetFramework>\n    <Nullable>enable</Nullable>\n    <ImplicitUsings>enable</ImplicitUsings>\n    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>\n    <AnalysisLevel>latest-recommended</AnalysisLevel>\n  </PropertyGroup>\n</Project>",
+      "note": "Файл лежит в корне репозитория. MSBuild ищет ближайший Directory.Build.props вверх от каждого .csproj и подключает его до содержимого проекта, поэтому значение в самом .csproj перекрывает общее. Дальше вверх поиск не идёт: вложенный файл подключает верхний сам, через Import. Так в .csproj остаётся только то, чем проект отличается от соседей."
+    },
+    {
+      "type": "codepair",
+      "title": "Версии пакетов в одном месте",
+      "left": {"label":"Directory.Packages.props","code":"<Project>\n  <PropertyGroup>\n    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>\n  </PropertyGroup>\n  <ItemGroup>\n    <PackageVersion Include=\"Serilog\" Version=\"4.2.0\" />\n    <PackageVersion Include=\"xunit\" Version=\"2.9.3\" />\n    <PackageVersion Include=\"Testcontainers.PostgreSql\" Version=\"4.4.0\" />\n  </ItemGroup>\n</Project>"},
+      "right": {"label":"src/Shop.Api/Shop.Api.csproj","code":"<Project Sdk=\"Microsoft.NET.Sdk.Web\">\n  <ItemGroup>\n    <!-- без Version: версия из Directory.Packages.props -->\n    <PackageReference Include=\"Serilog\" />\n    <ProjectReference Include=\"..\\Shop.Core\\Shop.Core.csproj\" />\n  </ItemGroup>\n</Project>"},
+      "note": "Один пакет - одна версия во всём решении. Обновили строку в Directory.Packages.props - обновились все проекты. Version в PackageReference при включённом CPM даёт ошибку NU1008. Если одному проекту нужна другая версия, есть атрибут VersionOverride. TargetFramework здесь не указан: он пришёл из Directory.Build.props."
     },
     {
       "type": "example",
-      "title": "Тест на xUnit по схеме Arrange-Act-Assert",
-      "code": "using Xunit;\n\npublic class CartTests\n{\n    [Fact]\n    public void Total_TwoItems_ReturnsSum()\n    {\n        // Arrange: готовим корзину\n        var cart = new Cart();\n        cart.Add(100);\n        cart.Add(50);\n\n        // Act: одно действие\n        var total = cart.Total();\n\n        // Assert: проверяем результат\n        Assert.Equal(150, total);\n    }\n}",
-      "note": "[Fact] отмечает метод как тест. Имя теста говорит, что проверяем, при каких условиях и что ждём. Если Total вернёт не 150, dotnet test покажет красный тест и оба числа.",
-      "output": "Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1, Duration: 12 ms - MyApp.Tests.dll (net8.0)"
+      "title": "global.json: одна версия SDK у всех",
+      "label": "global.json",
+      "code": "{\n  \"sdk\": {\n    \"version\": \"10.0.100\",\n    \"rollForward\": \"latestFeature\"\n  }\n}",
+      "note": "latestFeature разрешает любой SDK 10.0 не ниже 10.0.100, но не 11. Без файла dotnet берёт самый новый установленный SDK, и сборка зависит от машины. Если нужного SDK нет, dotnet честно скажет, какой поставить."
+    },
+    {
+      "type": "compare",
+      "title": "Как публиковать: шесть способов",
+      "cols": ["","Размер hello world","Нужен .NET на машине","Старт","Когда брать"],
+      "rows": [
+        ["Обычный, framework-dependent","Меньше 1 МБ","Да","Обычный","Сервер или контейнер с образом aspnet или runtime"],
+        ["Self-contained","Около 70 МБ","Нет","Обычный","Машина, где .NET поставить нельзя"],
+        ["Single-file","Один файл, размер как у выбранного режима","Как у выбранного режима","Обычный","Утилита, которую раздают одним файлом"],
+        ["Тримминг","Около 10-20 МБ","Нет","Обычный","Self-contained, где важен размер, а рефлексии мало"],
+        ["ReadyToRun","В 2-3 раза больше обычного","Как у выбранного режима","Быстрее","Важен холодный старт, а NativeAOT не подходит"],
+        ["NativeAOT","Около 1-3 МБ","Нет","Мгновенный","CLI, мелкие сервисы, функции, контейнеры с малой памятью"]
+      ]
+    },
+    {
+      "type": "cheatsheet",
+      "title": "Выкладка, пакеты, секреты, миграции",
+      "items": [
+        {"cmd":"dotnet publish -c Release -o out","text":"Обычная публикация в папку out. С .NET 8 Release и так по умолчанию","group":"Публикация"},
+        {"cmd":"dotnet publish -r linux-x64 --self-contained","text":"Вместе с runtime под Linux x64","group":"Публикация"},
+        {"cmd":"dotnet publish -r win-x64 --self-contained -p:PublishSingleFile=true","text":"Один .exe со всем внутри","group":"Публикация"},
+        {"cmd":"dotnet publish -r linux-x64 --self-contained -p:PublishTrimmed=true","text":"Self-contained без неиспользуемого кода","group":"Публикация"},
+        {"cmd":"dotnet publish -r linux-x64 -p:PublishReadyToRun=true","text":"Заранее скомпилированный код для быстрого старта","group":"Публикация"},
+        {"cmd":"dotnet publish -r linux-x64 -p:PublishAot=true","text":"NativeAOT. Собирается только на той же ОС, нужен компоновщик","group":"Публикация"},
+        {"cmd":"dotnet pack -c Release -o nupkgs","text":"Собрать пакет .nupkg из библиотеки","group":"Пакеты"},
+        {"cmd":"dotnet nuget push nupkgs/*.nupkg -s https://api.nuget.org/v3/index.json -k $NUGET_API_KEY","text":"Выложить пакет. Ключ берите из переменной окружения, не пишите в скрипт","group":"Пакеты"},
+        {"cmd":"dotnet list package --outdated","text":"Какие пакеты устарели. В .NET 10 то же: dotnet package list","group":"Пакеты"},
+        {"cmd":"dotnet list package --vulnerable --include-transitive","text":"Пакеты с известными уязвимостями, включая зависимости зависимостей","group":"Пакеты"},
+        {"cmd":"dotnet new tool-manifest","text":"Завести .config/dotnet-tools.json для локальных инструментов","group":"Инструменты"},
+        {"cmd":"dotnet tool install dotnet-ef","text":"Поставить инструмент в репозиторий. С -g - на всю машину","group":"Инструменты"},
+        {"cmd":"dotnet tool restore","text":"Поставить все инструменты из манифеста, например в CI","group":"Инструменты"},
+        {"cmd":"dnx dotnetsay","text":"В .NET 10: запустить инструмент из NuGet один раз, без установки","group":"Инструменты"},
+        {"cmd":"dotnet user-secrets init","text":"Включить секреты для проекта: в .csproj появится UserSecretsId","group":"Секреты и HTTPS"},
+        {"cmd":"dotnet user-secrets set \"Smtp:Password\" \"local-pass\"","text":"Записать секрет в файл вне репозитория","group":"Секреты и HTTPS"},
+        {"cmd":"dotnet user-secrets list","text":"Показать секреты проекта","group":"Секреты и HTTPS"},
+        {"cmd":"dotnet dev-certs https --trust","text":"Создать сертификат для https://localhost и доверять ему","group":"Секреты и HTTPS"},
+        {"cmd":"dotnet dev-certs https --clean","text":"Удалить старые сертификаты разработки, если браузер ругается","group":"Секреты и HTTPS"},
+        {"cmd":"dotnet ef migrations add AddOrders","text":"Новая миграция по изменениям в моделях","group":"EF Core"},
+        {"cmd":"dotnet ef database update","text":"Применить миграции к базе из строки подключения","group":"EF Core"},
+        {"cmd":"dotnet ef migrations script --idempotent -o migrate.sql","text":"SQL-скрипт, который можно запускать повторно: применит только недостающее","group":"EF Core"},
+        {"cmd":"dotnet ef migrations bundle -r linux-x64 --self-contained -o efbundle","text":"Один исполняемый файл с миграциями для сервера без SDK","group":"EF Core"},
+        {"cmd":"./efbundle --connection \"Host=db;Database=shop;Username=app\"","text":"Применить миграции на сервере. Пароль - из секретов, не в истории терминала","group":"EF Core"}
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Настройки через Options pattern",
+      "label": "appsettings.json и Program.cs",
+      "code": "// appsettings.json\n{\n  \"Smtp\": { \"Host\": \"smtp.example.com\", \"Port\": 587 }\n}\n\n// Program.cs\nusing System.ComponentModel.DataAnnotations;\nusing Microsoft.Extensions.Options;\n\nvar builder = WebApplication.CreateBuilder(args);\n\nbuilder.Services.AddOptions<SmtpOptions>()\n    .BindConfiguration(\"Smtp\")       // секция \"Smtp\" -> класс\n    .ValidateDataAnnotations()       // проверить атрибуты\n    .ValidateOnStart();              // и сделать это при старте\nbuilder.Services.AddSingleton<Mailer>();\n\nvar app = builder.Build();\napp.Run();\n\npublic sealed class SmtpOptions\n{\n    [Required] public string Host { get; set; } = \"\";\n    [Range(1, 65535)] public int Port { get; set; }\n}\n\npublic sealed class Mailer(IOptions<SmtpOptions> options)\n{\n    private readonly SmtpOptions _smtp = options.Value;\n}",
+      "outputLabel": "Если в appsettings.json Port = 0, приложение не стартует",
+      "output": "Microsoft.Extensions.Options.OptionsValidationException: DataAnnotation validation failed for 'SmtpOptions' members: 'Port' with the error: 'The field Port must be between 1 and 65535.'.",
+      "note": "Код вместо строк вида configuration[\"Smtp:Port\"] получает готовый объект с типами. Без ValidateOnStart ошибка всплыла бы только при первом обращении к options.Value. Вывод - настоящий, с .NET 10."
+    },
+    {
+      "type": "steps",
+      "title": "Откуда берутся настройки: каждый следующий источник главнее",
+      "items": ["appsettings.json - общее для всех окружений","appsettings.{Environment}.json - например appsettings.Development.json","User secrets - только когда окружение Development","Переменные окружения: Smtp__Port=2525, два подчёркивания вместо двоеточия","Аргументы командной строки: dotnet run -- --Smtp:Port=2525","Окружение задаёт ASPNETCORE_ENVIRONMENT или DOTNET_ENVIRONMENT. Если не задано - Production"]
+    },
+    {
+      "type": "compare",
+      "title": "IOptions, IOptionsSnapshot, IOptionsMonitor",
+      "cols": ["","IOptions<T>","IOptionsSnapshot<T>","IOptionsMonitor<T>"],
+      "rows": [
+        ["Время жизни","Singleton","Scoped: один на запрос","Singleton"],
+        ["Видит правку appsettings.json на ходу","Нет, читает один раз","Да, со следующего запроса","Да, сразу, и есть событие OnChange"],
+        ["Куда внедрять","Куда угодно","Только в scoped и transient","Куда угодно, в том числе в singleton"],
+        ["Когда брать","Настройки меняются только с перезапуском","Настройки на каждый запрос","Фоновые службы, которым нужны свежие значения"]
+      ]
+    },
+    {
+      "type": "example",
+      "title": "xUnit: тест с данными и база в Testcontainers",
+      "label": "C#",
+      "code": "using Testcontainers.PostgreSql;\nusing Xunit;\n\n// Одна база на все тесты класса: старт контейнера стоит секунды\npublic sealed class DbFixture : IAsyncLifetime\n{\n    public PostgreSqlContainer Db { get; } = new PostgreSqlBuilder()\n        .WithImage(\"postgres:17\")\n        .Build();\n\n    public Task InitializeAsync() => Db.StartAsync();\n    public Task DisposeAsync() => Db.DisposeAsync().AsTask();\n}\n\npublic class OrderRepoTests(DbFixture fx) : IClassFixture<DbFixture>\n{\n    [Theory]\n    [InlineData(1, 100)]\n    [InlineData(3, 300)]\n    [Trait(\"Category\", \"Integration\")]\n    public async Task Total_SeveralItems_ReturnsSum(int count, int expected)\n    {\n        // Arrange\n        var repo = new OrderRepo(fx.Db.GetConnectionString());\n        await repo.CreateSchemaAsync();\n        var id = await repo.CreateOrderAsync(Enumerable.Repeat(100, count));\n\n        // Act\n        var total = await repo.TotalAsync(id);\n\n        // Assert\n        Assert.Equal(expected, total);\n    }\n}",
+      "note": "[Theory] с [InlineData] - один тест на несколько наборов данных, каждый набор виден в отчёте отдельно. IClassFixture создаёт DbFixture один раз на класс и передаёт его в конструктор. [Trait] даёт метку для --filter \"Category=Integration\". Код написан под xUnit v2; в xUnit v3 методы IAsyncLifetime возвращают ValueTask. OrderRepo - ваш класс доступа к базе."
     },
     {
       "type": "compare",
       "title": "Три библиотеки для тестов",
-      "cols": ["", "xUnit", "NUnit", "MSTest"],
+      "cols": ["","xUnit","NUnit","MSTest"],
       "rows": [
-        ["Метка теста", "[Fact]", "[Test]", "[TestMethod]"],
-        ["Тест с разными данными", "[Theory] и [InlineData]", "[TestCase]", "[DataRow]"],
-        ["Класс с тестами", "Обычный класс", "[TestFixture], можно без неё", "[TestClass]"],
-        ["Шаблон проекта", "dotnet new xunit", "dotnet new nunit", "dotnet new mstest"]
+        ["Метка теста","[Fact]","[Test]","[TestMethod]"],
+        ["Тест с разными данными","[Theory] и [InlineData]","[TestCase]","[DataRow]"],
+        ["Класс с тестами","Обычный класс","[TestFixture], можно без неё","[TestClass]"],
+        ["Общая подготовка","Конструктор и IClassFixture","[SetUp] и [OneTimeSetUp]","[TestInitialize] и [ClassInitialize]"],
+        ["Шаблон проекта","dotnet new xunit","dotnet new nunit","dotnet new mstest"]
       ]
     },
     {
@@ -92,49 +220,83 @@
       "title": "Сколько длится один тест",
       "unit": "миллисекунды",
       "items": [
-        { "label": "Модульный тест", "value": 5, "note": "только код в памяти" },
-        { "label": "Интеграционный тест с базой", "value": 300, "note": "запросы к настоящей базе" },
-        { "label": "Запуск базы в Testcontainers", "value": 5000, "note": "один раз на набор тестов" }
+        {"label":"Модульный тест","value":5,"note":"только код в памяти"},
+        {"label":"Интеграционный тест с базой","value":300,"note":"запросы к настоящей базе"},
+        {"label":"Запуск базы в Testcontainers","value":5000,"note":"один раз на класс через IClassFixture"}
       ],
-      "note": "Числа примерные, порядок величин. Поэтому модульных тестов пишут много, а интеграционных - столько, сколько нужно, чтобы проверить связи с базой и сетью."
+      "note": "Числа примерные, порядок величин. Поэтому модульных тестов пишут много, а интеграционных - столько, сколько нужно, чтобы проверить связи с базой и сетью. Контейнер поднимают один раз на класс, а не на каждый тест."
+    },
+    {
+      "type": "practice",
+      "title": "Одна версия пакетов на всё решение",
+      "task": "Переведите решение из двух проектов на Directory.Packages.props и закрепите SDK через global.json.",
+      "steps": ["Узнайте свою версию SDK: dotnet --version","dotnet new globaljson --sdk-version <ваша версия> --roll-forward latestFeature","Создайте в корне Directory.Packages.props из решения","Перенесите туда версии всех пакетов строками PackageVersion","Удалите атрибут Version из всех PackageReference в .csproj","dotnet build и dotnet list package"],
+      "check": "dotnet build проходит, ни в одном .csproj нет Version у PackageReference, dotnet list package показывает одинаковые версии в обоих проектах.",
+      "hint": "NU1008 - где-то осталась Version в PackageReference. NU1010 - для пакета нет строки PackageVersion.",
+      "solution": "<Project>\n  <PropertyGroup>\n    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>\n  </PropertyGroup>\n  <ItemGroup>\n    <PackageVersion Include=\"Serilog\" Version=\"4.2.0\" />\n    <PackageVersion Include=\"xunit\" Version=\"2.9.3\" />\n  </ItemGroup>\n</Project>"
+    },
+    {
+      "type": "practice",
+      "title": "Сравните способы публикации",
+      "task": "Опубликуйте одну консольную программу четырьмя способами и сравните размер и скорость запуска.",
+      "steps": ["dotnet new console -n Hello && cd Hello","dotnet publish -o out/fdd","dotnet publish -r win-x64 --self-contained -o out/sc (на Linux - linux-x64)","dotnet publish -r win-x64 --self-contained -p:PublishSingleFile=true -p:PublishTrimmed=true -o out/trim","dotnet publish -r win-x64 -p:PublishAot=true -o out/aot","Сравните размеры папок и запустите каждую программу"],
+      "check": "out/fdd - меньше мегабайта, out/sc - десятки мегабайт, out/trim - около десяти, out/aot - пара мегабайт и запускается заметно быстрее остальных.",
+      "hint": "NativeAOT собирает только под ОС, на которой запущен publish, и требует компоновщик: на Windows - Visual Studio с компонентом «Разработка классических приложений на C++», на Linux - clang.",
+      "solution": "# размер каждой папки\n# PowerShell:\nGet-ChildItem out -Directory | ForEach-Object {\n  \"{0,-6} {1,8:N1} MB\" -f $_.Name, ((Get-ChildItem $_ -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)\n}\n# bash:\ndu -sh out/*"
+    },
+    {
+      "type": "practice",
+      "title": "Отчёт о покрытии в HTML",
+      "task": "Посчитайте покрытие тестами и откройте отчёт, где видно, какие строки тесты не проходят.",
+      "steps": ["dotnet test --collect \"XPlat Code Coverage\"","dotnet tool install -g dotnet-reportgenerator-globaltool","reportgenerator -reports:\"tests/**/TestResults/*/coverage.cobertura.xml\" -targetdir:coverage -reporttypes:Html","Откройте coverage/index.html в браузере"],
+      "check": "В отчёте видно покрытие строк и веток по каждому классу. Красным отмечены строки, до которых тесты не дошли.",
+      "hint": "Сборщик coverlet.collector уже подключён в шаблоне dotnet new xunit. Нет файла coverage.cobertura.xml - проверьте, что этот пакет есть в проекте тестов.",
+      "solution": "dotnet test --collect \"XPlat Code Coverage\"\ndotnet tool install -g dotnet-reportgenerator-globaltool\nreportgenerator -reports:\"tests/**/TestResults/*/coverage.cobertura.xml\" -targetdir:coverage -reporttypes:Html"
+    },
+    {
+      "type": "rules",
+      "title": "Как правильно",
+      "items": [
+        {"kind":"when","title":"Self-contained","text":"Когда на машину нельзя поставить .NET или нужна точная версия runtime рядом с программой. В Docker обычно не нужен: базовый образ aspnet уже содержит runtime."},
+        {"kind":"when","title":"NativeAOT","text":"CLI, маленькие сервисы и функции, где важны старт и память. Прочитайте предупреждения при publish: всё, что держится на рефлексии, может не работать."},
+        {"kind":"when","title":"ReadyToRun","text":"Когда важен холодный старт, а NativeAOT не подходит из-за библиотек."},
+        {"kind":"dont","title":"Коммитить bin и obj","text":"Это результат сборки: он зависит от машины, много весит и ломает сборку у других. dotnet new gitignore создаст готовый .gitignore."},
+        {"kind":"dont","title":"Debug на сервере","text":"В Debug нет оптимизаций. dotnet publish с .NET 8 собирает Release сам, а dotnet build - нет."},
+        {"kind":"dont","title":"Секреты в appsettings.json","text":"Он лежит в репозитории. Для разработки - user-secrets, на сервере - переменные окружения или хранилище секретов."},
+        {"kind":"do","title":"global.json в репозитории","text":"Одна версия SDK на всех машинах и в CI. rollForward latestFeature пропускает исправления, но не новую major-версию."},
+        {"kind":"do","title":"ValidateOnStart","text":"Ошибку в настройках лучше увидеть при старте, чем на первом запросе через час."},
+        {"kind":"tip","title":"Формат в CI","text":"dotnet format --verify-no-changes падает, если код не отформатирован. Локально dotnet format чинит сам."},
+        {"kind":"tip","title":"Уязвимые пакеты","text":"restore сам предупреждает о пакетах с уязвимостями (NU1901-NU1904). Полный список - dotnet list package --vulnerable --include-transitive."}
+      ]
     },
     {
       "type": "mistakes",
       "title": "Что ломается чаще всего",
       "items": [
-        { "problem": "The current .NET SDK does not support targeting .NET 9.0", "fix": "Проект требует более новую версию, чем установлена. Поставьте нужный SDK или проверьте файл global.json, в нём может быть закреплена версия." },
-        { "problem": "Ошибка CS0246: тип или пространство имён не найдено", "fix": "Не подключена библиотека или ссылка на проект. Добавьте её: dotnet add package имя или dotnet add reference путь." },
-        { "problem": "Странные ошибки после переключения ветки", "fix": "В папках bin и obj остались старые файлы. Выполните dotnet clean или удалите эти папки и соберите заново." },
-        { "problem": "На сервере программа работает медленно", "fix": "Выложена Debug-сборка. Публикуйте с конфигурацией Release: dotnet publish -c Release." },
-        { "problem": "Интеграционные тесты падают с ошибкой подключения к Docker", "fix": "Testcontainers нужен работающий Docker. Запустите его и повторите." }
-      ]
-    },
-    {
-      "type": "cheatsheet",
-      "title": "Шпаргалка",
-      "items": [
-        { "cmd": "dotnet --info", "text": "Какие SDK и runtime установлены" },
-        { "cmd": "dotnet new list", "text": "Какие шаблоны проектов есть" },
-        { "cmd": "dotnet restore", "text": "Скачать библиотеки из NuGet. build делает это сам" },
-        { "cmd": "dotnet build", "text": "Собрать в конфигурации Debug" },
-        { "cmd": "dotnet run --project MyApp", "text": "Собрать и запустить проект" },
-        { "cmd": "dotnet watch", "text": "Запустить и перезапускать при каждой правке" },
-        { "cmd": "dotnet test", "text": "Запустить все тесты" },
-        { "cmd": "dotnet test --filter Cart", "text": "Запустить только тесты, в имени которых есть Cart" },
-        { "cmd": "dotnet add package Serilog", "text": "Подключить библиотеку из NuGet" },
-        { "cmd": "dotnet publish -c Release -o out", "text": "Собрать для выкладки в папку out" },
-        { "cmd": "dotnet format", "text": "Привести оформление кода к правилам проекта" }
+        {"problem":"The current .NET SDK does not support targeting .NET 10.0","fix":"Проект требует SDK новее установленного. Поставьте нужный SDK или проверьте global.json: в нём может быть закреплена версия."},
+        {"problem":"Ошибка CS0246: тип или пространство имён не найдено","fix":"Не подключён пакет или ссылка на проект. dotnet add package имя или dotnet add reference путь."},
+        {"problem":"Странные ошибки после переключения ветки","fix":"В bin и obj остались старые файлы. dotnet clean или удалите эти папки и соберите заново."},
+        {"problem":"На сервере программа работает медленно","fix":"Выложен результат dotnet build в Debug. Публикуйте через dotnet publish: с .NET 8 он сам собирает Release."},
+        {"problem":"NU1008 или NU1010 после включения Directory.Packages.props","fix":"NU1008 - уберите Version из PackageReference. NU1010 - добавьте строку PackageVersion для этого пакета."},
+        {"problem":"Настройка из переменной окружения не применяется","fix":"Двоеточие в имени переменной на Linux не работает. Пишите Smtp__Port - два подчёркивания."},
+        {"problem":"После publish с триммингом программа падает с MissingMethodException","fix":"Тримминг удалил код, который вызывается через рефлексию. Смотрите предупреждения IL2026 и соседние при publish, правьте код или откажитесь от тримминга."},
+        {"problem":"dotnet ef: команда не найдена","fix":"Поставьте инструмент: dotnet tool install -g dotnet-ef или dotnet tool restore для локального. В проекте нужен пакет Microsoft.EntityFrameworkCore.Design."},
+        {"problem":"Браузер не доверяет https://localhost","fix":"dotnet dev-certs https --trust. Не помогло - --clean и снова --trust."},
+        {"problem":"Интеграционные тесты падают с ошибкой подключения к Docker","fix":"Testcontainers нужен работающий Docker. Запустите его и повторите."}
       ]
     },
     {
       "type": "quiz",
       "title": "Проверьте себя",
       "items": [
-        { "q": "Что нужно, чтобы собрать программу на C#?", "options": ["Только runtime", ".NET SDK", "Только NuGet"], "answer": 1, "why": "SDK содержит компилятор и команду dotnet. Runtime умеет только запускать готовое." },
-        { "q": "Что лежит в файле .sln?", "options": ["Код программы", "Список проектов", "Пароли"], "answer": 1, "why": "Solution только перечисляет проекты, чтобы собирать и открывать их вместе." },
-        { "q": "В каком порядке идут части теста?", "options": ["Assert, Act, Arrange", "Arrange, Act, Assert", "Act, Assert, Arrange"], "answer": 1, "why": "Сначала готовим данные, потом делаем одно действие, потом проверяем результат." },
-        { "q": "Зачем интеграционным тестам Testcontainers?", "options": ["Чтобы тесты шли быстрее", "Чтобы проверять код с настоящей базой, которая создаётся и удаляется сама", "Чтобы не писать тесты"], "answer": 1, "why": "Тест работает с той же базой, что на сервере, но чистой и своей. После прогона она удаляется." },
-        { "q": "Какую конфигурацию выкладывают на сервер?", "options": ["Debug", "Release"], "answer": 1, "why": "Release оптимизирован и работает быстрее. Debug нужен для отладки при разработке." }
+        {"q":"Что нужно, чтобы собрать программу на C#?","options":["Только runtime",".NET SDK","Только NuGet"],"answer":1,"why":"SDK содержит компилятор и команду dotnet. Runtime умеет только запускать готовое."},
+        {"q":"Где задаётся версия пакета, если включено центральное управление пакетами?","options":["В Directory.Packages.props","В каждом .csproj","В global.json"],"answer":0,"why":"Версии лежат в одном файле, а PackageReference в .csproj их не указывает."},
+        {"q":"Зачем нужен global.json?","options":["Хранит настройки приложения","Список пакетов","Закрепляет версию SDK"],"answer":2,"why":"Без него dotnet берёт самый новый установленный SDK, и сборка зависит от машины."},
+        {"q":"Какой способ публикации обходится без JIT?","options":["ReadyToRun","NativeAOT","Self-contained"],"answer":1,"why":"NativeAOT компилирует всё заранее. ReadyToRun кладёт готовый код, но JIT остаётся для горячих методов."},
+        {"q":"Как записать настройку Smtp:Port переменной окружения?","options":["Smtp:Port","SMTP.PORT","Smtp__Port"],"answer":2,"why":"Двоеточие в именах переменных работает не везде, поэтому .NET понимает два подчёркивания."},
+        {"q":"Увидит ли IOptions<T> правку appsettings.json без перезапуска?","options":["Да, сразу","Нет, значение читается один раз"],"answer":1,"why":"Свежие значения дают IOptionsSnapshot (на следующем запросе) и IOptionsMonitor (сразу)."},
+        {"q":"Что запустит dotnet test --filter \"Category!=Slow\"?","options":["Все тесты, кроме помеченных Category=Slow","Только медленные","Ни одного"],"answer":0,"why":"!= исключает тесты с этой меткой. Метку ставит [Trait(\"Category\", \"Slow\")] в xUnit."},
+        {"q":"Почему bin и obj не коммитят?","options":["Git не умеет хранить .dll","Там пароли","Это результат сборки, он зависит от машины и создаётся заново"],"answer":2,"why":"Любой dotnet build создаёт их снова. В репозитории они только мешают и ломают сборку у других."}
       ]
     },
     { "type": "project", "title": "Где это в вашем проекте" }

@@ -279,7 +279,7 @@
         { "flag": "--config", "alias": ["-c"], "text": "Файл с настройками генератора" },
         { "flag": "--skip-validate-spec", "text": "Не проверять описание API перед созданием кода" }
       ],
-      "help": "help"
+      "help": ["{bin} help {sub}", "{bin} help"]
     },
     {
       "id": "swagger-typescript-api",
@@ -296,6 +296,79 @@
         { "flag": "--modular", "text": "Разложить клиент по нескольким файлам" }
       ],
       "help": "--help"
+    },
+    {
+      "id": "nswag",
+      "name": "NSwag",
+      "topic": "dotnet",
+      "bins": [
+        "nswag"
+      ],
+      "about": "Создаёт по описанию API в формате OpenAPI (Swagger) готовый код клиента на TypeScript или C# и само описание из проекта ASP.NET Core.",
+      "how": [
+        "Читает описание API: файл, адрес работающего сервера или собранный проект ASP.NET Core",
+        "По шаблону пишет классы и функции запросов к каждому методу API",
+        "Кладёт результат в файл из ключа /output: или из настроек nswag.json"
+      ],
+      "default": {
+        "say": "Создаёт код по описанию API в формате OpenAPI",
+        "fx": [
+          "write"
+        ]
+      },
+      "sub": [
+        {
+          "match": "^run(?:\\s|$)",
+          "part": "по настройкам",
+          "say": "Создаёт код по настройкам из файла nswag.json",
+          "fx": [
+            "write"
+          ]
+        },
+        {
+          "match": "^openapi2tsclient(?:\\s|$)",
+          "part": "клиент TypeScript",
+          "say": "Создаёт клиент на TypeScript по описанию API",
+          "fx": [
+            "write"
+          ]
+        },
+        {
+          "match": "^openapi2csclient(?:\\s|$)",
+          "part": "клиент C#",
+          "say": "Создаёт клиент на C# по описанию API",
+          "fx": [
+            "write"
+          ]
+        },
+        {
+          "match": "^openapi2cscontroller(?:\\s|$)",
+          "part": "контроллеры C#",
+          "say": "Создаёт заготовки контроллеров ASP.NET Core по описанию API",
+          "fx": [
+            "write"
+          ]
+        },
+        {
+          "match": "^(?:aspnetcore2openapi|webapi2openapi)(?:\\s|$)",
+          "part": "описание из проекта",
+          "say": "Собирает описание API OpenAPI из проекта ASP.NET Core",
+          "fx": [
+            "write"
+          ]
+        },
+        {
+          "match": "^version(?:\\s|$)",
+          "part": "версия",
+          "say": "Показывает версию NSwag",
+          "fx": [
+            "read"
+          ]
+        }
+      ],
+      "help": [
+        "{bin} help"
+      ]
     }
   ]
 }

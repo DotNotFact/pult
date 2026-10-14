@@ -95,6 +95,33 @@
       ]
     },
     {
+      "type": "rules",
+      "title": "Как работать с Go",
+      "items": [
+        { "kind": "do", "title": "go mod tidy перед коммитом", "text": "go.mod и go.sum тогда совпадают с кодом: нет лишних библиотек и не забыты нужные. CI проверяет то же самое." },
+        { "kind": "do", "title": "Проверки в CI", "text": "Три команды: gofmt -l . печатает плохо оформленные файлы, и пустой вывод значит, что всё в порядке. Потом go vet ./... и go test ./..." },
+        { "kind": "dont", "title": "Не выбрасывайте ошибки", "text": "v, _ := f() молча теряет ошибку. Проверяйте if err != nil и возвращайте её выше с пояснением: fmt.Errorf(\"чтение настроек: %w\", err)." },
+        { "kind": "tip", "title": "CGO_ENABLED=0 для пустых образов", "text": "С включённым cgo файл зависит от системной библиотеки C. CGO_ENABLED=0 делает его самодостаточным: такой запускается и в образе scratch или distroless." },
+        { "kind": "when", "title": "Когда Go к месту", "text": "Сервисы и утилиты, которые удобно раздавать одним файлом. Для интерфейсов с окнами и научных расчётов у других языков больше готового." }
+      ]
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: сервер на Go и сборка для Linux",
+      "task": "Напишите маленький HTTP-сервер, тест для обработчика и соберите один файл для Linux-сервера.",
+      "steps": [
+        "mkdir hello-go, cd hello-go, go mod init example.com/hello",
+        "Создайте main.go: обработчик hello отвечает hello from go, сервер слушает :8080",
+        "go run . и в другом окне curl http://localhost:8080",
+        "Создайте main_test.go: вызов hello через httptest и проверка ответа",
+        "go vet ./... и go test ./...",
+        "Соберите для Linux: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o hello-linux ."
+      ],
+      "check": "curl печатает hello from go. go test пишет ok. Появился файл hello-linux размером в несколько мегабайт: его можно скопировать на сервер и запустить без установки Go.",
+      "hint": "В PowerShell переменные сборки задают так: $env:GOOS = \"linux\"; $env:GOARCH = \"amd64\"; $env:CGO_ENABLED = \"0\"; go build -o hello-linux . После сборки уберите их: Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED.",
+      "solution": "mkdir hello-go && cd hello-go\ngo mod init example.com/hello\n\n// main.go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"log\"\n\t\"net/http\"\n)\n\nfunc hello(w http.ResponseWriter, r *http.Request) {\n\tfmt.Fprintln(w, \"hello from go\")\n}\n\nfunc main() {\n\thttp.HandleFunc(\"/\", hello)\n\tlog.Println(\"http://localhost:8080\")\n\tlog.Fatal(http.ListenAndServe(\":8080\", nil))\n}\n\n// main_test.go\npackage main\n\nimport (\n\t\"net/http/httptest\"\n\t\"testing\"\n)\n\nfunc TestHello(t *testing.T) {\n\trec := httptest.NewRecorder()\n\thello(rec, httptest.NewRequest(\"GET\", \"/\", nil))\n\tif got := rec.Body.String(); got != \"hello from go\\n\" {\n\t\tt.Errorf(\"ответ %q, ждали %q\", got, \"hello from go\\n\")\n\t}\n}\n\ngo run .\ngo vet ./...\ngo test ./...\nGOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o hello-linux ."
+    },
+    {
       "type": "mistakes",
       "title": "Что ломается чаще всего",
       "items": [
@@ -123,8 +150,8 @@
       "type": "quiz",
       "title": "Проверьте себя",
       "items": [
-        { "q": "Что нужно поставить на сервер, чтобы запустить программу на Go?", "options": ["Go нужной версии", "Ничего, достаточно собранного файла", "Docker обязательно"], "answer": 1, "why": "go build кладёт программу и библиотеки в один файл, ему не нужна среда выполнения." },
-        { "q": "Как назвать файл с тестами?", "options": ["test.go", "что_угодно_test.go", "tests/main.go"], "answer": 1, "why": "Go считает тестами файлы, имя которых кончается на _test.go." },
+        { "q": "Что нужно поставить на сервер, чтобы запустить программу на Go?", "options": ["Go нужной версии", "Docker обязательно", "Ничего, достаточно собранного файла"], "answer": 2, "why": "go build кладёт программу и библиотеки в один файл, ему не нужна среда выполнения." },
+        { "q": "Как назвать файл с тестами?", "options": ["что_угодно_test.go", "test.go", "tests/main.go"], "answer": 0, "why": "Go считает тестами файлы, имя которых кончается на _test.go." },
         { "q": "Что делает go mod tidy?", "options": ["Удаляет проект", "Приводит go.mod и go.sum в порядок по коду", "Оформляет код"], "answer": 1, "why": "Добавляет нужные библиотеки, которых нет в go.mod, и убирает те, что код больше не использует." },
         { "q": "Как собрать программу для Linux, работая на Windows?", "options": ["Нельзя", "Задать GOOS=linux и GOARCH перед go build", "Только в Docker"], "answer": 1, "why": "Компилятор Go умеет собирать для других систем без дополнительных программ." }
       ]

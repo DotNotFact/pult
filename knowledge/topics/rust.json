@@ -99,6 +99,34 @@
       "note": "Числа примерные. Разница бывает от нескольких раз до сотни, сильнее всего на вычислениях. Замеры скорости делают только на release."
     },
     {
+      "type": "rules",
+      "title": "Как работать с Rust",
+      "items": [
+        { "kind": "do", "title": "Проверки как в CI", "text": "cargo fmt --check, cargo clippy -- -D warnings и cargo test - перед каждым push. Тот же набор гоняет CI." },
+        { "kind": "do", "title": "Ошибки через Result и ?", "text": "Функция, которая может не справиться, возвращает Result. Знак ? передаёт ошибку выше. Так ошибка доходит до места, где знают, что с ней делать." },
+        { "kind": "dont", "title": "unwrap() не для рабочего кода", "text": "unwrap() и expect() роняют программу паникой, если значения нет. Их место - тесты, примеры и случаи, где ошибки не может быть по смыслу, с объяснением в expect()." },
+        { "kind": "dont", "title": "Не лечите заимствования клонированием", "text": "clone() убирает ошибку компилятора, но копирует данные. Сначала попробуйте передать ссылку &value." },
+        { "kind": "tip", "title": "cargo check для быстрой проверки", "text": "Пока пишете код, хватает cargo check: он проверяет всё, что проверит сборка, но не создаёт файл и работает в разы быстрее." }
+      ]
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: утилита с тестами и проверками",
+      "task": "Напишите программу, которая считает слова в тексте из аргумента, добавьте тесты и прогоните полный набор проверок, как в CI.",
+      "steps": [
+        "cargo new words, cd words",
+        "В src/main.rs напишите функцию count_words(text: &str) -> usize и main, который берёт первый аргумент",
+        "Добавьте в тот же файл модуль tests с двумя тестами",
+        "cargo run -- \"раз два три\"",
+        "cargo test",
+        "cargo fmt --check и cargo clippy -- -D warnings",
+        "cargo build --release и запустите готовый файл из target/release"
+      ],
+      "check": "cargo run печатает 3. cargo test заканчивается строкой test result: ok. 2 passed. fmt --check и clippy ничего не находят. Release-версия печатает 2 для «один два».",
+      "hint": "Аргументы для самой программы пишутся после --, иначе их заберёт cargo. На Windows готовый файл - target\\release\\words.exe.",
+      "solution": "cargo new words && cd words\n\n// src/main.rs\nfn count_words(text: &str) -> usize {\n    text.split_whitespace().count()\n}\n\nfn main() {\n    let text = std::env::args().nth(1).unwrap_or_default();\n    println!(\"{}\", count_words(&text));\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn counts_words_separated_by_spaces() {\n        assert_eq!(count_words(\"раз два  три\"), 3);\n    }\n\n    #[test]\n    fn empty_text_has_no_words() {\n        assert_eq!(count_words(\"\"), 0);\n    }\n}\n\ncargo run -- \"раз два три\"\ncargo test\ncargo fmt --check\ncargo clippy -- -D warnings\ncargo build --release\n./target/release/words \"один два\""
+    },
+    {
       "type": "mistakes",
       "title": "Что ломается чаще всего",
       "items": [
@@ -113,15 +141,15 @@
       "type": "cheatsheet",
       "title": "Шпаргалка",
       "items": [
-        { "cmd": "cargo new my-app", "text": "Создать новый проект" },
+        { "group": "Проект и сборка", "cmd": "cargo new my-app", "text": "Создать новый проект" },
         { "cmd": "cargo run", "text": "Собрать и запустить" },
         { "cmd": "cargo check", "text": "Быстро проверить, что код собирается" },
         { "cmd": "cargo build --release", "text": "Собрать быструю версию в target/release" },
-        { "cmd": "cargo test", "text": "Запустить тесты" },
+        { "group": "Тесты и библиотеки", "cmd": "cargo test", "text": "Запустить тесты" },
         { "cmd": "cargo add serde", "text": "Добавить библиотеку в Cargo.toml" },
-        { "cmd": "cargo fmt", "text": "Оформить код по правилам" },
+        { "group": "Проверки кода", "cmd": "cargo fmt", "text": "Оформить код по правилам" },
         { "cmd": "cargo clippy -- -D warnings", "text": "Проверить код, предупреждения считать ошибками" },
-        { "cmd": "cargo update", "text": "Обновить версии в Cargo.lock в пределах Cargo.toml" },
+        { "group": "Обслуживание", "cmd": "cargo update", "text": "Обновить версии в Cargo.lock в пределах Cargo.toml" },
         { "cmd": "cargo clean", "text": "Удалить папку target" },
         { "cmd": "rustup update", "text": "Обновить Rust" }
       ]
@@ -130,8 +158,8 @@
       "type": "quiz",
       "title": "Проверьте себя",
       "items": [
-        { "q": "Зачем нужен Cargo.lock?", "options": ["Чтобы запереть проект паролем", "Чтобы у всех собирались одни и те же версии библиотек", "Чтобы ускорить сборку"], "answer": 1, "why": "В Cargo.toml записаны допустимые версии, а в Cargo.lock - точные, которые реально использовались." },
-        { "q": "Какую сборку запускать, чтобы проверить скорость программы?", "options": ["Debug", "Release"], "answer": 1, "why": "Debug не оптимизирован и может работать в десятки раз медленнее." },
+        { "q": "Зачем нужен Cargo.lock?", "options": ["Чтобы запереть проект паролем", "Чтобы ускорить сборку", "Чтобы у всех собирались одни и те же версии библиотек"], "answer": 2, "why": "В Cargo.toml записаны допустимые версии, а в Cargo.lock - точные, которые реально использовались." },
+        { "q": "Какую сборку запускать, чтобы проверить скорость программы?", "options": ["Release", "Debug"], "answer": 0, "why": "Debug не оптимизирован и может работать в десятки раз медленнее." },
         { "q": "Что делает cargo clippy?", "options": ["Оформляет код", "Ищет подозрительные места в коде", "Удаляет target"], "answer": 1, "why": "Оформляет код cargo fmt, а clippy ищет ошибки и неудачные решения." },
         { "q": "Можно ли удалить папку target?", "options": ["Нет, пропадёт код", "Да, cargo соберёт её заново"], "answer": 1, "why": "В target только результаты сборки. Код лежит в src." }
       ]

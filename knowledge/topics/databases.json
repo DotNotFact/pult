@@ -69,9 +69,9 @@
     },
     {
       "type": "example",
-      "title": "Модель в Prisma (prisma/schema.prisma)",
-      "code": "datasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nmodel User {\n  id    Int     @id @default(autoincrement())\n  email String  @unique\n  phone String?\n  posts Post[]\n}\n\nmodel Post {\n  id       Int    @id @default(autoincrement())\n  title    String\n  author   User   @relation(fields: [authorId], references: [id])\n  authorId Int\n}",
-      "note": "datasource - к какой базе подключаться, адрес берётся из переменной окружения. model - таблица. Знак ? значит, что поле можно не заполнять. Связь Post и User Prisma превратит во внешний ключ."
+      "title": "Модель в Prisma 7 (prisma/schema.prisma)",
+      "code": "datasource db {\n  provider = \"postgresql\"\n}\n\nmodel User {\n  id    Int     @id @default(autoincrement())\n  email String  @unique\n  phone String?\n  posts Post[]\n}\n\nmodel Post {\n  id       Int    @id @default(autoincrement())\n  title    String\n  author   User   @relation(fields: [authorId], references: [id])\n  authorId Int\n}",
+      "note": "datasource - какая база. Адрес базы в Prisma 7 лежит не в схеме, а в prisma.config.ts: datasource: { url: env(\"DATABASE_URL\") }. В Prisma 6 и старше его писали строкой url = env(\"DATABASE_URL\") прямо здесь. model - таблица. Знак ? значит, что поле можно не заполнять. Связь Post и User Prisma превратит во внешний ключ."
     },
     {
       "type": "compare",
@@ -85,6 +85,35 @@
         ["Резервные копии", "Не нужны", "Обязательны, по расписанию"],
         ["Кто подключается", "Вы", "Только приложение и дежурные"]
       ]
+    },
+    {
+      "type": "rules",
+      "title": "Как обращаться с базой",
+      "items": [
+        { "kind": "do", "title": "Схема меняется только миграциями", "text": "Никаких ручных ALTER TABLE на сервере. Ручная правка не повторится у коллег и на новом сервере, и схемы разойдутся." },
+        { "kind": "do", "title": "Опасное - в несколько шагов", "text": "Переименовать поле: добавить новое, скопировать данные, перевести код, удалить старое в следующем выпуске. Тогда старая и новая версии кода работают с базой одновременно." },
+        { "kind": "do", "title": "Индекс на поле поиска", "text": "Запрос ищет по email - на email нужен индекс. Без него база читает всю таблицу. EXPLAIN перед запросом покажет Seq Scan, если индекса нет." },
+        { "kind": "dont", "title": "Не давайте приложению права владельца", "text": "Приложению хватает чтения и записи своих таблиц. Права менять схему - у отдельного пользователя для миграций. Ошибка или взлом приложения тогда не удалит базу." },
+        { "kind": "when", "title": "SQLite или PostgreSQL", "text": "SQLite - один файл без сервера: настольная программа, прототип, тесты. PostgreSQL - когда в базу пишут несколько процессов или пользователей одновременно." }
+      ]
+    },
+    {
+      "type": "practice",
+      "title": "Попробуйте сами: миграции и восстановление из копии",
+      "task": "Поднимите PostgreSQL в Docker, примените две миграции по порядку, сделайте резервную копию, «потеряйте» таблицу и восстановите её из копии.",
+      "steps": [
+        "docker run -d --name pg-lab -e POSTGRES_PASSWORD=secret postgres:17",
+        "Создайте 001_create_users.sql (таблица users с id и email) и 002_add_phone.sql (поле phone)",
+        "Примените их по порядку через psql внутри контейнера",
+        "Вставьте строку с email и phone",
+        "Сделайте копию: pg_dump -Fc в файл /tmp/app.dump внутри контейнера",
+        "Устройте аварию: drop table users",
+        "Восстановите: pg_restore --clean --if-exists из /tmp/app.dump",
+        "select * from users, затем уберите контейнер"
+      ],
+      "check": "После восстановления select * from users возвращает вашу строку вместе с phone. Если поменять миграции местами, вторая упадёт с relation \"users\" does not exist.",
+      "hint": "the database system is starting up - база ещё запускается, подождите пару секунд. В PowerShell файл передают так: Get-Content 001_create_users.sql | docker exec -i pg-lab psql -U postgres.",
+      "solution": "docker run -d --name pg-lab -e POSTGRES_PASSWORD=secret postgres:17\n\n-- 001_create_users.sql\ncreate table users (id serial primary key, email text not null unique);\n\n-- 002_add_phone.sql\nalter table users add column phone text;\n\n# применить по порядку (bash)\ndocker exec -i pg-lab psql -U postgres -v ON_ERROR_STOP=1 < 001_create_users.sql\ndocker exec -i pg-lab psql -U postgres -v ON_ERROR_STOP=1 < 002_add_phone.sql\ndocker exec pg-lab psql -U postgres -c \"insert into users (email, phone) values ('a@example.com', '+100');\"\n\n# резервная копия\ndocker exec pg-lab pg_dump -U postgres -Fc -f /tmp/app.dump postgres\n\n# авария и восстановление\ndocker exec pg-lab psql -U postgres -c \"drop table users;\"\ndocker exec pg-lab pg_restore -U postgres -d postgres --clean --if-exists /tmp/app.dump\ndocker exec pg-lab psql -U postgres -c \"select * from users;\"\n\ndocker rm -f pg-lab"
     },
     {
       "type": "mistakes",
@@ -116,8 +145,8 @@
       "type": "quiz",
       "title": "Проверьте себя",
       "items": [
-        { "q": "Почему миграции применяют строго по порядку?", "options": ["Так красивее", "Каждая следующая опирается на то, что сделали предыдущие", "Так быстрее"], "answer": 1, "why": "Нельзя добавить поле в таблицу, которую ещё не создали. Порядок задают дата или номер в имени." },
-        { "q": "Что делать, если в уже применённой миграции ошибка?", "options": ["Исправить этот файл", "Создать новую миграцию, которая исправит", "Удалить базу на сервере"], "answer": 1, "why": "Применённую миграцию база больше не запускает. Изменения идут только новыми файлами." },
+        { "q": "Почему миграции применяют строго по порядку?", "options": ["Так красивее", "Так быстрее", "Каждая следующая опирается на то, что сделали предыдущие"], "answer": 2, "why": "Нельзя добавить поле в таблицу, которую ещё не создали. Порядок задают дата или номер в имени." },
+        { "q": "Что делать, если в уже применённой миграции ошибка?", "options": ["Создать новую миграцию, которая исправит", "Исправить этот файл", "Удалить базу на сервере"], "answer": 0, "why": "Применённую миграцию база больше не запускает. Изменения идут только новыми файлами." },
         { "q": "Что такое seed?", "options": ["Резервная копия", "Начальные данные для пустой базы", "Пароль от базы"], "answer": 1, "why": "Seed наполняет базу справочниками и тестовыми записями, чтобы с ней можно было сразу работать." },
         { "q": "Где хранить адрес и пароль базы?", "options": ["В коде", "В переменной окружения, например DATABASE_URL", "В README"], "answer": 1, "why": "Код попадает в git и его видят все. Переменные окружения задают отдельно на каждой машине." }
       ]

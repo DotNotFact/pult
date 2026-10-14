@@ -1,0 +1,80 @@
+{
+  "_": "Готовые сценарии, которые Пульт предлагает проекту на вкладке «Сценарии». Шаг находит скрипт проекта по этапу (stage - id из stages.json) и по имени (name - регулярное выражение JS без учёта регистра); если заданы оба, нужны оба. Из подходящих берётся лучший: избранный, потом чаще запускаемый, потом тот, что выше в быстром запуске. optional - шаг можно не найти. Шаблон показывается, если нашлись все обязательные шаги и всего не меньше двух.",
+  "templates": [
+    {
+      "id": "morning",
+      "name": "Начать день",
+      "why": "забрать свежий код, поставить зависимости и запустить проект",
+      "steps": [
+        { "name": "^git pull" },
+        { "name": "((^| |:)(install|i|bootstrap|setup|sync)$|^npm ci$|^dotnet restore$)" },
+        { "stage": "dev", "name": "(^| |:)(dev|start|serve|up|run|watch)$", "optional": true }
+      ]
+    },
+    {
+      "id": "precommit",
+      "name": "Перед коммитом",
+      "why": "поправить формат и найти ошибки до того, как они попадут в историю",
+      "steps": [
+        { "name": "(^| |:)(format|fmt|prettier)( --write|:write|:fix)?$", "optional": true },
+        { "name": "(^| |:)(lint|clippy|eslint|stylelint)$" },
+        { "name": "(^| |:)(typecheck|type-check|types|tsc|check)$", "optional": true },
+        { "name": "(^| |:)(test|tests|unit|vitest|jest)$" }
+      ]
+    },
+    {
+      "id": "prepush",
+      "name": "Перед пушем",
+      "why": "прогнать у себя всё, что потом проверит CI: формат, линтер, типы, тесты и сборку",
+      "steps": [
+        { "name": "(^| |:)(format|fmt|prettier)( --check|:check| --verify-no-changes)$", "optional": true },
+        { "name": "(^| |:)(lint|clippy|eslint)$" },
+        { "name": "(^| |:)(typecheck|type-check|types|tsc|check)$", "optional": true },
+        { "name": "(^| |:)(test|tests)$" },
+        { "stage": "build", "name": "(^| |:)build$" }
+      ]
+    },
+    {
+      "id": "clean",
+      "name": "Чистая сборка",
+      "why": "стереть старые результаты сборки и собрать проект с нуля, когда что-то ведёт себя странно",
+      "steps": [
+        { "name": "(^| |:)(clean|clear|distclean|reset)$" },
+        { "name": "((^| |:)(install|i)$|^npm ci$|^dotnet restore$)", "optional": true },
+        { "stage": "build", "name": "(^| |:)build$" }
+      ]
+    },
+    {
+      "id": "release",
+      "name": "Релизная сборка",
+      "why": "проверить тесты и собрать то, что уйдёт людям: с оптимизациями и упаковкой",
+      "steps": [
+        { "name": "(^| |:)(lint|clippy|eslint)$", "optional": true },
+        { "name": "(^| |:)(test|tests)$" },
+        { "name": "(build --release|build:prod|build:release|build -c release|--configuration release|(^| |:)(release|dist)$)" },
+        { "name": "(^| |:)(package|pack|bundle|package\\.ps1|package\\.sh)$", "optional": true }
+      ]
+    },
+    {
+      "id": "env",
+      "name": "Поднять окружение",
+      "why": "запустить базу и сервисы в контейнерах, накатить миграции и тестовые данные",
+      "steps": [
+        { "name": "(compose up|(^| |:)(up|docker:up|services:up|infra:up|db:up)$)" },
+        { "name": "(^| |:)(migrate|db:migrate|migration:run|migrations|db:push|database update)$" },
+        { "name": "(^| |:)(seed|db:seed|seeds)$", "optional": true }
+      ]
+    },
+    {
+      "id": "deps",
+      "name": "Обновить зависимости и проверить",
+      "why": "поднять версии пакетов и сразу убедиться, что тесты и сборка не сломались",
+      "steps": [
+        { "name": "(^| |:)(update|upgrade|deps:update|update-deps|outdated)$" },
+        { "name": "((^| |:)(install|i)$|^dotnet restore$)", "optional": true },
+        { "name": "(^| |:)(test|tests)$" },
+        { "stage": "build", "name": "(^| |:)build$", "optional": true }
+      ]
+    }
+  ]
+}

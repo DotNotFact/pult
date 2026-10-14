@@ -1,0 +1,335 @@
+{
+  "id": "csharp",
+  "title": "C# изнутри",
+  "color": "#9b4f96",
+  "icon": "code",
+  "level": "продвинутый",
+  "summary": "Что стоит за кодом на C#: где живут объекты, как работает сборщик мусора, во что компилятор превращает async, лямбды, foreach и строки. Настоящий IL рядом с кодом. Для шага от Middle к Senior.",
+  "detect": {"files":[".sln",".slnx",".csproj",".cs"],"deps":[],"bins":["dotnet"],"stacks":[".NET"]},
+  "related": ["dotnet","testing"],
+  "sections": [
+    {
+      "type": "idea",
+      "title": "Зачем знать, что под кодом",
+      "text": "Middle пишет код, который работает. Senior знает, сколько этот код стоит: сколько памяти выделит, как часто разбудит сборщик мусора, на каком потоке продолжится после await. Компилятор C# превращает async, лямбды, foreach и строки в обычный код на IL. Кто умеет его читать, находит медленные места глазами и замером, а не догадкой. Весь IL в уроке настоящий: собран .NET 10 в Release.",
+      "analogy": "Водитель жмёт на газ. Механик знает, что при этом происходит в моторе, и по звуку слышит, где поломка. Этот урок - про мотор."
+    },
+    {
+      "type": "diagram",
+      "title": "Путь кода от .cs до процессора",
+      "nodes": [
+        {"id":"cs","label":"Код .cs","note":"то, что вы пишете","icon":"code"},
+        {"id":"roslyn","label":"Компилятор Roslyn","note":"dotnet build","icon":"wrench"},
+        {"id":"il","label":"IL в .dll","note":"команды виртуальной машины","icon":"file"},
+        {"id":"tier0","label":"JIT, Tier0","note":"быстро, без оптимизаций","icon":"bolt"},
+        {"id":"tier1","label":"JIT, Tier1","note":"горячие методы, с PGO","icon":"chip"}
+      ],
+      "edges": [
+        ["cs","roslyn","компиляция"],
+        ["roslyn","il","пишет"],
+        ["il","tier0","первый вызов"],
+        ["tier0","tier1","30 вызовов"]
+      ],
+      "caption": "Компилятор C# не делает машинный код, он пишет IL. Машинный код делает JIT прямо во время работы. Сначала быстро и просто (Tier0), потом для часто вызываемых методов - заново и хорошо, с учётом того, как метод вызывался на самом деле (Tier1 с PGO). ReadyToRun кладёт готовый машинный код в .dll заранее, NativeAOT обходится без JIT совсем."
+    },
+    {
+      "type": "terms",
+      "title": "Слова: типы, память и JIT",
+      "items": [
+        {"term":"Значимый тип","text":"struct, int, double, bool, enum. Переменная хранит само значение. При присваивании копируется всё значение целиком.","forms":["значимые типы","значимого типа","value type"]},
+        {"term":"Ссылочный тип","text":"class, string, массивы, делегаты. Объект лежит в куче, переменная хранит только ссылку. При присваивании копируется ссылка, объект остаётся один.","forms":["ссылочные типы","ссылочного типа","reference type"]},
+        {"term":"Стек","text":"Память потока для локальных переменных и параметров. Освобождается сама, когда метод возвращается. Сборщик мусора её не трогает.","forms":["стека","стеке","stack"]},
+        {"term":"Управляемая куча","text":"Память, где живут объекты. Выделяет её new, освобождает сборщик мусора.","forms":["куча","кучи","куче","кучу","heap"]},
+        {"term":"Упаковка","text":"Копия значимого типа в новом объекте в куче. Нужна, чтобы передать значение как object или интерфейс. В IL это команда box. Каждая упаковка - новое выделение памяти.","forms":["упаковки","boxing","box"]},
+        {"term":"IL","text":"Промежуточный язык. Его пишет компилятор C# в файл .dll. Процессор IL не понимает, его переводит JIT.","forms":["CIL","MSIL"]},
+        {"term":"JIT","text":"Компилятор внутри runtime. Переводит IL в машинный код при первом вызове метода.","forms":["джит","JIT-компилятор"]},
+        {"term":"Tier0 и Tier1","text":"Уровни JIT. Tier0 - быстрый код без оптимизаций при первом вызове. После 30 вызовов метод собирается заново на Tier1, с оптимизациями. Метод с долгим циклом переходит на Tier1 прямо посреди цикла (OSR).","forms":["Tier0","Tier1","OSR","tiered compilation"]},
+        {"term":"Динамический PGO","text":"Пока метод работает на Tier0, JIT записывает, какие типы приходят и какие ветки выполняются чаще. На Tier1 он подставляет эти вызовы напрямую. Включён по умолчанию с .NET 8.","forms":["PGO","Dynamic PGO"]},
+        {"term":"Span<T>","text":"Окно в непрерывный кусок памяти: массив, строку, память на стеке. Ничего не копирует. Это ref struct.","forms":["Span","ReadOnlySpan"]},
+        {"term":"ref struct","text":"Структура, которая никогда не попадает в кучу: её нельзя упаковать, положить в поле класса или держать через await.","forms":[]},
+        {"term":"Memory<T>","text":"То же окно в память, но обычная структура. Её можно хранить в поле и передавать в async-метод. Для работы из неё берут .Span.","forms":["Memory","ReadOnlyMemory"]},
+        {"term":"ArrayPool","text":"Общий склад массивов. Rent берёт массив, Return возвращает. Массив переиспользуется, сборщику мусора нечего убирать.","forms":["ArrayPool<T>","пул массивов"]},
+        {"term":"stackalloc","text":"Выделяет массив на стеке текущего метода. Освобождается сам при выходе из метода. Только для маленьких размеров.","forms":[]}
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "class, struct, record class, record struct",
+      "cols": ["","class","struct","record class","record struct"],
+      "rows": [
+        ["Где живёт","В куче","Там, где объявлен: в стеке, в поле, в элементе массива","В куче","Как struct"],
+        ["Присваивание","Копирует ссылку","Копирует все поля","Копирует ссылку","Копирует все поля"],
+        ["Сравнение ==","Одна ли это ссылка","Оператора нет, пока не напишете","По значениям полей","По значениям полей"],
+        ["Что дописывает компилятор","Ничего","Ничего","Equals, GetHashCode, ToString, == и !=, Deconstruct, копирование для with","То же, что у record class"],
+        ["Наследование","Есть","Нет","Только от другого record","Нет"],
+        ["Когда брать","Сущности с поведением и долгой жизнью","Маленькие значения: по совету Microsoft до 16 байт","DTO, сообщения, неизменяемые данные","Маленькие неизменяемые значения: деньги, координаты"]
+      ]
+    },
+    {
+      "type": "codepair",
+      "title": "Упаковка: где появляется box",
+      "left": {"label":"C#","code":"public static object Box(int n) => n;\n\npublic static string Format(int n)\n    => string.Format(\"{0}\", n);\n\npublic static bool EqualsObj(int a, int b)\n    => a.Equals((object)b);\n\npublic static void Log(IComparable c) { }\n\n// int уходит в параметр-интерфейс\npublic static void CallViaInterface(int n) => Log(n);\n\n// T станет int, упаковки нет\npublic static void Generic<T>(T x) where T : IComparable<T>\n    => x.CompareTo(x);"},
+      "right": {"label":"IL","code":"// BoxingDemo::Box\nIL_0000: ldarg.0\nIL_0001: box System.Int32\nIL_0006: ret\n\n// BoxingDemo::Format\nIL_0000: ldstr \"{0}\"\nIL_0005: ldarg.0\nIL_0006: box System.Int32\nIL_000b: call string System.String::Format(string, object)\nIL_0010: ret\n\n// BoxingDemo::EqualsObj\nIL_0000: ldarga.s a\nIL_0002: ldarg.1\nIL_0003: box System.Int32\nIL_0008: call instance bool System.Int32::Equals(object)\nIL_000d: ret\n\n// BoxingDemo::CallViaInterface\nIL_0000: ldarg.0\nIL_0001: box System.Int32\nIL_0006: call void BoxingDemo::Log(class System.IComparable)\nIL_000b: ret\n\n// BoxingDemo::Generic\nIL_0000: ldarga.s x\nIL_0002: ldarg.0\nIL_0003: constrained. !!T\nIL_0009: callvirt instance int32 class System.IComparable`1<!!T>::CompareTo(!0)\nIL_000e: pop\nIL_000f: ret"},
+      "note": "Каждый box - новый объект в куче: для int это 24 байта на 64-битной системе (заголовок, ссылка на тип и само число). Ищите box там, где значимый тип уходит в object, в интерфейс или в params object[]. В generic-методе компилятор пишет constrained. - для значимого типа вызов идёт прямо по значению, без box. IL у generic один на все T, а машинный код JIT делает отдельно для каждого значимого типа и один общий для всех ссылочных. Поэтому generic со struct работает так же быстро, как код, написанный руками под этот тип. IL настоящий: собран компилятором .NET SDK 10.0.401 в Release и разобран ilspycmd. Имена сборок и пространств имён сокращены."
+    },
+    {
+      "type": "codepair",
+      "title": "in и скрытая копия struct",
+      "left": {"label":"C#","code":"public struct Big\n{\n    public long A, B, C, D;\n    public long Sum() => A + B + C + D;\n}\npublic static long ByIn(in Big b) => b.Sum();\n\npublic readonly struct BigR\n{\n    public readonly long A, B, C, D;\n    public long Sum() => A + B + C + D;\n}\npublic static long ByIn(in BigR b) => b.Sum();"},
+      "right": {"label":"IL","code":"// InDemo::ByIn\n.locals init (\n  [0] valuetype InDemo/Big\n)\nIL_0000: ldarg.0\nIL_0001: ldobj InDemo/Big\nIL_0006: stloc.0\nIL_0007: ldloca.s 0\nIL_0009: call instance int64 InDemo/Big::Sum()\nIL_000e: ret\n\n// InDemo2::ByIn\nIL_0000: ldarg.0\nIL_0001: call instance int64 InDemo2/BigR::Sum()\nIL_0006: ret"},
+      "note": "in передаёт struct по ссылке и обещает его не менять. Но метод Sum у обычного struct мог бы менять поля. Компилятор не знает, поменяет ли, и делает скрытую копию: ldobj и stloc копируют все 32 байта перед вызовом. У readonly struct копии нет: вызов идёт прямо по ссылке. Правило: in - только для readonly struct или для методов, помеченных readonly. ref readonly у параметра (C# 12) значит то же, что in, но вызывающий явно пишет ref или in, и по коду видно, что передаётся ссылка. IL настоящий: собран компилятором .NET SDK 10.0.401 в Release и разобран ilspycmd. Имена сборок и пространств имён сокращены."
+    },
+    {
+      "type": "codepair",
+      "title": "stackalloc и Span: память без кучи",
+      "left": {"label":"C#","code":"public static int SumDigits(string s)\n{\n    Span<int> buf = stackalloc int[16];\n    int n = 0;\n    foreach (char c in s.AsSpan())\n        if (char.IsDigit(c) && n < buf.Length)\n            buf[n++] = c - '0';\n\n    int sum = 0;\n    foreach (int d in buf[..n]) sum += d;\n    return sum;\n}"},
+      "right": {"label":"IL","code":"// SpanDemo::SumDigits\n.locals init (\n  [0] valuetype System.Span`1<int32>,\n  [1] int32,\n  [2] int32,\n  [3] valuetype System.ReadOnlySpan`1<char>,\n  [4] int32,\n  [5] char,\n  [6] valuetype System.Span`1<int32>,\n  [7] int32\n)\nIL_0000: ldc.i4.s 64\nIL_0002: conv.u\nIL_0003: localloc\nIL_0005: ldc.i4.s 16\nIL_0007: newobj instance void valuetype System.Span`1<int32>::.ctor(void*, int32)\nIL_000c: stloc.0\nIL_000d: ldc.i4.0\nIL_000e: stloc.1\nIL_000f: ldarg.0\nIL_0010: call valuetype System.ReadOnlySpan`1<char> System.MemoryExtensions::AsSpan(string)\nIL_0015: stloc.3\n// ... цикл по символам ...\nIL_005f: ldloca.s 0\nIL_0061: ldc.i4.0\nIL_0062: ldloc.1\nIL_0063: call instance valuetype System.Span`1<!0> valuetype System.Span`1<int32>::Slice(int32, int32)\nIL_0068: stloc.s 6"},
+      "note": "stackalloc стал командой localloc: 64 байта на стеке метода. Span - обычная структура в локальной переменной. AsSpan не копирует строку, срез buf[..n] стал вызовом Slice и тоже ничего не копирует. В куче не появилось ни одного объекта. Стек потока маленький (обычно 1-8 МБ), а переполнение роняет процесс без шанса на catch. Поэтому stackalloc - для сотен байт, всё большее берут из ArrayPool. IL настоящий: собран компилятором .NET SDK 10.0.401 в Release и разобран ilspycmd. Имена сборок и пространств имён сокращены."
+    },
+    {
+      "type": "diagram",
+      "title": "Поколения сборщика мусора",
+      "nodes": [
+        {"id":"new","label":"new","note":"выделение в контексте потока","icon":"bolt"},
+        {"id":"gen0","label":"Поколение 0","note":"молодые, чистится часто","icon":"cube"},
+        {"id":"gen1","label":"Поколение 1","note":"буфер между 0 и 2","icon":"cube"},
+        {"id":"gen2","label":"Поколение 2","note":"долгоживущие, чистится редко","icon":"database"},
+        {"id":"loh","label":"LOH","note":"от 85 000 байт","icon":"layers"},
+        {"id":"poh","label":"POH","note":"закреплённые массивы","icon":"lock"}
+      ],
+      "edges": [
+        ["new","gen0","маленький объект"],
+        ["gen0","gen1","пережил сборку"],
+        ["gen1","gen2","пережил ещё одну"],
+        ["new","loh","большой объект"],
+        ["new","poh","pinned: true"]
+      ],
+      "caption": "Большинство объектов умирает молодыми, поэтому сборка поколения 0 быстрая: проверяется малая часть кучи. Чтобы ради ссылок на молодые объекты не просматривать всё поколение 2, runtime ведёт card table - отметки о том, в какие участки старой памяти недавно записали ссылку на молодой объект. LOH собирается только вместе с поколением 2 и по умолчанию не уплотняется. POH (с .NET 5) - для массивов, адрес которых отдают в ОС: GC.AllocateArray<byte>(size, pinned: true)."
+    },
+    {
+      "type": "terms",
+      "title": "Слова: сборщик мусора",
+      "items": [
+        {"term":"Сборщик мусора","text":"Часть runtime, которая находит объекты, на которые больше никто не ссылается, и освобождает их память. Сам решает, когда запускаться.","forms":["GC","сборка мусора","сборки мусора","сборщика мусора"]},
+        {"term":"Поколение","text":"Возраст объекта по числу пережитых сборок: 0, 1 или 2. Молодые проверяются часто, старые редко.","forms":["поколения","поколений","generation","gen0","gen1","gen2"]},
+        {"term":"LOH","text":"Large Object Heap - куча для объектов от 85 000 байт, обычно больших массивов. Собирается вместе с поколением 2, по умолчанию не уплотняется.","forms":["Large Object Heap"]},
+        {"term":"POH","text":"Pinned Object Heap - куча для массивов, которые нельзя двигать: их адрес передают в ОС или в нативный код. Есть с .NET 5.","forms":["Pinned Object Heap"]},
+        {"term":"Контекст выделения","text":"Кусок поколения 0, выданный одному потоку. new просто сдвигает указатель внутри него, без блокировок. Поэтому выделить память в .NET дёшево, а дорогая часть - сборка.","forms":["allocation context"]},
+        {"term":"Card table","text":"Отметки о том, в какие участки старой памяти записали ссылку на молодой объект. Сборка поколения 0 смотрит только отмеченные участки, а не всё поколение 2.","forms":[]},
+        {"term":"Workstation GC","text":"Режим по умолчанию для обычных программ: одна куча, сборка идёт на потоке, который выделял память. Меньше памяти, короче пауза для одного пользователя.","forms":[]},
+        {"term":"Server GC","text":"Режим для сервисов: своя куча и свой поток сборки на каждое ядро. Выше пропускная способность, больше памяти. В проектах ASP.NET Core включён сам.","forms":["серверный GC"]},
+        {"term":"Фоновая сборка","text":"Сборка поколения 2 идёт параллельно с работой программы, а поколения 0 и 1 в это время можно собирать. Включена по умолчанию (System.GC.Concurrent).","forms":["background GC","concurrent GC"]},
+        {"term":"DATAS","text":"Подстройка Server GC под нагрузку: число куч растёт и падает вместе с работой, память не держится впрок. Включена по умолчанию с .NET 9 для Server GC.","forms":["DynamicAdaptationMode"]},
+        {"term":"Финализатор","text":"Метод ~MyClass(). GC вызывает его в отдельном потоке перед освобождением объекта. Объект с финализатором переживает лишнюю сборку.","forms":["финализатора","финализаторы","finalizer"]},
+        {"term":"SafeHandle","text":"Готовая обёртка над дескриптором ОС: файлом, сокетом, памятью из нативного кода. Закрывает его и в Dispose, и в своём финализаторе.","forms":[]},
+        {"term":"Слабая ссылка","text":"WeakReference<T> - ссылка, которая не держит объект. GC может его убрать, и тогда TryGetTarget вернёт false. Для кэшей, которые не должны мешать сборке.","forms":["WeakReference","слабые ссылки"]}
+      ]
+    },
+    {
+      "type": "codepair",
+      "title": "Режим GC: в .csproj и что попадёт в runtimeconfig.json",
+      "left": {"label":"MyApp.csproj и runtimeconfig.template.json","code":"<PropertyGroup>\n  <!-- Server GC: куча на каждое ядро -->\n  <ServerGarbageCollection>true</ServerGarbageCollection>\n  <!-- фоновая сборка поколения 2, по умолчанию true -->\n  <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>\n  <!-- DATAS: 1 - включить, 0 - выключить -->\n  <GarbageCollectionAdaptationMode>1</GarbageCollectionAdaptationMode>\n</PropertyGroup>\n\n// runtimeconfig.template.json рядом с .csproj\n{\n  \"configProperties\": {\n    \"System.GC.ConserveMemory\": 5\n  }\n}"},
+      "right": {"label":"bin/Release/net10.0/MyApp.runtimeconfig.json","code":"{\n  \"runtimeOptions\": {\n    \"tfm\": \"net10.0\",\n    \"framework\": {\n      \"name\": \"Microsoft.NETCore.App\",\n      \"version\": \"10.0.0\"\n    },\n    \"configProperties\": {\n      \"System.GC.ConserveMemory\": 5,\n      \"System.GC.Concurrent\": true,\n      \"System.GC.Server\": true,\n      \"System.GC.DynamicAdaptationMode\": 1\n    }\n  }\n}"},
+      "note": "Свойства MSBuild при сборке становятся ключами runtimeconfig.json - его и читает runtime при старте. Этот файл можно поправить на сервере без пересборки, а переменная окружения DOTNET_gcServer=1 переопределит его. ConserveMemory (от 0 до 9) просит GC чаще уплотнять кучу ради меньшей памяти. Вывод справа - настоящий файл после dotnet build, служебные ключи убраны."
+    },
+    {
+      "type": "compare",
+      "title": "Финализатор, IDisposable, SafeHandle",
+      "cols": ["","Финализатор","IDisposable","SafeHandle"],
+      "rows": [
+        ["Кто вызывает","GC, в своём потоке, когда сочтёт нужным","Ваш код: using или Dispose()","Dispose, а если забыли - финализатор"],
+        ["Когда сработает","Неизвестно. При выходе процесса .NET финализаторы не запускает","Сразу в конце using","Сразу или при сборке"],
+        ["Цена","Объект живёт на одну сборку дольше","Ничего лишнего","Один маленький объект"],
+        ["Для чего","Только последняя страховка","Файлы, соединения, таймеры, подписки","Сырой дескриптор ОС из нативного кода"]
+      ]
+    },
+    {
+      "type": "codepair",
+      "title": "using превращается в try/finally",
+      "left": {"label":"C#","code":"public static int ReadFirst(string path)\n{\n    using var s = File.OpenRead(path);\n    return s.ReadByte();\n}\n\n// await using в async-методе даёт тот же finally,\n// но внутри него стоит await s.DisposeAsync()"},
+      "right": {"label":"IL","code":"// UsingDemo::ReadFirst\n.locals init (\n  [0] class FileStream,\n  [1] int32\n)\nIL_0000: ldarg.0\nIL_0001: call class FileStream File::OpenRead(string)\nIL_0006: stloc.0\n.try\n{\n  IL_0007: ldloc.0\n  IL_0008: callvirt instance int32 Stream::ReadByte()\n  IL_000d: stloc.1\n  IL_000e: leave.s IL_001a\n}\nfinally\n{\n  IL_0010: ldloc.0\n  IL_0011: brfalse.s IL_0019\n  IL_0013: ldloc.0\n  IL_0014: callvirt instance void System.IDisposable::Dispose()\n  IL_0019: endfinally\n}\nIL_001a: ldloc.1\nIL_001b: ret"},
+      "note": "using - это try/finally. Dispose вызывается и при return, и при исключении. brfalse пропускает вызов, если ресурс оказался null. leave выходит из try так, чтобы finally точно выполнился. Если у класса есть финализатор, его Dispose должен звать GC.SuppressFinalize(this): тогда GC не держит объект лишнюю сборку. IL настоящий: собран компилятором .NET SDK 10.0.401 в Release и разобран ilspycmd. Имена сборок и пространств имён сокращены."
+    },
+    {
+      "type": "codepair",
+      "title": "async: во что превращается метод",
+      "left": {"label":"C#","code":"public static async Task<int> GetLengthAsync(\n    HttpClient http, string url)\n{\n    string body = await http.GetStringAsync(url);\n    return body.Length;\n}"},
+      "right": {"label":"Что сделал компилятор","code":"// Вывод ilspycmd -lv CSharp4 (атрибуты убраны)\nprivate struct <GetLengthAsync>d__0 : IAsyncStateMachine\n{\n    public int <>1__state;\n    public AsyncTaskMethodBuilder<int> <>t__builder;\n    public HttpClient http;\n    public string url;\n    private TaskAwaiter<string> <>u__1;\n\n    private void MoveNext()\n    {\n        int num = <>1__state;\n        int length;\n        try\n        {\n            TaskAwaiter<string> awaiter;\n            if (num != 0)\n            {\n                awaiter = http.GetStringAsync(url).GetAwaiter();\n                if (!awaiter.IsCompleted)\n                {\n                    num = (<>1__state = 0);\n                    <>u__1 = awaiter;\n                    <>t__builder.AwaitUnsafeOnCompleted(ref awaiter, ref this);\n                    return;\n                }\n            }\n            else\n            {\n                awaiter = <>u__1;\n                <>u__1 = default(TaskAwaiter<string>);\n                num = (<>1__state = -1);\n            }\n            length = awaiter.GetResult().Length;\n        }\n        catch (Exception exception)\n        {\n            <>1__state = -2;\n            <>t__builder.SetException(exception);\n            return;\n        }\n        <>1__state = -2;\n        <>t__builder.SetResult(length);\n    }\n}\n\npublic static Task<int> GetLengthAsync(HttpClient http, string url)\n{\n    <GetLengthAsync>d__0 stateMachine = default(<GetLengthAsync>d__0);\n    stateMachine.<>t__builder = AsyncTaskMethodBuilder<int>.Create();\n    stateMachine.http = http;\n    stateMachine.url = url;\n    stateMachine.<>1__state = -1;\n    stateMachine.<>t__builder.Start(ref stateMachine);\n    return stateMachine.<>t__builder.Task;\n}"},
+      "note": "Метод стал структурой - конечным автоматом. Параметры и переменные, которые нужны после await, стали её полями. Сам GetLengthAsync только заполняет структуру, вызывает Start (он сразу зовёт MoveNext) и отдаёт Task. Если задача уже готова (IsCompleted), код идёт дальше синхронно: ни подписки, ни лишних объектов. Если нет - номер шага пишется в <>1__state, структура один раз копируется в кучу внутрь объекта, который и станет Task, а MoveNext вызовут снова, когда ожидание закончится. В Debug автомат - класс, а не структура: так удобнее отладчику."
+    },
+    {
+      "type": "codepair",
+      "title": "Тот же MoveNext в IL",
+      "left": {"label":"Что сделал компилятор (кусок)","code":"int num = <>1__state;\ntry\n{\n    TaskAwaiter<string> awaiter;\n    if (num != 0)\n    {\n        awaiter = http.GetStringAsync(url).GetAwaiter();\n        if (!awaiter.IsCompleted)   // быстрый путь\n        {\n            num = (<>1__state = 0);\n            <>u__1 = awaiter;\n            <>t__builder.AwaitUnsafeOnCompleted(\n                ref awaiter, ref this);\n            return;                 // поток свободен\n        }\n    }\n    else\n    {\n        awaiter = <>u__1;\n        <>u__1 = default(TaskAwaiter<string>);\n        num = (<>1__state = -1);\n    }\n    length = awaiter.GetResult().Length;\n}"},
+      "right": {"label":"IL","code":"// <GetLengthAsync>d__0::MoveNext, начало\nIL_0000: ldarg.0\nIL_0001: ldfld int32 AsyncDemo/'<GetLengthAsync>d__0'::'<>1__state'\nIL_0006: stloc.0\n.try\n{\n  IL_0007: ldloc.0\n  IL_0008: brfalse.s IL_004a\n  // state != 0: первый заход\n  IL_000a: ldarg.0\n  IL_000b: ldfld class HttpClient AsyncDemo/'<GetLengthAsync>d__0'::http\n  IL_0010: ldarg.0\n  IL_0011: ldfld string AsyncDemo/'<GetLengthAsync>d__0'::url\n  IL_0016: callvirt instance class Task`1<string> HttpClient::GetStringAsync(string)\n  IL_001b: callvirt instance valuetype TaskAwaiter`1<!0> class Task`1<string>::GetAwaiter()\n  IL_0020: stloc.2\n  IL_0021: ldloca.s 2\n  IL_0023: call instance bool valuetype TaskAwaiter`1<string>::get_IsCompleted()\n  IL_0028: brtrue.s IL_0066\n  IL_002a: ldarg.0\n  IL_002b: ldc.i4.0\n  IL_002c: dup\n  IL_002d: stloc.0\n  IL_002e: stfld int32 AsyncDemo/'<GetLengthAsync>d__0'::'<>1__state'\n  IL_0033: ldarg.0\n  IL_0034: ldloc.2\n  IL_0035: stfld valuetype TaskAwaiter`1<string> AsyncDemo/'<GetLengthAsync>d__0'::'<>u__1'\n  IL_003a: ldarg.0\n  IL_003b: ldflda valuetype AsyncTaskMethodBuilder`1<int32> AsyncDemo/'<GetLengthAsync>d__0'::'<>t__builder'\n  IL_0040: ldloca.s 2\n  IL_0042: ldarg.0\n  IL_0043: call instance void valuetype AsyncTaskMethodBuilder`1<int32>::AwaitUnsafeOnCompleted<valuetype TaskAwaiter`1<string>, valuetype AsyncDemo/'<GetLengthAsync>d__0'>(!!0&, !!1&)\n  IL_0048: leave.s IL_00a0\n  // state == 0: вернулись после ожидания\n  IL_004a: ldarg.0\n  IL_004b: ldfld valuetype TaskAwaiter`1<string> AsyncDemo/'<GetLengthAsync>d__0'::'<>u__1'\n  IL_0050: stloc.2\n  IL_0051: ldarg.0\n  IL_0052: ldflda valuetype TaskAwaiter`1<string> AsyncDemo/'<GetLengthAsync>d__0'::'<>u__1'\n  IL_0057: initobj valuetype TaskAwaiter`1<string>\n  IL_005d: ldarg.0\n  IL_005e: ldc.i4.m1\n  IL_005f: dup\n  IL_0060: stloc.0\n  IL_0061: stfld int32 AsyncDemo/'<GetLengthAsync>d__0'::'<>1__state'\n  // общая часть: забрать результат\n  IL_0066: ldloca.s 2\n  IL_0068: call instance !0 valuetype TaskAwaiter`1<string>::GetResult()\n  IL_006d: callvirt instance int32 System.String::get_Length()\n  // ... дальше catch, SetException и SetResult\n}"},
+      "note": "brfalse.s IL_004a - переход по номеру состояния: 0 значит «вернулись после ожидания». get_IsCompleted и brtrue.s - быстрый путь мимо подписки. AwaitUnsafeOnCompleted подписывает MoveNext на завершение задачи, leave.s выходит из метода, и поток уходит делать другую работу. Когда await три, вместо brfalse компилятор ставит switch: в нашей сборке это switch (IL_0052, IL_00b0, IL_0115). GetResult бросает исключение задачи, если она упала: так await пробрасывает ошибку. IL настоящий: собран компилятором .NET SDK 10.0.401 в Release и разобран ilspycmd. Имена сборок и пространств имён сокращены."
+    },
+    {
+      "type": "terms",
+      "title": "Слова: async и потоки",
+      "items": [
+        {"term":"Конечный автомат","text":"Структура, которую компилятор строит из async-метода. Поле <>1__state помнит, на каком await остановились, MoveNext продолжает с этого места.","forms":["state machine","IAsyncStateMachine","MoveNext"]},
+        {"term":"AsyncTaskMethodBuilder","text":"Помощник внутри автомата. Создаёт Task, подписывается на ожидание, выставляет результат (SetResult) или исключение (SetException).","forms":[]},
+        {"term":"SynchronizationContext","text":"Правило, куда вернуть продолжение после await. В WPF и WinForms - в поток окна. В ASP.NET Core его нет: продолжение идёт в пул потоков.","forms":["контекст синхронизации"]},
+        {"term":"ConfigureAwait(false)","text":"Просьба не возвращаться в SynchronizationContext после await. Нужна в библиотеках. В приложении на ASP.NET Core ничего не меняет.","forms":["ConfigureAwait"]},
+        {"term":"ValueTask","text":"Структура вместо Task. Если результат готов сразу, ничего не выделяет. Ждать её можно только один раз.","forms":["ValueTask<T>"]},
+        {"term":"CancellationToken","text":"Флажок отмены. Метод проверяет его или передаёт дальше. Отменяет тот, кто создал CancellationTokenSource.","forms":["токен отмены","CancellationTokenSource"]},
+        {"term":"IAsyncEnumerable","text":"Последовательность, где каждый элемент приходит асинхронно. Читается через await foreach, пишется через async и yield return.","forms":["IAsyncEnumerable<T>","await foreach"]},
+        {"term":"Пул потоков","text":"Общий набор рабочих потоков процесса. На нём выполняются продолжения после await, Task.Run и таймеры.","forms":["пула потоков","пуле потоков","ThreadPool"]},
+        {"term":"Голодание пула потоков","text":"Все потоки пула заняты ожиданием: .Result, .Wait(), Thread.Sleep. Новая работа стоит в очереди, а пул добавляет потоки медленно. Сервис тормозит при почти свободном процессоре.","forms":["thread pool starvation"]}
+      ]
+    },
+    {
+      "type": "example",
+      "title": "Отмена, буфер из пула и IAsyncEnumerable",
+      "label": "C#",
+      "code": "using System.Buffers;\nusing System.Runtime.CompilerServices;\n\n// Буфер из пула. Memory, а не Span: Span нельзя держать через await\nstatic async Task<long> CountBytesAsync(Stream s, CancellationToken ct)\n{\n    byte[] buf = ArrayPool<byte>.Shared.Rent(64 * 1024);\n    try\n    {\n        long total = 0;\n        int read;\n        while ((read = await s.ReadAsync(buf.AsMemory(), ct)) > 0)\n            total += read;\n        return total;\n    }\n    finally\n    {\n        ArrayPool<byte>.Shared.Return(buf);\n    }\n}\n\n// Строки приходят по одной, как только прочитаны\nstatic async IAsyncEnumerable<string> ReadLinesAsync(\n    string path, [EnumeratorCancellation] CancellationToken ct = default)\n{\n    using var reader = new StreamReader(path);\n    while (await reader.ReadLineAsync(ct) is { } line)\n        yield return line;\n}\n\n// Не больше 5 секунд на всё чтение\nusing var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));\nawait foreach (var line in ReadLinesAsync(\"log.txt\", cts.Token))\n    Console.WriteLine(line);",
+      "note": "Rent может вернуть массив больше запрошенного, поэтому считаем по тому, что вернул ReadAsync. 64 КБ меньше порога LOH, так что массив без пула ушёл бы в поколение 0, а с пулом не выделяется вовсе. [EnumeratorCancellation] связывает токен из WithCancellation с параметром метода. Отмена приходит как OperationCanceledException: её ловят там, где решают, что делать дальше. Код собран и запущен на .NET 10."
+    },
+    {
+      "type": "codepair",
+      "title": "Лямбда с захватом и static-лямбда",
+      "left": {"label":"C#","code":"public static List<int> Above(List<int> items, int min)\n    => items.Where(x => x > min).ToList();\n\npublic static List<int> Positive(List<int> items)\n    => items.Where(static x => x > 0).ToList();"},
+      "right": {"label":"IL","code":"// ClosureDemo::Above\nIL_0000: newobj instance void ClosureDemo/'<>c__DisplayClass0_0'::.ctor()\nIL_0005: stloc.0\nIL_0006: ldloc.0\nIL_0007: ldarg.1\nIL_0008: stfld int32 ClosureDemo/'<>c__DisplayClass0_0'::min\nIL_000d: ldarg.0\nIL_000e: ldloc.0\nIL_000f: ldftn instance bool ClosureDemo/'<>c__DisplayClass0_0'::'<Above>b__0'(int32)\nIL_0015: newobj instance void class System.Func`2<int32, bool>::.ctor(object, native int)\nIL_001a: call class IEnumerable`1<!!0> Enumerable::Where<int32>(class IEnumerable`1<!!0>, class System.Func`2<!!0, bool>)\nIL_001f: call class List`1<!!0> Enumerable::ToList<int32>(class IEnumerable`1<!!0>)\nIL_0024: ret\n\n// ClosureDemo::Positive\nIL_0000: ldarg.0\nIL_0001: ldsfld class System.Func`2<int32, bool> ClosureDemo/'<>c'::'<>9__1_0'\nIL_0006: dup\nIL_0007: brtrue.s IL_0020\nIL_0009: pop\nIL_000a: ldsfld class ClosureDemo/'<>c' ClosureDemo/'<>c'::'<>9'\nIL_000f: ldftn instance bool ClosureDemo/'<>c'::'<Positive>b__1_0'(int32)\nIL_0015: newobj instance void class System.Func`2<int32, bool>::.ctor(object, native int)\nIL_001a: dup\nIL_001b: stsfld class System.Func`2<int32, bool> ClosureDemo/'<>c'::'<>9__1_0'\nIL_0020: call class IEnumerable`1<!!0> Enumerable::Where<int32>(class IEnumerable`1<!!0>, class System.Func`2<!!0, bool>)\nIL_0025: call class List`1<!!0> Enumerable::ToList<int32>(class IEnumerable`1<!!0>)\nIL_002a: ret"},
+      "note": "Лямбда читает min, поэтому компилятор делает класс <>c__DisplayClass0_0 с полем min. Каждый вызов Above создаёт два объекта: этот класс и делегат Func (две команды newobj). Лямбда без захвата живёт в статическом классе <>c, а её делегат создаётся один раз и хранится в статическом поле: ldsfld и brtrue.s - проверка этого кэша. static перед лямбдой запрещает захват: случайно взять внешнюю переменную не получится, компилятор выдаст ошибку. Where тоже выделяет объект-итератор и ничего не выполняет до ToList или foreach - это отложенное выполнение. IL настоящий: собран компилятором .NET SDK 10.0.401 в Release и разобран ilspycmd. Имена сборок и пространств имён сокращены."
+    },
+    {
+      "type": "codepair",
+      "title": "foreach по List и по IEnumerable",
+      "left": {"label":"C#","code":"public static int ListSum(List<int> list)\n{\n    int s = 0;\n    foreach (var x in list) s += x;\n    return s;\n}\n\npublic static int EnumSum(IEnumerable<int> seq)\n{\n    int s = 0;\n    foreach (var x in seq) s += x;\n    return s;\n}"},
+      "right": {"label":"IL","code":"// Sum::ListSum\n.locals init (\n  [0] int32,\n  [1] valuetype List`1/Enumerator<int32>,\n  [2] int32\n)\nIL_0000: ldc.i4.0\nIL_0001: stloc.0\nIL_0002: ldarg.0\nIL_0003: callvirt instance valuetype List`1/Enumerator<!0> class List`1<int32>::GetEnumerator()\nIL_0008: stloc.1\n.try\n{\n  IL_0009: br.s IL_0017\n    IL_000b: ldloca.s 1\n    IL_000d: call instance !0 valuetype List`1/Enumerator<int32>::get_Current()\n    IL_0012: stloc.2\n    IL_0013: ldloc.0\n    IL_0014: ldloc.2\n    IL_0015: add\n    IL_0016: stloc.0\n    IL_0017: ldloca.s 1\n    IL_0019: call instance bool valuetype List`1/Enumerator<int32>::MoveNext()\n    IL_001e: brtrue.s IL_000b\n  IL_0020: leave.s IL_0030\n}\nfinally\n{\n  IL_0022: ldloca.s 1\n  IL_0024: constrained. valuetype List`1/Enumerator<int32>\n  IL_002a: callvirt instance void System.IDisposable::Dispose()\n  IL_002f: endfinally\n}\nIL_0030: ldloc.0\nIL_0031: ret\n\n// Sum::EnumSum\n.locals init (\n  [0] int32,\n  [1] class IEnumerator`1<int32>,\n  [2] int32\n)\nIL_0000: ldc.i4.0\nIL_0001: stloc.0\nIL_0002: ldarg.0\nIL_0003: callvirt instance class IEnumerator`1<!0> class IEnumerable`1<int32>::GetEnumerator()\nIL_0008: stloc.1\n.try\n{\n  IL_0009: br.s IL_0016\n    IL_000b: ldloc.1\n    IL_000c: callvirt instance !0 class IEnumerator`1<int32>::get_Current()\n    IL_0011: stloc.2\n    IL_0012: ldloc.0\n    IL_0013: ldloc.2\n    IL_0014: add\n    IL_0015: stloc.0\n    IL_0016: ldloc.1\n    IL_0017: callvirt instance bool System.Collections.IEnumerator::MoveNext()\n    IL_001c: brtrue.s IL_000b\n  IL_001e: leave.s IL_002a\n}\nfinally\n{\n  IL_0020: ldloc.1\n  IL_0021: brfalse.s IL_0029\n  IL_0023: ldloc.1\n  IL_0024: callvirt instance void System.IDisposable::Dispose()\n  IL_0029: endfinally\n}\nIL_002a: ldloc.0\nIL_002b: ret"},
+      "note": "Для List компилятор берёт List<int>.Enumerator - структуру в локальной переменной (valuetype), вызовы прямые (call). Для IEnumerable<int> перечислитель - объект в куче за интерфейсом, каждый шаг - виртуальный вызов (callvirt). На .NET 8 это 40 байт на каждый такой foreach. JIT в .NET 10 в нашем замере сам убрал это выделение, но рассчитывать на это всюду нельзя. В горячем коде принимайте конкретный тип или ReadOnlySpan<T>. IL настоящий: собран компилятором .NET SDK 10.0.401 в Release и разобран ilspycmd. Имена сборок и пространств имён сокращены."
+    },
+    {
+      "type": "codepair",
+      "title": "string.Format и интерполяция",
+      "left": {"label":"C#","code":"public static string HelloFormat(string name, int age)\n    => string.Format(\"{0} is {1}\", name, age);\n\npublic static string Hello(string name, int age)\n    => $\"{name} is {age}\";\n\n// строка известной длины - без промежуточных буферов\nstring id = string.Create(8, 42, (span, n) =>\n{\n    span.Fill('0');\n    n.TryFormat(span[^2..], out _);\n});   // \"00000042\""},
+      "right": {"label":"IL","code":"// StringDemo::HelloFormat\nIL_0000: ldstr \"{0} is {1}\"\nIL_0005: ldarg.0\nIL_0006: ldarg.1\nIL_0007: box System.Int32\nIL_000c: call string System.String::Format(string, object, object)\nIL_0011: ret\n\n// StringDemo::Hello\n.locals init (\n  [0] valuetype DefaultInterpolatedStringHandler\n)\nIL_0000: ldloca.s 0\nIL_0002: ldc.i4.4\nIL_0003: ldc.i4.2\nIL_0004: call instance void DefaultInterpolatedStringHandler::.ctor(int32, int32)\nIL_0009: ldloca.s 0\nIL_000b: ldarg.0\nIL_000c: call instance void DefaultInterpolatedStringHandler::AppendFormatted(string)\nIL_0011: ldloca.s 0\nIL_0013: ldstr \" is \"\nIL_0018: call instance void DefaultInterpolatedStringHandler::AppendLiteral(string)\nIL_001d: ldloca.s 0\nIL_001f: ldarg.1\nIL_0020: call instance void DefaultInterpolatedStringHandler::AppendFormatted<int32>(!!0)\nIL_0025: ldloca.s 0\nIL_0027: call instance string DefaultInterpolatedStringHandler::ToStringAndClear()\nIL_002c: ret"},
+      "note": "string.Format принимает object, поэтому int упакован (box). Интерполяция с C# 10 собирается через DefaultInterpolatedStringHandler - структуру в локальной переменной. AppendFormatted<int> - generic, без упаковки, а буфер берётся из ArrayPool. string.Create пишет прямо в память новой строки. StringBuilder нужен, когда строку собирают в цикле. Строковые литералы интернированы: одинаковый литерал во всей программе - один объект. string.Intern для строк из данных почти никогда не нужен: такие строки живут до конца процесса. IL настоящий: собран компилятором .NET SDK 10.0.401 в Release и разобран ilspycmd. Имена сборок и пространств имён сокращены."
+    },
+    {
+      "type": "chart",
+      "title": "Сколько байт выделяет один вызов",
+      "unit": "байт",
+      "items": [
+        {"label":"Box(int)","value":24,"note":"одна упаковка"},
+        {"label":"string.Format(\"{0}\", n)","value":56,"note":"упаковка 24 и строка 32"},
+        {"label":"$\"{n}\"","value":32,"note":"только строка"},
+        {"label":"foreach по IEnumerable<int>, .NET 8","value":40,"note":"перечислитель в куче"},
+        {"label":"foreach по IEnumerable<int>, .NET 10","value":0,"note":"JIT убрал выделение"},
+        {"label":"Where с захватом min","value":160,"note":"замыкание, делегат и итератор"},
+        {"label":"Where со static-лямбдой","value":72,"note":"только итератор"},
+        {"label":"async Task<int>, готов сразу","value":72,"note":"объект Task"},
+        {"label":"async ValueTask<int>, готов сразу","value":0,"note":"ничего"}
+      ],
+      "note": "Настоящий замер: GC.GetAllocatedBytesForCurrentThread до и после миллиона вызовов, после прогрева до Tier1. Release, x64, .NET 10.0.12 и 8.0.31. Число 12345 - пять символов, строка из них занимает 32 байта. Все строки, кроме foreach, на .NET 8 и .NET 10 совпали."
+    },
+    {
+      "type": "compare",
+      "title": "JIT и готовый код: что когда работает",
+      "cols": ["","Tier0","Tier1 с PGO","ReadyToRun","NativeAOT"],
+      "rows": [
+        ["Когда делается","При первом вызове метода","После 30 вызовов или долгого цикла","Заранее, при publish","Заранее, при publish"],
+        ["Качество кода","Простое, без оптимизаций","Лучшее: учтено, как метод вызывался","Хорошее, без данных о работе","Хорошее, без данных о работе"],
+        ["Зачем","Быстро запуститься","Быстро работать долго","Быстрый старт, горячие методы потом всё равно уйдут в Tier1","Мгновенный старт и мало памяти"],
+        ["Ограничения","Нет","Нет","Файлы больше","Нет JIT: нельзя грузить сборки на лету, рефлексия и сериализация ограничены"]
+      ]
+    },
+    {
+      "type": "cheatsheet",
+      "title": "Инструменты: смотреть IL и мерить",
+      "items": [
+        {"cmd":"dotnet tool install -g ilspycmd","text":"Поставить декомпилятор ILSpy для терминала","group":"Смотреть IL"},
+        {"cmd":"ilspycmd -il bin/Release/net10.0/MyApp.dll","text":"IL всей сборки","group":"Смотреть IL"},
+        {"cmd":"ilspycmd -t MyApp.Orders bin/Release/net10.0/MyApp.dll","text":"Один тип в виде C#","group":"Смотреть IL"},
+        {"cmd":"ilspycmd -lv CSharp4 bin/Release/net10.0/MyApp.dll","text":"C# без сахара: видны конечные автоматы async","group":"Смотреть IL"},
+        {"cmd":"sharplab.io","text":"То же в браузере: C# слева, IL, упрощённый C# или ассемблер JIT справа","group":"Смотреть IL"},
+        {"cmd":"ildasm MyApp.dll","text":"Дизассемблер из Visual Studio: Developer Command Prompt, только Windows","group":"Смотреть IL"},
+        {"cmd":"dotnet tool install -g dotnet-counters","text":"Так же ставятся dotnet-trace, dotnet-gcdump и dotnet-dump","group":"Мерить живой процесс"},
+        {"cmd":"dotnet-counters ps","text":"Найти id процесса .NET","group":"Мерить живой процесс"},
+        {"cmd":"dotnet-counters monitor -p 1234 --counters System.Runtime","text":"Память, сборки по поколениям, очередь пула потоков в реальном времени","group":"Мерить живой процесс"},
+        {"cmd":"dotnet-trace collect -p 1234 --profile gc-verbose","text":"След сборок и выделений в файл .nettrace для PerfView или Visual Studio","group":"Мерить живой процесс"},
+        {"cmd":"dotnet-gcdump collect -p 1234","text":"Снимок кучи: какие типы сколько занимают","group":"Мерить живой процесс"},
+        {"cmd":"dotnet-gcdump report app.gcdump","text":"Таблица типов из снимка прямо в терминале","group":"Мерить живой процесс"},
+        {"cmd":"dotnet-dump collect -p 1234","text":"Полный дамп памяти процесса","group":"Мерить живой процесс"},
+        {"cmd":"dotnet-dump analyze dump.dmp","text":"Разбор дампа: dumpheap -stat, gcroot, clrstack -all, threadpool","group":"Мерить живой процесс"},
+        {"cmd":"dotnet add package BenchmarkDotNet","text":"Библиотека для точных замеров кода","group":"Мерить код"},
+        {"cmd":"dotnet run -c Release","text":"Запустить замеры. В Debug BenchmarkDotNet мерить откажется","group":"Мерить код"}
+      ]
+    },
+    {
+      "type": "practice",
+      "title": "Уберите упаковку и докажите замером",
+      "task": "Сравните string.Format и интерполяцию BenchmarkDotNet с [MemoryDiagnoser]. Найдите упаковку в IL и убедитесь, что разница в памяти - ровно один упакованный int.",
+      "steps": ["dotnet new console -n BoxBench","cd BoxBench и dotnet add package BenchmarkDotNet","Вставьте код из решения в Program.cs","Запустите: dotnet run -c Release","Сравните колонку Allocated у двух методов","ilspycmd -il bin/Release/net10.0/BoxBench.dll - найдите box System.Int32"],
+      "check": "У Format в колонке Allocated на 24 байта больше, чем у Interpolated. В IL у Format есть box System.Int32, у Interpolated - нет, зато есть DefaultInterpolatedStringHandler.",
+      "hint": "[MemoryDiagnoser] добавляет колонки Gen0 и Allocated. Без него BenchmarkDotNet меряет только время.",
+      "solution": "using BenchmarkDotNet.Attributes;\nusing BenchmarkDotNet.Running;\n\nBenchmarkRunner.Run<Bench>();\n\n[MemoryDiagnoser]\npublic class Bench\n{\n    private int _id = 12345;\n\n    [Benchmark(Baseline = true)]\n    public string Format() => string.Format(\"id={0}\", _id);\n\n    [Benchmark]\n    public string Interpolated() => $\"id={_id}\";\n}"
+    },
+    {
+      "type": "practice",
+      "title": "Устройте взаимоблокировку и почините её",
+      "task": "Повторите в консоли то, что ломает программы на WPF и WinForms: .Result на задаче, продолжение которой ждёт поток окна.",
+      "steps": ["dotnet new console -n Deadlock","Вставьте код из решения в Program.cs","Запустите: dotnet run - через 2 секунды программа напишет hung","Допишите .ConfigureAwait(false) после Task.Delay(100) и запустите снова"],
+      "check": "Без ConfigureAwait(false) выводится hung. С ним - «готово: 42».",
+      "hint": "Продолжение после await просится в контекст. Контекст ждёт главный поток. Главный поток ждёт задачу в Wait. Круг замкнулся. В настоящем приложении лучшее лечение - await вместо .Result до самого верха.",
+      "solution": "using System.Collections.Concurrent;\n\n// Контекст с одним потоком, как у окна WPF или WinForms\nSynchronizationContext.SetSynchronizationContext(new OneThreadContext());\n\nTask<int> task = GetAsync();\n// .Result висел бы вечно, Wait с таймаутом - чтобы это увидеть\nConsole.WriteLine(task.Wait(2000) ? $\"готово: {task.Result}\" : \"hung\");\n\nstatic async Task<int> GetAsync()\n{\n    await Task.Delay(100);   // продолжение просится обратно в контекст\n    return 42;\n}\n\n// Продолжения копятся в очереди. Разбирать её должен главный поток,\n// но он стоит в Wait.\nsealed class OneThreadContext : SynchronizationContext\n{\n    private readonly BlockingCollection<(SendOrPostCallback, object?)> _queue = new();\n    public override void Post(SendOrPostCallback d, object? state)\n        => _queue.Add((d, state));\n}"
+    },
+    {
+      "type": "practice",
+      "title": "Прочитайте конечный автомат в ILSpy",
+      "task": "Соберите async-метод с тремя await и найдите в нём номера состояний, быстрый путь IsCompleted и переход switch.",
+      "steps": ["dotnet new classlib -n AsyncLab","Вставьте метод из решения в Class1.cs","dotnet build -c Release","ilspycmd -lv CSharp4 bin/Release/net10.0/AsyncLab.dll - упрощённый C#","ilspycmd -il bin/Release/net10.0/AsyncLab.dll - IL, найдите switch","dotnet build -c Debug и посмотрите тот же тип в bin/Debug"],
+      "check": "В MoveNext есть switch (num) с ветками 0, 1 и 2, перед каждым ожиданием стоит if (!awaiter.IsCompleted). У автомата три поля-ожидателя разных типов. В Release тип <ThreeAsync>d__0 - struct (в IL: extends System.ValueType), в Debug - class.",
+      "hint": "Ищите в IL строку с ldfld ... <>1__state и сразу за ней switch.",
+      "solution": "public static class AsyncLab\n{\n    public static async Task<int> ThreeAsync()\n    {\n        await Task.Delay(10);\n        await Task.Yield();\n        await Task.Delay(10).ConfigureAwait(false);\n        return 1;\n    }\n}"
+    },
+    {
+      "type": "rules",
+      "title": "Как правильно",
+      "items": [
+        {"kind":"do","title":"Сначала замер, потом правка","text":"Выделения и паузы меряйте BenchmarkDotNet с [MemoryDiagnoser] или dotnet-counters. Правка без замера до и после - догадка."},
+        {"kind":"when","title":"Span и stackalloc","text":"Для разбора строк и байтов в горячем коде. stackalloc - до сотен байт, больше - ArrayPool. Через await Span не живёт: там нужен Memory<T>."},
+        {"kind":"when","title":"ValueTask","text":"Когда метод часто завершается синхронно: данные уже в кэше или в буфере. Ждать ровно один раз, не хранить, не ждать из двух мест. Нужно больше - .AsTask()."},
+        {"kind":"dont","title":"async void","text":"Только для обработчиков событий. Исключение из async void не поймать снаружи, в сервисе оно роняет процесс. В остальных местах - async Task."},
+        {"kind":"dont","title":".Result и .Wait()","text":"Блокируют поток. В UI это взаимоблокировка, в ASP.NET Core - голодание пула потоков. await до самого верха."},
+        {"kind":"do","title":"ConfigureAwait(false) в библиотеках","text":"Код библиотеки не знает, где его вызовут. В коде самого приложения на ASP.NET Core он ничего не меняет."},
+        {"kind":"do","title":"CancellationToken по цепочке","text":"Принимайте его последним параметром в каждом async-методе с вводом-выводом и передавайте дальше. Иначе отменённый запрос продолжает нагружать базу и сеть."},
+        {"kind":"dont","title":"GC.Collect","text":"Почти никогда. Он запускает полную блокирующую сборку и сбивает подстройку GC под вашу нагрузку. Исключения - тесты на утечки и редкие точки, где пауза заведомо не мешает."},
+        {"kind":"when","title":"Server GC","text":"Для сервисов: в ASP.NET Core включён сам. В контейнере с жёстким лимитом памяти не выключайте DATAS без замера - он и держит память Server GC в рамках."},
+        {"kind":"tip","title":"readonly struct","text":"Если поля не меняются после создания, пометьте struct как readonly. Пропадут скрытые копии при in и в readonly-полях."},
+        {"kind":"tip","title":"static-лямбды","text":"Пишите static перед лямбдой без захвата. Компилятор не даст случайно захватить переменную и выделять замыкание на каждый вызов."},
+        {"kind":"tip","title":"Финализатор - редкость","text":"Свой финализатор нужен, только если держите сырой дескриптор и нет готового SafeHandle. Обычно хватает IDisposable."}
+      ]
+    },
+    {
+      "type": "mistakes",
+      "title": "Что ломается и как найти",
+      "items": [
+        {"problem":"Сервис тормозит, процессор почти свободен, очередь пула потоков растёт","fix":".Result, .Wait() или синхронный ввод-вывод держат потоки пула. dotnet-counters покажет длину очереди пула потоков, dotnet-dump analyze и clrstack -all - где потоки стоят. Перепишите на await."},
+        {"problem":"Память растёт, хотя утечки в коде не видно","fix":"Чаще всего это подписка на событие долгоживущего объекта или статический словарь-кэш. Снимите два dotnet-gcdump с интервалом и сравните, какой тип растёт. Кто держит объект, покажет gcroot в dotnet-dump."},
+        {"problem":"Паузы GC по сотне миллисекунд под нагрузкой","fix":"Много объектов переживают поколение 0 и копятся в поколении 2, или часто выделяются массивы от 85 000 байт в LOH. Переиспользуйте буферы через ArrayPool и смотрите в dotnet-counters, сколько сборок поколения 2."},
+        {"problem":"ValueTask ждут дважды или из двух мест","fix":"Результат непредсказуем: объект под ValueTask мог уже уйти другому вызову. Ждите один раз, а для повторного ожидания берите .AsTask()."},
+        {"problem":"Исключение из async void уронило процесс","fix":"async void нельзя дождаться и нельзя обернуть в try снаружи. Замените на async Task и дождитесь вызова."},
+        {"problem":"Словарь с ключом-struct работает медленно","fix":"Без своих Equals и GetHashCode struct сравнивается реализацией ValueType: при полях-ссылках через отражение, а хеш часто совпадает. Реализуйте IEquatable<T> или возьмите record struct."},
+        {"problem":"LINQ-запрос выполняется несколько раз","fix":"Where и Select ленивые: запрос выполняется заново при каждом foreach, Count() или Any(). Если результат нужен несколько раз, один раз вызовите ToList()."},
+        {"problem":"В массиве из ArrayPool чужие данные","fix":"Массив использовали после Return или вернули дважды. После Return ссылку забудьте. Rent не очищает массив: в нём может лежать прошлое содержимое."}
+      ]
+    },
+    {
+      "type": "quiz",
+      "title": "Проверьте себя",
+      "items": [
+        {"q":"Где лежит поле int внутри объекта класса?","options":["В стеке","В куче, внутри объекта","В регистре процессора"],"answer":1,"why":"Значимый тип хранится там, где объявлен. Поле класса - часть объекта, а объект в куче."},
+        {"q":"Какая команда IL выделяет объект под значимый тип?","options":["box","ldloc","ldarg"],"answer":0,"why":"box копирует значение в новый объект в куче. ldloc и ldarg только читают переменную и параметр."},
+        {"q":"Почему x => x > min выделяет память при каждом вызове метода?","options":["Лямбды всегда медленные","Из-за ToList","Захвачена min: создаются объект-замыкание и делегат"],"answer":2,"why":"Компилятор кладёт min в поле класса <>c__DisplayClass. Лямбда без захвата кэширует делегат в статическом поле."},
+        {"q":"Что делает AwaitUnsafeOnCompleted, если задача ещё не готова?","options":["Подписывает MoveNext на завершение и отпускает поток","Блокирует поток до завершения","Бросает исключение"],"answer":0,"why":"Автомат запоминает состояние и выходит. MoveNext вызовут снова, когда задача завершится."},
+        {"q":"Когда ValueTask выгоднее Task?","options":["Всегда","Когда результат ждут из нескольких мест","Когда метод часто завершается синхронно"],"answer":2,"why":"Готовый результат ValueTask отдаёт без выделения. Ждать его можно только один раз."},
+        {"q":"Массив на 100 000 байт. Куда он попадёт?","options":["В поколение 0","В LOH","В стек"],"answer":1,"why":"Объекты от 85 000 байт идут сразу в LOH. Он собирается только вместе с поколением 2."},
+        {"q":"Почему .Result в обработчике кнопки WPF может зависнуть навсегда?","options":["WPF не поддерживает Task","Продолжение после await ждёт поток окна, а поток окна ждёт .Result","Кнопка нажата дважды"],"answer":1,"why":"Каждый ждёт другого. Лечение - await в async-обработчике или ConfigureAwait(false) в вызываемом коде."},
+        {"q":"Что делает JIT с методом после 30 вызовов?","options":["Удаляет Tier0-код из .dll","Собирает его заново с оптимизациями (Tier1)","Переводит его обратно в IL"],"answer":1,"why":"Горячий метод перекомпилируется на Tier1 с учётом данных PGO, собранных на Tier0."}
+      ]
+    },
+    { "type": "project", "title": "Где это в вашем проекте" }
+  ]
+}
