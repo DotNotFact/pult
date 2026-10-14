@@ -14,7 +14,29 @@
     }
   },
   "bundle": {
-    "active": false,
-    "icon": ["icons/icon.ico"]
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "DotNotFact",
+    "copyright": "Copyright (c) 2026 DotNotFact, MIT License",
+    "homepage": "https://github.com/DotNotFact/pult",
+    "category": "DeveloperTool",
+    "shortDescription": "Команды любого проекта с объяснениями, запуском, CI и уроками",
+    "useLocalToolsDir": true,
+    "icon": ["icons/icon.ico", "icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png"],
+    "windows": {
+      "webviewInstallMode": { "type": "embedBootstrapper", "silent": true },
+      "allowDowngrades": true,
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English", "Russian"],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "sidebarImage": "installer/sidebar.bmp",
+        "headerImage": "installer/header.bmp",
+        "installerHooks": "installer/hooks.nsh",
+        "compression": "lzma"
+      }
+    }
   }
 }

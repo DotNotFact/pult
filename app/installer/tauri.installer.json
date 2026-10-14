@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "resources": {
+      "../target/release/pult-cli.exe": "pult-cli.exe",
+      "installer/pult.cmd": "bin/pult.cmd"
+    }
+  }
+}

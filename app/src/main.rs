@@ -6,7 +6,7 @@ use notify::{RecursiveMode, Watcher};
 use pult_core::model::{Project, Script};
 use pult_core::runner::{self, Live};
 use pult_core::store::{self, HistEntry, Settings};
-use pult_core::util::{inside, is_unc, now_ms};
+use pult_core::util::{inside, is_unc, now_ms, resolve_inside};
 use pult_core::{ci, env, git, helpcmd, kb, scan};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -15,11 +15,13 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_notification::NotificationExt;
+
+mod tray;
 
 type R<T> = Result<T, String>;
 
@@ -69,6 +71,21 @@ struct App {
 
 type St<'a> = State<'a, Arc<App>>;
 
+/// Замок, который не паникует на «отравлении». Паника в одном потоке (вывод запуска, сверка
+/// проекта) иначе роняла бы каждую следующую команду окна, и Пульт переставал отвечать целиком.
+/// Под замком только вставки и присваивания: прерванная на середине правка данные не ломает.
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Фоновый поток с именем: в сообщении о панике и в отладчике видно, чей он. Не запустился
+/// (система исчерпала потоки) - пишем об этом, а не роняем команду окна, как thread::spawn.
+fn spawn_named(name: &str, f: impl FnOnce() + Send + 'static) {
+    if let Err(e) = std::thread::Builder::new().name(name.into()).spawn(f) {
+        eprintln!("поток {name} не запустился: {e}");
+    }
+}
+
 fn key(p: &str) -> String {
     p.to_lowercase()
 }
@@ -94,15 +111,29 @@ fn canon(p: &str) -> R<PathBuf> {
     Ok(PathBuf::from(s.strip_prefix(r"\\?\").unwrap_or(&s)))
 }
 
-fn fingerprint(p: &Project) -> u64 {
-    let mut c = p.clone();
-    c.scanned_at = 0;
-    c.scan_ms = 0;
-    c.cached = false;
-    c.favorites = vec![];
-    let mut h = DefaultHasher::new();
-    serde_json::to_string(&c).unwrap_or_default().hash(&mut h);
-    h.finish()
+/// JSON проекта идёт прямо в хеш: без копии проекта и без строки в полмегабайта
+/// (замер в docs/optimizations.md).
+struct HashWriter(DefaultHasher);
+
+impl std::io::Write for HashWriter {
+    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+        self.0.write(b);
+        Ok(b.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Отпечаток проекта без полей, которые меняются при каждом разборе или зависят от окна.
+/// Эти поля на время хеша обнуляются и возвращаются на место.
+fn fingerprint(p: &mut Project) -> u64 {
+    let keep = (p.scanned_at, p.scan_ms, p.cached, std::mem::take(&mut p.favorites));
+    (p.scanned_at, p.scan_ms, p.cached) = (0, 0, false);
+    let mut h = HashWriter(DefaultHasher::new());
+    let _ = serde_json::to_writer(&mut h, &*p);
+    (p.scanned_at, p.scan_ms, p.cached, p.favorites) = keep;
+    h.0.finish()
 }
 
 fn for_client(mut p: Project, cached: bool) -> Project {
@@ -111,15 +142,41 @@ fn for_client(mut p: Project, cached: bool) -> Project {
     p
 }
 
-fn register(app: &App, p: Project) {
-    let mut g = app.inner.lock().unwrap();
-    let fp = fingerprint(&p);
+/// Событие `project`. Проект сериализуется по ссылке сразу в строку: `json!` сначала строил из
+/// него дерево Value (для большого проекта - мегабайты кучи), и только потом строку.
+#[derive(Serialize, Clone)]
+struct ProjectEvent<'a> {
+    reason: &'a str,
+    data: &'a Project,
+}
+
+fn register(app: &App, mut p: Project) {
+    let fp = fingerprint(&mut p);
+    register_fp(app, p, fp);
+}
+
+fn register_fp(app: &App, p: Project, fp: u64) {
+    let mut g = lock(&app.inner);
     g.projects.insert(key(&p.path), Proj { data: p, fp, refreshing: false, again: false });
 }
 
 fn find_script(app: &App, id: &str) -> Option<(String, Script)> {
-    let g = app.inner.lock().unwrap();
+    let g = lock(&app.inner);
     g.projects.values().find_map(|p| p.data.scripts.iter().find(|s| s.id == id).map(|s| (p.data.path.clone(), s.clone())))
+}
+
+/// Проект по пути: уже открытый - из памяти, иначе разбор (для сценариев из трея, когда окно его не открывало).
+fn find_project(handle: &AppHandle, app: &Arc<App>, path: &str) -> R<Project> {
+    let root = canon(path)?.to_string_lossy().to_string();
+    if let Some(p) = lock(&app.inner).projects.get(&key(&root)) {
+        return Ok(p.data.clone());
+    }
+    let p = scan::scan(Path::new(&root), &opts())?;
+    store::save_scan(&p);
+    register(app, p.clone());
+    let data = for_client(p.clone(), false);
+    let _ = handle.emit("project", ProjectEvent { reason: "scenario", data: &data });
+    Ok(p)
 }
 
 fn opts() -> scan::ScanOpts {
@@ -129,7 +186,7 @@ fn opts() -> scan::ScanOpts {
 // ---------- фоновая сверка и слежение за файлами ----------
 fn refresh(handle: AppHandle, app: Arc<App>, root: String, reason: &'static str) {
     {
-        let mut g = app.inner.lock().unwrap();
+        let mut g = lock(&app.inner);
         if let Some(p) = g.projects.get_mut(&key(&root)) {
             if p.refreshing {
                 p.again = true;
@@ -138,16 +195,19 @@ fn refresh(handle: AppHandle, app: Arc<App>, root: String, reason: &'static str)
             p.refreshing = true;
         }
     }
-    std::thread::spawn(move || {
+    spawn_named("pult-refresh", move || {
         match scan::scan(Path::new(&root), &opts()) {
-            Ok(p) => {
-                store::save_scan(&p);
-                let fp = fingerprint(&p);
-                let changed = app.inner.lock().unwrap().projects.get(&key(&root)).is_none_or(|x| x.fp != fp);
+            Ok(mut p) => {
+                let fp = fingerprint(&mut p);
+                let changed = lock(&app.inner).projects.get(&key(&root)).is_none_or(|x| x.fp != fp);
                 if changed {
-                    register(&app, p.clone());
-                    let _ = handle.emit("project", json!({ "reason": reason, "data": for_client(p, false) }));
-                } else if let Some(x) = app.inner.lock().unwrap().projects.get_mut(&key(&root)) {
+                    // кэш на диске переписывается только при изменениях: прежде каждая сверка
+                    // писала полмегабайта JSON ради одного нового scannedAt
+                    store::save_scan(&p);
+                    let data = for_client(p.clone(), false);
+                    register_fp(&app, p, fp);
+                    let _ = handle.emit("project", ProjectEvent { reason, data: &data });
+                } else if let Some(x) = lock(&app.inner).projects.get_mut(&key(&root)) {
                     x.data.scanned_at = p.scanned_at;
                 }
             }
@@ -155,7 +215,7 @@ fn refresh(handle: AppHandle, app: Arc<App>, root: String, reason: &'static str)
                 let _ = handle.emit("project-error", json!({ "path": root, "error": e }));
             }
         }
-        let again = match app.inner.lock().unwrap().projects.get_mut(&key(&root)) {
+        let again = match lock(&app.inner).projects.get_mut(&key(&root)) {
             Some(x) => {
                 x.refreshing = false;
                 std::mem::take(&mut x.again)
@@ -169,48 +229,13 @@ fn refresh(handle: AppHandle, app: Arc<App>, root: String, reason: &'static str)
     });
 }
 
-/// Что за событие файла: 1 - перечитать проект, 2 - обновить git, 0 - не важно.
-fn classify_event(root: &Path, p: &Path) -> u8 {
-    let Ok(r) = p.strip_prefix(root) else { return 0 };
-    let parts: Vec<String> = r.components().map(|c| c.as_os_str().to_string_lossy().to_string()).collect();
-    let Some(first) = parts.first() else { return 0 };
-    // именно папка .git, а не .gitlab-ci.yml или .githooks
-    if first == ".git" {
-        let rest = parts[1..].join("/");
-        let hit = ["HEAD", "index", "FETCH_HEAD", "MERGE_HEAD", "ORIG_HEAD", "packed-refs"].contains(&rest.as_str()) || rest.starts_with("refs/") || rest.starts_with("rebase-");
-        return if hit { 2 } else { 0 };
-    }
-    let name = parts.last().cloned().unwrap_or_default();
-    if parts[0] == "node_modules" {
-        return u8::from(parts.len() == 2 && [".modules.yaml", ".package-lock.json", ".yarn-state.yml"].contains(&name.as_str()));
-    }
-    let kb = kb::get();
-    let skip = kb.str_list("skipDirs");
-    if parts.iter().any(|c| skip.contains(c)) {
-        return 0;
-    }
-    let low = name.to_lowercase();
-    let fixed = ["package.json", "pnpm-lock.yaml", "package-lock.json", "yarn.lock", "makefile", "gnumakefile", "justfile", "taskfile.yml", "taskfile.yaml", "readme.md", ".nvmrc", ".gitlab-ci.yml", ".env", ".env.example", "jenkinsfile"];
-    let from_kb = kb.manifests["kinds"].as_array().into_iter().flatten().flat_map(|k| k["files"].as_array().cloned().unwrap_or_default()).filter_map(|v| v.as_str().map(|s| s.to_lowercase())).any(|f| f == low);
-    if fixed.contains(&low.as_str()) || from_kb || [".sln", ".slnx", ".csproj", ".fsproj"].iter().any(|e| low.ends_with(e)) {
-        return 1;
-    }
-    if parts.len() >= 3 && parts[0] == ".github" && parts[1] == "workflows" {
-        return 1;
-    }
-    if parts.len() >= 2 && kb.str_list("scriptDirs").contains(first) && [".ps1", ".sh", ".bat", ".cmd", ".py", ".js", ".mjs", ".ts"].iter().any(|e| low.ends_with(e)) {
-        return 1;
-    }
-    0
-}
-
 fn ensure_watch(handle: &AppHandle, app: &Arc<App>, root: &str) {
     if !store::config().settings.auto_refresh {
         return;
     }
     let k = key(root);
     {
-        let mut g = app.inner.lock().unwrap();
+        let mut g = lock(&app.inner);
         if let Some(w) = g.watchers.get_mut(&k) {
             w.0 = now_ms();
             return;
@@ -218,7 +243,9 @@ fn ensure_watch(handle: &AppHandle, app: &Arc<App>, root: &str) {
         // не больше четырёх наблюдаемых проектов - самый давний отпускаем;
         // при повторном открытии он снова попадёт сюда
         while g.watchers.len() >= 4 {
-            let Some(oldest) = g.watchers.iter().min_by_key(|(_, v)| v.0).map(|(k, _)| k.clone()) else { break };
+            let Some(oldest) = g.watchers.iter().min_by_key(|(_, v)| v.0).map(|(k, _)| k.clone()) else {
+                break;
+            };
             g.watchers.remove(&oldest);
         }
     }
@@ -228,7 +255,7 @@ fn ensure_watch(handle: &AppHandle, app: &Arc<App>, root: &str) {
     let Ok(mut w) = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         if let Ok(ev) = res {
             for p in &ev.paths {
-                let kind = classify_event(&r2, p);
+                let kind = scan::watch_kind(&r2, p, &kb::get());
                 if kind > 0 {
                     let _ = tx.send(kind);
                 }
@@ -241,7 +268,7 @@ fn ensure_watch(handle: &AppHandle, app: &Arc<App>, root: &str) {
         return;
     }
     let (h2, a2, root2) = (handle.clone(), app.clone(), root.to_string());
-    std::thread::spawn(move || {
+    spawn_named("pult-watch", move || {
         while let Ok(first) = rx.recv() {
             let mut scan_needed = first == 1;
             let mut git_needed = first == 2;
@@ -259,7 +286,7 @@ fn ensure_watch(handle: &AppHandle, app: &Arc<App>, root: &str) {
             } else if git_needed {
                 let g = git::info(Path::new(&root2), &store::trusted_hosts());
                 let mut changed = false;
-                if let Some(p) = a2.inner.lock().unwrap().projects.get_mut(&key(&root2)) {
+                if let Some(p) = lock(&a2.inner).projects.get_mut(&key(&root2)) {
                     if p.data.git != g {
                         p.data.git = g.clone();
                         changed = true;
@@ -271,17 +298,23 @@ fn ensure_watch(handle: &AppHandle, app: &Arc<App>, root: &str) {
             }
         }
     });
-    app.inner.lock().unwrap().watchers.insert(k, (now_ms(), w));
+    lock(&app.inner).watchers.insert(k, (now_ms(), w));
 }
 
 // ---------- команды: проект и знания ----------
 #[tauri::command]
 async fn state(st: St<'_>) -> R<Value> {
     let c = store::config();
-    let recent: Vec<Value> = c.recent.iter().map(|r| json!({ "path": r.path, "name": r.name, "at": r.at, "pinned": r.pinned, "exists": Path::new(&r.path).is_dir() })).collect();
-    let runs: Vec<RunPub> = st.inner.lock().unwrap().runs.values().map(|r| r.p.clone()).collect();
-    let open = st.open_path.lock().unwrap().take();
-    Ok(json!({ "recent": recent, "last": c.last, "settings": c.settings, "runs": runs, "kb": kb::get().client_bundle(), "openPath": open, "version": env!("CARGO_PKG_VERSION") }))
+    let recent: Vec<Value> = c
+        .recent
+        .iter()
+        .map(|r| json!({ "path": r.path, "name": r.name, "at": r.at, "pinned": r.pinned, "exists": Path::new(&r.path).is_dir() }))
+        .collect();
+    let runs: Vec<RunPub> = lock(&st.inner).runs.values().map(|r| r.p.clone()).collect();
+    let open = lock(&st.open_path).take();
+    Ok(
+        json!({ "recent": recent, "last": c.last, "settings": c.settings, "runs": runs, "kb": kb::get().client_bundle(), "openPath": open, "version": env!("CARGO_PKG_VERSION") }),
+    )
 }
 
 #[tauri::command]
@@ -300,7 +333,7 @@ async fn scan_project(handle: AppHandle, st: St<'_>, path: String, force: Option
     let root = canon(&path)?;
     let root_s = root.to_string_lossy().to_string();
     let force = force.unwrap_or(false);
-    let mem = app.inner.lock().unwrap().projects.get(&key(&root_s)).map(|p| p.data.clone());
+    let mem = lock(&app.inner).projects.get(&key(&root_s)).map(|p| p.data.clone());
     let (data, cached) = match (mem, force) {
         (Some(d), false) => {
             if now_ms().saturating_sub(d.scanned_at) > 30_000 {
@@ -358,10 +391,37 @@ async fn env_info(names: Vec<String>, docker: Option<bool>, force: Option<bool>)
     .map_err(|e| e.to_string())
 }
 
+/// Справка программы. Файл из папки проекта запускается, только если окно передало его путь
+/// в `confirmed` - то есть пользователь увидел путь и согласился.
 #[tauri::command]
-async fn help(st: St<'_>, script_id: String) -> R<helpcmd::Help> {
+async fn help(st: St<'_>, script_id: String, confirmed: Option<String>) -> R<helpcmd::Help> {
     let (root, s) = find_script(&st, &script_id).ok_or("Скрипт не найден - обновите проект")?;
-    tauri::async_runtime::spawn_blocking(move || helpcmd::ask(&s, Path::new(&root), &kb::get())).await.map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || helpcmd::ask_confirmed(&s, Path::new(&root), &kb::get(), confirmed.as_deref()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// «Доверять этому репозиторию»: git для него запускается, хотя его настройки могут запускать
+/// программы. Сетевой путь в настройках не доверяется никогда.
+#[tauri::command]
+async fn trust_repo(handle: AppHandle, st: St<'_>, path: String) -> R<Option<pult_core::model::GitInfo>> {
+    let root = lock(&st.inner).projects.get(&key(&path)).map(|p| p.data.path.clone()).ok_or("Проект не открыт")?;
+    let app = st.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let loc = git::locate(Path::new(&root)).ok_or("Это не git-репозиторий")?;
+        if loc.verdict.as_ref().is_some_and(|v| v.refused) {
+            return Err("В настройках репозитория сетевой путь - git для него не запускаю".to_string());
+        }
+        store::trust_repo(&loc.work);
+        let g = git::info(Path::new(&root), &store::trusted_hosts());
+        if let Some(p) = lock(&app.inner).projects.get_mut(&key(&root)) {
+            p.data.git = g.clone();
+        }
+        let _ = handle.emit("git", json!({ "path": root, "git": g }));
+        Ok(g)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ---------- команды: запуск ----------
@@ -389,20 +449,34 @@ fn new_id() -> String {
 fn start_run(handle: &AppHandle, app: &Arc<App>, root: &str, s: &Script, args: &str) -> R<RunPub> {
     let argv = build_argv(s, args)?;
     let id = new_id();
-    let p = RunPub { id: id.clone(), project: root.into(), script_id: s.id.clone(), title: s.name.clone(), cmd: pult_core::util::display_argv(&argv), where_: s.where_.clone(), args: args.trim().into(), status: "running".into(), code: None, started_at: now_ms(), ended_at: None, kind: "script".into() };
+    let p = RunPub {
+        id: id.clone(),
+        project: root.into(),
+        script_id: s.id.clone(),
+        title: s.name.clone(),
+        cmd: pult_core::util::display_argv(&argv),
+        where_: s.where_.clone(),
+        args: args.trim().into(),
+        status: "running".into(),
+        code: None,
+        started_at: now_ms(),
+        ended_at: None,
+        kind: "script".into(),
+    };
     let settings = store::config().settings;
-    let mut envs: Vec<(String, String)> = vec![("PYTHONIOENCODING".into(), "utf-8".into()), ("PYTHONUNBUFFERED".into(), "1".into()), ("PULT".into(), "1".into())];
+    let mut envs: Vec<(String, String)> =
+        vec![("PYTHONIOENCODING".into(), "utf-8".into()), ("PYTHONUNBUFFERED".into(), "1".into()), ("PULT".into(), "1".into())];
     if settings.colors {
         envs.extend([("FORCE_COLOR".into(), "1".into()), ("CLICOLOR_FORCE".into(), "1".into()), ("NO_COLOR".into(), String::new())]);
     } else {
         envs.extend([("NO_COLOR".into(), "1".into()), ("FORCE_COLOR".into(), String::new())]);
     }
     let cwd = Path::new(root).join(if s.where_ == "." { "" } else { &s.where_ });
-    app.inner.lock().unwrap().runs.insert(id.clone(), RunRec { p: p.clone(), log: String::new(), live: None });
+    lock(&app.inner).runs.insert(id.clone(), RunRec { p: p.clone(), log: String::new(), live: None });
     let (a1, id1) = (app.clone(), id.clone());
-    let tx = app.log_tx.lock().unwrap().clone();
+    let tx = lock(&app.log_tx).clone();
     let on_text = move |t: String| {
-        if let Some(r) = a1.inner.lock().unwrap().runs.get_mut(&id1) {
+        if let Some(r) = lock(&a1.inner).runs.get_mut(&id1) {
             r.log.push_str(&t);
             if r.log.len() > 1_500_000 {
                 let cut = r.log.len() - 1_000_000;
@@ -416,24 +490,53 @@ fn start_run(handle: &AppHandle, app: &Arc<App>, root: &str, s: &Script, args: &
     let on_exit = move |code: i32, live: Arc<Live>| {
         // дать сборщику вывода отправить хвост раньше, чем придёт «завершено»
         std::thread::sleep(Duration::from_millis(80));
-        let pub_ = {
-            let mut g = a2.inner.lock().unwrap();
+        // запись истории (чтение и запись history.json) - после замка: под ним ждали бы диска
+        // все команды окна, которым нужен список проектов или запусков
+        let (pub_, hist) = {
+            let mut g = lock(&a2.inner);
             let Some(r) = g.runs.get_mut(&id2) else { return };
             r.p.code = Some(code);
-            r.p.status = if live.was_stopped() { "stopped" } else if code == 0 { "ok" } else { "fail" }.into();
+            r.p.status = if live.was_stopped() {
+                "stopped"
+            } else if code == 0 {
+                "ok"
+            } else {
+                "fail"
+            }
+            .into();
             r.p.ended_at = Some(now_ms());
             r.live = None;
             let tail: Vec<&str> = r.log.lines().rev().take(80).collect();
             let tail = tail.into_iter().rev().collect::<Vec<_>>().join("\n");
-            store::push_history(HistEntry { id: r.p.id.clone(), project: r.p.project.clone(), script_id: r.p.script_id.clone(), title: r.p.title.clone(), cmd: r.p.cmd.clone(), where_: r.p.where_.clone(), args: r.p.args.clone(), status: r.p.status.clone(), code: r.p.code, started_at: r.p.started_at, ended_at: r.p.ended_at, kind: "script".into(), tail });
-            r.p.clone()
+            let hist = HistEntry {
+                id: r.p.id.clone(),
+                project: r.p.project.clone(),
+                script_id: r.p.script_id.clone(),
+                title: r.p.title.clone(),
+                cmd: r.p.cmd.clone(),
+                where_: r.p.where_.clone(),
+                args: r.p.args.clone(),
+                status: r.p.status.clone(),
+                code: r.p.code,
+                started_at: r.p.started_at,
+                ended_at: r.p.ended_at,
+                kind: "script".into(),
+                tail,
+            };
+            (r.p.clone(), hist)
         };
+        store::push_history(hist);
         let _ = h2.emit("run", &pub_);
         let took = pub_.ended_at.unwrap_or(0).saturating_sub(pub_.started_at);
         let focused = h2.get_webview_window("main").and_then(|w| w.is_focused().ok()).unwrap_or(true);
         if took > 8000 && !focused && store::config().settings.notify {
             let ok = pub_.status == "ok";
-            let _ = h2.notification().builder().title(format!("{} {}", if ok { "Готово:" } else { "Ошибка:" }, pub_.title)).body(format!("{} за {} с", if ok { "закончилось" } else { "упало" }, took / 1000)).show();
+            let _ = h2
+                .notification()
+                .builder()
+                .title(format!("{} {}", if ok { "Готово:" } else { "Ошибка:" }, pub_.title))
+                .body(format!("{} за {} с", if ok { "закончилось" } else { "упало" }, took / 1000))
+                .show();
             if let Some(w) = h2.get_webview_window("main") {
                 let _ = w.request_user_attention(Some(tauri::UserAttentionType::Informational));
             }
@@ -441,14 +544,14 @@ fn start_run(handle: &AppHandle, app: &Arc<App>, root: &str, s: &Script, args: &
     };
     match runner::spawn_live(&argv, &cwd, &envs, on_text, on_exit) {
         Ok(live) => {
-            if let Some(r) = app.inner.lock().unwrap().runs.get_mut(&id) {
+            if let Some(r) = lock(&app.inner).runs.get_mut(&id) {
                 r.live = Some(live);
             }
             let _ = handle.emit("run", &p);
             Ok(p)
         }
         Err(e) => {
-            app.inner.lock().unwrap().runs.remove(&id);
+            lock(&app.inner).runs.remove(&id);
             Err(format!("Не запустилось: {e}"))
         }
     }
@@ -459,7 +562,7 @@ async fn run(handle: AppHandle, st: St<'_>, script_id: String, args: Option<Stri
     let app = st.inner().clone();
     let (root, s) = find_script(&app, &script_id).ok_or("Скрипт не найден - обновите проект (F5)")?;
     if !force.unwrap_or(false) {
-        if let Some(r) = app.inner.lock().unwrap().runs.values().find(|r| r.p.script_id == script_id && r.p.status == "running") {
+        if let Some(r) = lock(&app.inner).runs.values().find(|r| r.p.script_id == script_id && r.p.status == "running") {
             return Err(format!("RUNNING:{}", r.p.id));
         }
     }
@@ -471,13 +574,19 @@ async fn run(handle: AppHandle, st: St<'_>, script_id: String, args: Option<Stri
 async fn restart(handle: AppHandle, st: St<'_>, run_id: String, args: Option<String>) -> R<RunPub> {
     let app = st.inner().clone();
     let (script_id, old_args, live) = {
-        let g = app.inner.lock().unwrap();
+        let g = lock(&app.inner);
         let r = g.runs.get(&run_id).ok_or("Запуск не найден")?;
         (r.p.script_id.clone(), r.p.args.clone(), r.live.clone())
     };
     if let Some(l) = live {
-        tauri::async_runtime::spawn_blocking(move || l.stop()).await.map_err(|e| e.to_string())?;
-        std::thread::sleep(Duration::from_millis(150));
+        // пауза - в том же блокирующем потоке: thread::sleep в async-команде занял бы поток
+        // среды выполнения, на котором ждут ответа другие команды окна
+        tauri::async_runtime::spawn_blocking(move || {
+            l.stop();
+            std::thread::sleep(Duration::from_millis(150));
+        })
+        .await
+        .map_err(|e| e.to_string())?;
     }
     let (root, s) = find_script(&app, &script_id).ok_or("Скрипт больше не найден в проекте")?;
     start_run(&handle, &app, &root, &s, args.as_deref().unwrap_or(&old_args))
@@ -485,7 +594,7 @@ async fn restart(handle: AppHandle, st: St<'_>, run_id: String, args: Option<Str
 
 #[tauri::command]
 async fn stop(st: St<'_>, run_id: String) -> R<bool> {
-    let live = st.inner.lock().unwrap().runs.get(&run_id).and_then(|r| r.live.clone());
+    let live = lock(&st.inner).runs.get(&run_id).and_then(|r| r.live.clone());
     match live {
         Some(l) => {
             tauri::async_runtime::spawn_blocking(move || l.stop()).await.map_err(|e| e.to_string())?;
@@ -496,8 +605,8 @@ async fn stop(st: St<'_>, run_id: String) -> R<bool> {
 }
 
 #[tauri::command]
-async fn stdin(handle: AppHandle, st: St<'_>, run_id: String, text: Option<String>, eof: Option<bool>) -> R<()> {
-    let live = st.inner.lock().unwrap().runs.get(&run_id).and_then(|r| r.live.clone()).ok_or("Процесс уже завершился")?;
+async fn stdin(st: St<'_>, run_id: String, text: Option<String>, eof: Option<bool>) -> R<()> {
+    let live = lock(&st.inner).runs.get(&run_id).and_then(|r| r.live.clone()).ok_or("Процесс уже завершился")?;
     if eof.unwrap_or(false) {
         live.close_stdin();
         return Ok(());
@@ -508,16 +617,17 @@ async fn stdin(handle: AppHandle, st: St<'_>, run_id: String, text: Option<Strin
     }
     live.write_line(&t).map_err(|e| format!("Процесс не принимает ввод: {e}"))?;
     let echo = format!("\x1b[36m› {t}\x1b[0m\n");
-    if let Some(r) = st.inner.lock().unwrap().runs.get_mut(&run_id) {
+    if let Some(r) = lock(&st.inner).runs.get_mut(&run_id) {
         r.log.push_str(&echo);
     }
-    let _ = handle.emit("log", json!({ "runId": run_id, "text": echo }));
+    // тем же сборщиком, что и вывод программы: прямое событие обгоняло ещё не отправленную пачку
+    let _ = lock(&st.log_tx).send((run_id, echo));
     Ok(())
 }
 
 #[tauri::command]
 async fn run_log(st: St<'_>, run_id: String) -> R<Value> {
-    let g = st.inner.lock().unwrap();
+    let g = lock(&st.inner);
     let r = g.runs.get(&run_id).ok_or("Запуск не найден")?;
     Ok(json!({ "run": r.p, "log": r.log }))
 }
@@ -525,7 +635,7 @@ async fn run_log(st: St<'_>, run_id: String) -> R<Value> {
 /// Убрать завершённые запуски: один (вкладка консоли) или все.
 #[tauri::command]
 async fn forget(st: St<'_>, run_id: Option<String>) -> R<()> {
-    let mut g = st.inner.lock().unwrap();
+    let mut g = lock(&st.inner);
     match run_id {
         Some(id) => {
             if g.runs.get(&id).is_some_and(|r| r.p.status != "running") {
@@ -568,9 +678,9 @@ async fn settings(handle: AppHandle, st: St<'_>, patch: Value) -> R<Settings> {
         }
     });
     if !c.settings.auto_refresh {
-        st.inner.lock().unwrap().watchers.clear();
+        lock(&st.inner).watchers.clear();
     } else {
-        let paths: Vec<String> = st.inner.lock().unwrap().projects.values().map(|p| p.data.path.clone()).collect();
+        let paths: Vec<String> = lock(&st.inner).projects.values().map(|p| p.data.path.clone()).collect();
         for p in paths {
             ensure_watch(&handle, st.inner(), &p);
         }
@@ -608,17 +718,17 @@ async fn recent(path: String, action: String) -> R<()> {
 
 // ---------- команды: CI ----------
 fn remote_of(app: &App, path: &str, name: &str) -> R<(String, pult_core::model::Remote)> {
-    let g = app.inner.lock().unwrap();
+    let g = lock(&app.inner);
     let p = g.projects.get(&key(path)).ok_or("Проект не открыт")?;
     let r = p.data.git.as_ref().and_then(|g| g.remotes.iter().find(|r| r.name == name)).cloned().ok_or("Не найден remote")?;
     Ok((p.data.path.clone(), r))
 }
 
-fn ci_cached<F>(cache_key: String, max_age: u64, force: bool, f: F) -> Value
+fn ci_cached<F>(cache_key: &str, max_age: u64, force: bool, f: F) -> Value
 where
     F: FnOnce() -> R<Value>,
 {
-    let hit = store::ci_cache_get(&cache_key);
+    let hit = store::ci_cache_get(cache_key);
     if let Some((at, v)) = &hit {
         if !force && now_ms().saturating_sub(*at) < max_age {
             return json!({ "data": v, "at": at, "cached": true });
@@ -626,7 +736,7 @@ where
     }
     match f() {
         Ok(v) => {
-            store::ci_cache_put(&cache_key, &v);
+            store::ci_cache_put(cache_key, &v);
             json!({ "data": v, "at": now_ms(), "cached": false })
         }
         Err(e) => match hit {
@@ -639,16 +749,31 @@ where
 #[tauri::command]
 async fn ci_runs(st: St<'_>, path: String, remote: String, git_ref: Option<String>, force: Option<bool>) -> R<Value> {
     let (root, r) = remote_of(&st, &path, &remote)?;
-    let k = format!("runs|{}/{}|{}", r.host.clone().unwrap_or_default(), r.slug.clone().unwrap_or_default(), git_ref.clone().unwrap_or_default());
-    tauri::async_runtime::spawn_blocking(move || ci_cached(k, 45_000, force.unwrap_or(false), || ci::runs(Path::new(&root), &r, git_ref.as_deref().filter(|x| !x.is_empty())).map(|v| json!(v)))).await.map_err(|e| e.to_string())
+    let k = format!(
+        "runs|{}/{}|{}",
+        r.host.as_deref().unwrap_or_default(),
+        r.slug.as_deref().unwrap_or_default(),
+        git_ref.as_deref().unwrap_or_default()
+    );
+    tauri::async_runtime::spawn_blocking(move || {
+        ci_cached(&k, 45_000, force.unwrap_or(false), || {
+            ci::runs(Path::new(&root), &r, git_ref.as_deref().filter(|x| !x.is_empty())).map(|v| json!(v))
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn ci_jobs(st: St<'_>, path: String, remote: String, id: u64, done: Option<bool>, force: Option<bool>) -> R<Value> {
     let (root, r) = remote_of(&st, &path, &remote)?;
-    let k = format!("jobs|{}/{}|{id}", r.host.clone().unwrap_or_default(), r.slug.clone().unwrap_or_default());
+    let k = format!("jobs|{}/{}|{id}", r.host.as_deref().unwrap_or_default(), r.slug.as_deref().unwrap_or_default());
     let age = if done.unwrap_or(false) { 7 * 86_400_000 } else { 15_000 };
-    tauri::async_runtime::spawn_blocking(move || ci_cached(k, age, force.unwrap_or(false), || ci::jobs(Path::new(&root), &r, id).map(|v| json!(v)))).await.map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        ci_cached(&k, age, force.unwrap_or(false), || ci::jobs(Path::new(&root), &r, id).map(|v| json!(v)))
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -665,7 +790,9 @@ async fn ci_log(st: St<'_>, path: String, remote: String, job: u64) -> R<Value> 
 // ---------- команды: открыть ----------
 fn target(root: &str, rel: Option<&str>) -> R<PathBuf> {
     let root = PathBuf::from(root);
-    let Some(rel) = rel.filter(|r| !r.is_empty() && *r != ".") else { return Ok(root) };
+    let Some(rel) = rel.filter(|r| !r.is_empty() && *r != ".") else {
+        return Ok(root);
+    };
     if is_unc(rel) || Path::new(rel).is_absolute() {
         return Err("Только пути внутри проекта".into());
     }
@@ -673,7 +800,8 @@ fn target(root: &str, rel: Option<&str>) -> R<PathBuf> {
     if !inside(&root, &t) {
         return Err("За пределами проекта".into());
     }
-    Ok(t)
+    // ссылка внутри проекта может вести наружу или на сетевой путь
+    resolve_inside(&root, &t).ok_or_else(|| "Файла нет или он ведёт за пределы проекта".into())
 }
 
 #[tauri::command]
@@ -685,10 +813,12 @@ async fn open(st: St<'_>, what: String, path: Option<String>, rel: Option<String
         }
         return runner::open_default(&u).map_err(|e| e.to_string());
     }
-    let root = st.inner.lock().unwrap().projects.get(&key(&path.unwrap_or_default())).map(|p| p.data.path.clone()).ok_or("Проект не открыт")?;
+    let root = lock(&st.inner).projects.get(&key(&path.unwrap_or_default())).map(|p| p.data.path.clone()).ok_or("Проект не открыт")?;
     let t = target(&root, rel.as_deref())?;
     let res = match what.as_str() {
-        "explorer" => runner::open_default(&t.to_string_lossy()),
+        // проводник с файлом его запустит, а не покажет: файлы - только через «reveal» (/select)
+        "explorer" if t.is_dir() => runner::open_default(&t.to_string_lossy()),
+        "explorer" => runner::reveal(&t),
         "reveal" => runner::reveal(&t),
         "terminal" => runner::open_terminal(&t),
         "code" | "edit" => runner::open_in_editor(&t, line),
@@ -711,45 +841,135 @@ fn main() {
     let open_path = std::env::args().nth(1).filter(|a| !a.starts_with('-'));
     let app_state = Arc::new(App { inner: Mutex::new(Inner::default()), log_tx: Mutex::new(tx), open_path: Mutex::new(open_path) });
 
-    let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.unminimize();
-                let _ = w.set_focus();
-            }
-            if let Some(p) = argv.get(1).filter(|a| !a.starts_with('-')) {
-                let _ = app.emit("open-path", p);
-            }
-        }))
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+    // Тестовое окно (отладочная сборка с PULT_DEBUG_PORT) живёт рядом с обычным под своим
+    // идентификатором: своя защита от второго экземпляра, свой файл места и размера окна, своя папка
+    // WebView2. Иначе проверки перехватывают окно, в котором работает человек, и сдвигают его окно.
+    let mut context = tauri::generate_context!();
+    let test_port = std::env::var("PULT_DEBUG_PORT").ok().filter(|_| cfg!(debug_assertions));
+    if let Some(port) = &test_port {
+        let id = format!("{}.test-{port}", context.config().identifier);
+        context.config_mut().identifier = id;
+    }
+    // Второй запуск отдаёт папку первому окну. Относительный путь («pult ui .») считается от папки,
+    // где запустили второй, а не первый Пульт.
+    let builder = tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+        tray::show_main(app);
+        if let Some(p) = argv.get(1).filter(|a| !a.starts_with('-')) {
+            let full = Path::new(&cwd).join(p);
+            let _ = app.emit("open-path", full.to_string_lossy());
+        }
+    }));
+    let app = builder
+        // окно помнит место и размер, но не рамку: иначе старое сохранение возвращает системный
+        // заголовок поверх своего (decorations(false)); видимость и «поверх окон» решает Пульт сам
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        - tauri_plugin_window_state::StateFlags::DECORATIONS
+                        - tauri_plugin_window_state::StateFlags::VISIBLE,
+                )
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .on_window_event(|w, e| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = e {
+                // без значка в трее спрятанное окно не вернуть ничем - тогда закрываем как обычно
+                if store::config().settings.close_to_tray && w.app_handle().tray_by_id(tray::TRAY_ID).is_some() {
+                    api.prevent_close();
+                    let _ = w.hide();
+                }
+            }
+        })
         .manage(app_state.clone())
-        .invoke_handler(tauri::generate_handler![state, kb_reload, topic, scan_project, pick, env_info, help, run, restart, stop, stdin, run_log, forget, history, history_clear, settings, fav, recent, ci_runs, ci_jobs, ci_log, open])
+        .invoke_handler(tauri::generate_handler![
+            state,
+            kb_reload,
+            topic,
+            scan_project,
+            pick,
+            env_info,
+            help,
+            run,
+            restart,
+            stop,
+            stdin,
+            run_log,
+            forget,
+            history,
+            history_clear,
+            settings,
+            fav,
+            recent,
+            ci_runs,
+            ci_jobs,
+            ci_log,
+            open,
+            trust_repo,
+            tray::scenarios,
+            tray::scenario_save,
+            tray::scenario_delete,
+            tray::scenario_run,
+            tray::scenario_stop,
+            tray::scenarios_running,
+            tray::window_set,
+            tray::window_bg,
+            tray::mouse_down
+        ])
         .setup(move |app| {
+            // Ключи WebView2. Свои ключи заменяют ключи wry целиком, поэтому его три (без мини-меню,
+            // без SmartScreen, автозапуск звука) повторены здесь. Своё одно: сетевая служба внутри
+            // процесса браузера, а не отдельным процессом - окно не ходит в сеть, а процесс стоил
+            // 25-35 МБ рабочего набора (замер в docs/optimizations.md).
             #[allow(unused_mut)]
-            let mut win = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into())).title("Пульт").inner_size(1320.0, 900.0).min_inner_size(420.0, 420.0).center();
+            let mut browser_args = String::from(
+                "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required \
+                 --enable-features=NetworkServiceInProcess2",
+            );
+            #[allow(unused_mut)]
+            let mut win = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
+                .title("Пульт")
+                .inner_size(1320.0, 900.0)
+                .min_inner_size(280.0, 200.0)
+                // свой заголовок в ui/titlebar.js: у системного двойной щелчок по значку закрывает окно
+                .decorations(false)
+                .shadow(true)
+                .center();
             // порт отладки - только в отладочной сборке и только по явной просьбе: в релизе этого кода нет
             #[cfg(debug_assertions)]
             if let Ok(port) = std::env::var("PULT_DEBUG_PORT") {
-                win = win.additional_browser_args(&format!("--remote-debugging-port={port}"));
+                browser_args.push_str(&format!(" --remote-debugging-port={port}"));
+                win = win.data_directory(std::env::temp_dir().join(format!("pult-test-webview-{port}")));
             }
-            win.build()?;
-            // сборщик вывода: пачка раз в 50 мс вместо события на каждую строку
+            let w = win.additional_browser_args(&browser_args).build()?;
+            tray::initial_bg(&w);
+            // значок в трее с меню сценариев; без трея (старая оболочка Windows) Пульт работает как раньше
+            if let Err(e) = tray::build_tray(app.handle()) {
+                eprintln!("трей не создан: {e}");
+            }
+            // сборщик вывода: пачка не позже 50 мс от первого куска вместо события на каждую строку.
+            // Срок - от первого куска пачки, а не от последнего: программа, которая пишет чаще раза
+            // в 50 мс (полоска хода, журнал сервера), иначе молчала до 64 КБ или до самого конца.
             let h = app.handle().clone();
-            std::thread::spawn(move || {
+            spawn_named("pult-log", move || {
+                const TICK: Duration = Duration::from_millis(50);
                 let mut pending: HashMap<String, String> = HashMap::new();
+                let mut since: Option<std::time::Instant> = None;
                 loop {
-                    match rx.recv_timeout(Duration::from_millis(50)) {
+                    let wait = since.map_or(Duration::from_secs(3600), |s| TICK.saturating_sub(s.elapsed()));
+                    match rx.recv_timeout(wait) {
                         Ok((id, t)) => {
                             pending.entry(id).or_default().push_str(&t);
-                            if pending.values().map(String::len).sum::<usize>() < 64 * 1024 {
+                            let first = *since.get_or_insert_with(std::time::Instant::now);
+                            if first.elapsed() < TICK && pending.values().map(String::len).sum::<usize>() < 64 * 1024 {
                                 continue;
                             }
                         }
                         Err(mpsc::RecvTimeoutError::Timeout) => {}
                         Err(_) => return,
                     }
+                    since = None;
                     for (id, text) in pending.drain() {
                         let _ = h.emit("log", json!({ "runId": id, "text": text }));
                     }
@@ -757,13 +977,13 @@ fn main() {
             });
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("не удалось запустить окно");
 
     app.run(move |_h, ev| {
         if let RunEvent::Exit = ev {
             // закрыли окно - останавливаем то, что запускали из Пульта
-            let lives: Vec<Arc<Live>> = app_state.inner.lock().unwrap().runs.values().filter_map(|r| r.live.clone()).collect();
+            let lives: Vec<Arc<Live>> = lock(&app_state.inner).runs.values().filter_map(|r| r.live.clone()).collect();
             for l in lives {
                 l.stop();
             }
