@@ -85,6 +85,8 @@
       const outs = fwd.filter(([a]) => a === n.id).map(([, b]) => level.get(b));
       if (outs.length) level.set(n.id, Math.max(0, Math.min(...outs) - 1));
     }
+    // колонка задана явно (n.col): схема вкладки «ИИ» кладёт блоки по слоям, а не по длине пути стрелок
+    for (const n of nodes) if (Number.isInteger(n.col) && n.col >= 0) level.set(n.id, n.col);
     const sparse = [];
     for (const n of nodes) (sparse[level.get(n.id)] ||= []).push(n);
     // пустые уровни убираются: иначе в схеме дыра, а в расчёте размеров NaN
@@ -155,8 +157,10 @@
       for (const n of nodes) {
         const p = pos.get(n.id);
         const lab = wrap(n.label, labMax).slice(0, 2), note = wrap(n.note, noteMax).slice(0, 2);
-        boxes += `<g><rect x="${p.x}" y="${p.y}" width="${W}" height="${H}" rx="11" fill="var(--panel)" stroke="${esc(color)}" stroke-width="1.6"/>`;
-        if (n.icon) boxes += `<g transform="translate(${p.x + 10} ${p.y + 10})" color="${esc(color)}">${icon(n.icon, 18, color)}</g>`;
+        // s.go: блок можно нажать (переход к деталям), data-node несёт id блока; вторая раскладка той же схемы скрыта через display:none и фокус не берёт
+        const go = s.go ? ` class="dgo" tabindex="0" role="link" data-node="${esc(n.id)}" aria-label="${esc(s.go.replace('{name}', n.label))}"` : '';
+        boxes += `<g${go}><rect x="${p.x}" y="${p.y}" width="${W}" height="${H}" rx="11" fill="var(--panel)" stroke="${esc(n.color || color)}" stroke-width="1.6"/>`;
+        if (n.icon) boxes += `<g transform="translate(${p.x + 10} ${p.y + 10})" color="${esc(n.color || color)}">${icon(n.icon, 18, n.color || color)}</g>`;
         const tx = p.x + (n.icon ? 34 : 12);
         lab.forEach((l, i) => { boxes += `<text x="${tx}" y="${p.y + 25 + i * 17}" class="dn">${esc(l)}</text>`; });
         note.forEach((l, i) => { boxes += `<text x="${p.x + 12}" y="${p.y + 25 + lab.length * 17 + 2 + i * 15}" class="dd">${esc(l)}</text>`; });

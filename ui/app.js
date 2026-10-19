@@ -16,6 +16,8 @@ const LS = {
 const RU = { success: 'успех', ok: 'готово', failed: 'ошибка', fail: 'ошибка', running: 'идёт', pending: 'в очереди', canceled: 'отменён', stopped: 'остановлен', skipped: 'пропущен', manual: 'вручную' };
 // третье - короткая подпись для нижней панели узкого окна: там на подпись 50 px
 const TABS = [['overview', 'Обзор', 'Обзор'], ['scripts', 'Скрипты', 'Скрипты'], ['learn', 'Документация', 'Уроки'], ['ci', 'Пайплайны', 'CI'], ['git', 'Git', 'Git'], ['history', 'История', 'История']];
+// 4-й элемент (необязательный) - когда вкладка есть: у «ИИ» её нет, пока в проекте не нашлось ИИ-части (ui/ai.js)
+const tabsOn = () => TABS.filter((t) => !t[3] || t[3]());
 const FX_ORDER = ['danger', 'delete', 'admin', 'db', 'install', 'write', 'network', 'docker', 'read'];
 const URL_RE = /\bhttps?:\/\/[^\s"'<>`]+[^\s"'<>`.,;:!?)\]]/g;
 const LOCAL_URL = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|[\w.-]+\.(localhost|test))(:\d+)?/i;
@@ -399,13 +401,14 @@ function renderTop() {
     git: p?.git?.dirty ? `<span class="cnt">${p.git.dirty}</span>` : '',
     history: failed ? `<span class="cnt bad">${failed} ✗</span>` : '',
   };
+  if (window.AiTab) cnt.ai = window.AiTab.badge();
   const mark = { scripts: runs.length > 0, history: failed > 0, git: !!p?.git?.dirty };
   const html = `
     <div class="sb-head"><button class="sb-logo" data-act="home" title="Все проекты" aria-label="Все проекты"></button><span class="sb-title">Пульт</span>
       <button class="btn ghost icon sm" data-act="side-toggle" title="${mini ? 'Развернуть панель' : 'Свернуть панель'}" aria-label="${mini ? 'Развернуть панель' : 'Свернуть панель'}">${mini ? '»' : '«'}</button></div>
     ${p ? `<button class="sb-proj" data-act="projects" aria-haspopup="dialog" aria-expanded="${S.pop === 'projects'}" title="${esc(p.path)}&#10;Сменить проект (Ctrl+O)"><span class="av" aria-hidden="true">${esc((p.name[0] || '?').toUpperCase())}</span><span class="tx"><b>${esc(p.name)}</b><small>${esc(p.path)}</small></span><span class="car" aria-hidden="true">▾</span></button>`
       : '<button class="sb-proj" data-act="pick" title="Открыть папку проекта (Ctrl+O)"><span class="av">+</span><span class="tx"><b>Открыть проект</b><small>или перетащите папку в окно</small></span></button>'}
-    <div class="sb-nav">${TABS.map(([id, label, short], i) => `<button class="sb-item ${p && S.tab === id ? 'on' : ''}" data-tab="${id}" ${p ? '' : 'disabled'} ${p && S.tab === id ? 'aria-current="page"' : ''} aria-label="${label}" title="${label}${i < 9 ? ` (${i + 1})` : ''}"><span class="ic">${Learn.icon(NAV_ICON[id], 18)}<span class="sb-mark ${mark[id] ? 'on' : ''}"></span></span><span class="lbl">${label}</span><span class="lbs">${short || label}</span>${cnt[id] || ''}</button>`).join('')}
+    <div class="sb-nav">${tabsOn().map(([id, label, short], i) => `<button class="sb-item ${p && S.tab === id ? 'on' : ''}" data-tab="${id}" ${p ? '' : 'disabled'} ${p && S.tab === id ? 'aria-current="page"' : ''} aria-label="${label}" title="${label}${i < 9 ? ` (${i + 1})` : ''}"><span class="ic">${Learn.icon(NAV_ICON[id], 18)}<span class="sb-mark ${mark[id] ? 'on' : ''}"></span></span><span class="lbl">${label}</span><span class="lbs">${short || label}</span>${cnt[id] || ''}</button>`).join('')}
       <button class="sb-item sb-more ${S.pop === 'more' ? 'on' : ''}" data-act="more" aria-haspopup="dialog" aria-expanded="${S.pop === 'more'}" aria-label="Ещё: проект, поиск, настройки, справка" title="Проект, поиск, настройки, справка"><span class="ic">${Learn.icon('gear', 18)}<span class="sb-mark ${learning() ? 'on' : ''}"></span></span><span class="lbs">Ещё</span></button></div>
     ${runs.length ? `<div class="sb-sec">Идут сейчас</div><div class="sb-runs">${runs.map((r) => `<button class="sb-run" data-crun="${esc(r.id)}" ${etaTip(r.cmd, r.startedAt, runEta(r))}>${sdot('running')}<span class="t">${esc(r.title)}</span><span class="el" data-el="${esc(r.id)}">${esc(dur(Date.now() - r.startedAt))}</span>${etaBar(r.startedAt, runEta(r), 'under')}</button>`).join('')}</div>` : ''}
     <div class="sb-foot">
@@ -580,6 +583,7 @@ function renderTab() {
   else if (S.tab === 'git') patch(el, viewGit());
   else if (S.tab === 'history') patch(el, viewHistory());
   else if (S.tab === 'scenarios') { el._html = null; window.Scen?.renderTab(el); } // ui/scenarios.js рисует сам
+  else if (S.tab === 'ai') window.AiTab?.renderTab(el); // ui/ai.js: своя разметка через patch
 }
 function setTab(t) {
   const moved = t !== S.tab;
@@ -588,6 +592,7 @@ function setTab(t) {
   if (P()) LS.set('tab:' + P().path, t);
   if (moved) closeTransient();
   window.Scen?.onTab(t); // ui/scenarios.js: открытый редактор закрывается, черновик остаётся в памяти
+  window.AiTab?.onTab(t); // ui/ai.js: карта ИИ-части запрашивается при входе во вкладку
   renderTop();
   renderMain();
   $('#main').scrollTop = 0;
@@ -1518,7 +1523,7 @@ function fuzzy(q, s) {
 function paletteItems(q) {
   const out = [], p = P();
   const actions = [['Открыть папку проекта…', 'pick', 'Ctrl O'], ['Перечитать проект', 'rescan', 'F5'], ['Открыть терминал в проекте', 'term'], ['Открыть проект в VS Code', 'code'], ['Открыть проект в проводнике', 'explorer'],
-    ...TABS.map(([id, l], i) => [`Вкладка: ${l}`, 'tab:' + id, i < 9 ? String(i + 1) : '']), ['Свернуть или развернуть консоль', 'console', 'Ctrl J'], ['Режим обучения: включить или выключить', 'learn'], ['Настройки', 'settings'], ['Справка и горячие клавиши', 'help', '?']]
+    ...tabsOn().map(([id, l], i) => [`Вкладка: ${l}`, 'tab:' + id, i < 9 ? String(i + 1) : '']), ['Свернуть или развернуть консоль', 'console', 'Ctrl J'], ['Режим обучения: включить или выключить', 'learn'], ['Настройки', 'settings'], ['Справка и горячие клавиши', 'help', '?']]
     .filter(([, a]) => p || ['pick', 'settings', 'help', 'learn'].includes(a));
   if (p) for (const s of p.scripts) {
     const sc = Math.max(fuzzy(q, s.name) * 2, q.length > 2 && hayOf(s).includes(q.toLowerCase()) ? 300 : -1);
@@ -1585,8 +1590,8 @@ function doAction(act) {
 function openHelp() {
   const h = UI().help || {}, sec = (x) => x || {};
   const fx = [...FX_ORDER, 'long'].map((f) => `<span class="fx fx-${f}">${esc(fxInfo(f).label)}</span><span>${esc(fxInfo(f).say)}</span>`).join('');
-  const tabs = TABS.map(([id, label]) => (sec(h.tabs).items || {})[id] ? `<li><b>${esc(label)}</b> - ${esc(h.tabs.items[id])}</li>` : '').join('');
-  const n = Math.min(9, TABS.length);
+  const tabs = tabsOn().map(([id, label]) => (sec(h.tabs).items || {})[id] ? `<li><b>${esc(label)}</b> - ${esc(h.tabs.items[id])}</li>` : '').join('');
+  const n = Math.min(9, tabsOn().length);
   const keys = (sec(h.keys).items || []).map(([k, t]) => `<kbd>${esc(tpl(k, { n }))}</kbd><span>${esc(t)}</span>`).join('');
   const code = { pult: '<code>pult</code>', help: '<code>pult help</code>' };
   overlay(`<div class="dialog" role="dialog" aria-modal="true" tabindex="-1" aria-label="${esc(h.label || '')}"><button class="btn ghost icon x" data-act="close-overlay" aria-label="Закрыть">✕</button>
@@ -1632,7 +1637,7 @@ function setProject(d, switching) {
     S.detail = null; S.showAll = false; S.gitQ = ''; S.help = {};
     S.collapsed = new Set(LS.get('fold:' + d.path, []));
     S.tab = LS.get('tab:' + d.path, 'overview');
-    if (!TABS.some(([id]) => id === S.tab)) S.tab = 'overview';
+    if (!tabsOn().some(([id]) => id === S.tab)) S.tab = 'overview';
     S.topic = null; S.descOpen = false; S.descClamp = false;
   } else if (S.detail && !S.byId.has(S.detail)) S.detail = null;
 }
@@ -2008,7 +2013,7 @@ document.addEventListener('keydown', async (e) => {
   if (own && (k === 'Enter' || k === ' ')) { e.preventDefault(); e.target.click(); return; }
   // стрелки вверх и вниз - по соседним строкам того же списка, без десятков нажатий Tab
   if (own && (k === 'ArrowDown' || k === 'ArrowUp')) {
-    const cls = ['row', 'pr', 'li', 'qtile', 'rcard'].find((c) => e.target.classList.contains(c));
+    const cls = ['row', 'pr', 'li', 'qtile', 'rcard', 'ai-row'].find((c) => e.target.classList.contains(c));
     if (cls) {
       const all = $$(`.${cls}[tabindex="0"]`, e.target.closest('#main, #drawer') || document).filter((x) => x.offsetParent);
       const i = all.indexOf(e.target), next = all[i + (k === 'ArrowDown' ? 1 : -1)];
@@ -2018,7 +2023,7 @@ document.addEventListener('keydown', async (e) => {
   }
   if (k === '/' && P()) { e.preventDefault(); if (S.tab !== 'scripts') setTab('scripts'); setTimeout(() => $('#q')?.focus(), 0); return; }
   if (k === '?') { openHelp(); return; }
-  if (/^[1-9]$/.test(k) && P() && TABS[+k - 1]) { setTab(TABS[+k - 1][0]); return; }
+  if (/^[1-9]$/.test(k) && P() && tabsOn()[+k - 1]) { setTab(tabsOn()[+k - 1][0]); return; }
 });
 document.addEventListener('mousedown', (e) => {
   if (!e.target.matches('[data-grip]')) return;

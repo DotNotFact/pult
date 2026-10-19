@@ -1,0 +1,127 @@
+/* Вкладка «ИИ»: схема слоёв, рассказ, блоки видов деталей со строками. Цвета только из токенов app.css,
+   отступы - шкала --s*, карточки - blocks.css. Правила вида - .claude/rules/ui.md. */
+.ai-top{display:flex;flex-direction:column;gap:var(--s3);margin:0 0 var(--bgap)}
+.ai-intro{margin:0;max-width:78ch;line-height:1.5}
+.ai-tools{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2) var(--s3);min-width:0}
+.ai-q{width:min(340px,100%);flex:1 1 220px;max-width:340px;padding-block:6px}
+.ai-meta{margin-left:auto;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ai-re{flex:none}
+.ai-warn{margin:0;color:var(--warn)}
+.ai-loading,.ai-none{margin:var(--s5) 0;text-align:center}
+.ai.blk-stack{margin:0}
+.ai-k{scroll-margin-top:var(--s3);border-radius:var(--rb)}
+.ai-k:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- схема ---------- */
+.ai-layers{list-style:none;margin:0 0 var(--s3);padding:0;display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4)}
+.ai-layer{display:flex;align-items:baseline;gap:var(--s2);min-width:0;font-size:12.5px}
+.ai-lmark{width:10px;height:10px;border-radius:3px;background:var(--lc);flex:none;align-self:center}
+.ai-layer b{font-weight:650}
+.ai-lsay{color:var(--mute)}
+.ai-diag .dgo{cursor:pointer;outline:none}
+.ai-diag .dgo:hover rect,.ai-diag .dgo:focus-visible rect{fill:var(--soft)}
+.ai-diag .dgo:focus-visible rect{stroke-width:3}
+.ai-cap{margin-bottom:0}
+.ai-rels{list-style:none;margin:var(--s3) 0 0;padding:0;display:flex;flex-wrap:wrap;gap:var(--s1) var(--s2)}
+.ai-rels li{font-size:12px;padding:1px 9px;border:1px solid var(--line);border-radius:99px;color:var(--mute);background:var(--panel2);font-variant-numeric:tabular-nums}
+
+/* ---------- рассказ ---------- */
+.ai-story{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.ai-st{display:grid;grid-template-columns:28px minmax(0,1fr);gap:var(--s3);padding:var(--s3) 0;border-bottom:1px solid var(--line)}
+.ai-st:first-child{padding-top:0}
+.ai-st:last-child{border-bottom:0;padding-bottom:0}
+.ai-n{width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);font-size:11.5px;font-weight:700;display:grid;place-items:center;font-variant-numeric:tabular-nums}
+.ai-stx{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ai-stx b{font-size:14px}
+.ai-sttext{color:var(--mute);font-size:13px;line-height:1.5}
+.ai-parts{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s2);margin-top:var(--s1)}
+.ai-go{font:inherit;font-size:12px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- блок вида: пояснение ---------- */
+.ai-expl{padding:var(--s4);display:flex;flex-direction:column;gap:var(--s3);border-bottom:1px solid var(--line)}
+.ai-what{margin:0;font-size:14px;line-height:1.55;max-width:90ch}
+.ai-defs{margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:var(--s3) var(--s5)}
+.ai-def{min-width:0}
+.ai-def dt{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:650;margin-bottom:2px}
+.ai-def dd{margin:0;font-size:13px;line-height:1.5;color:var(--mute)}
+.ai-modes{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.ai-mode{font-size:12px;padding:2px 10px;border:1px solid var(--line);border-radius:99px;background:var(--panel2);color:var(--mute);font-variant-numeric:tabular-nums}
+.ai-mode b{color:var(--ink)}
+.ai-lesson{align-self:flex-start;margin:0;color:var(--accent-ink)}
+.ai-purpose{padding:var(--s4);border-bottom:1px solid var(--line)}
+.ai-gh{margin:0;font-size:13px;display:flex;align-items:center;gap:var(--s2);letter-spacing:0;text-transform:none;color:var(--ink)}
+.ai-pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:var(--s3);margin-top:var(--s3)}
+.ai-pcard{display:flex;flex-direction:column;gap:3px;padding:var(--s3);background:var(--panel2);border:1px solid var(--line);border-radius:10px}
+.ai-pcard b{font-size:13px}
+.ai-pcard span{font-size:12.5px;color:var(--mute);line-height:1.45}
+
+/* ---------- строки ---------- */
+.ai-group+.ai-group{border-top:1px solid var(--line)}
+.ai-group>.ai-gh{padding:var(--s3) var(--s4) 0}
+.ai-gsay{margin:2px 0 var(--s2);padding:0 var(--s4)}
+.ai-item{border-bottom:1px solid var(--line)}
+.ai-rows>.ai-item:last-child{border-bottom:0}
+.ai-group:last-child .ai-rows>.ai-item:last-child{border-bottom:0}
+.ai-row{display:grid;grid-template-columns:minmax(110px,24%) minmax(0,1fr) auto 16px;gap:var(--s3);align-items:center;min-height:44px;padding:var(--s2) var(--s4);cursor:pointer}
+.ai-row:hover{background:var(--soft)}
+.ai-row:focus-visible{outline-offset:-2px}
+.ai-nm{font-family:var(--mono);font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.ai-sm{color:var(--mute);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.ai-bd{display:flex;gap:var(--s1);justify-content:flex-end;flex-wrap:wrap;min-width:0;max-width:340px}
+.ai-chev{color:var(--faint);display:grid;place-items:center}
+.ai-chev svg{display:block}
+.ai-item.open .ai-chev svg{transform:rotate(180deg)}
+.ai-item.open>.ai-row{background:var(--soft)}
+.ai-b{flex:none;max-width:100%;display:inline-flex;align-items:center;font-size:11px;line-height:1.5;padding:1px 8px;border-radius:99px;background:var(--soft);color:var(--mute);white-space:nowrap;font-weight:500}
+.ai-b.k-plain{background:none;border:1px solid var(--line)}
+.ai-b.k-ok{background:var(--ok-soft);color:var(--ok)}
+.ai-b.k-warn{background:var(--warn-soft);color:var(--warn)}
+.ai-b.k-bad{background:var(--bad-soft);color:var(--bad)}
+.ai-b.k-info{background:var(--info-soft);color:var(--info)}
+.ai-b.k-violet{background:var(--violet-soft);color:var(--violet)}
+.ai-morerow{padding:var(--s2) var(--s4) var(--s3)}
+.ai-morerow .tlink{margin:0}
+@container blk (max-width:700px){
+  .ai-row{grid-template-columns:minmax(0,1fr) auto 16px;grid-template-areas:"nm bd ch" "sm sm sm";row-gap:2px}
+  .ai-nm{grid-area:nm}.ai-bd{grid-area:bd;flex-wrap:wrap}.ai-chev{grid-area:ch}
+  .ai-sm{grid-area:sm}
+}
+@container blk (max-width:460px){
+  .ai-row{grid-template-columns:minmax(0,1fr) 16px;grid-template-areas:"nm ch" "sm sm" "bd bd"}
+  .ai-bd{justify-content:flex-start}
+}
+
+/* ---------- подробности строки ---------- */
+.ai-det{padding:var(--s3) var(--s4) var(--s4);background:var(--panel2);border-top:1px solid var(--line);display:flex;flex-direction:column;gap:var(--s3)}
+.ai-when,.ai-full{margin:0;font-size:13px;line-height:1.5;max-width:90ch}
+.ai-when{color:var(--mute)}
+.ai-when b{color:var(--ink);font-weight:650}
+.ai-kv{display:grid;grid-template-columns:minmax(96px,max-content) minmax(0,1fr);gap:var(--s2) var(--s4);margin:0;font-size:12.5px}
+.ai-kv dt{color:var(--mute)}
+.ai-kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.ai-kv code{font-size:12px}
+.ai-cmd{display:block;white-space:pre-wrap}
+.ai-acts{display:inline-flex;flex-wrap:wrap;gap:var(--gap-btn);margin-left:var(--s2);vertical-align:middle}
+.ai-chips{margin:0;display:inline-flex}
+.ai-chips .chip{font-family:var(--mono);font-size:11.5px;padding:1px 8px}
+.ai-chips.deny .chip{border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
+.ai-chips .linkchip{cursor:pointer}
+.ai-globs,.ai-hits{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.ai-globs li{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s3);align-items:baseline}
+.ai-n0{color:var(--mute)}
+.ai-bad{color:var(--bad)}
+.ai-hits li{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s2);align-items:baseline;color:var(--mute)}
+.ai-prob{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2) var(--s3);padding:var(--s2) var(--s4);font-size:12.5px;min-height:44px}
+.ai-pnote{margin:0;padding:var(--s3) var(--s4)}
+
+/* ---------- «не найдено» ---------- */
+.ai-missing{margin-top:var(--bgap);border:1px dashed var(--line);border-radius:var(--rb);padding:var(--s3) var(--s4);background:var(--panel)}
+.ai-missing summary{cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;gap:var(--s2)}
+.ai-missing ul{margin:var(--s2) 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:var(--s2)}
+.ai-missing li{display:flex;flex-direction:column;gap:2px;font-size:12.5px}
+.ai-missing-what{color:var(--mute);line-height:1.45}
+.ai-missing .note{margin:var(--s2) 0 0}
+
+@media (prefers-reduced-motion:no-preference){
+  html.anim-ready .ai-chev svg{transition:transform var(--t-fast) var(--ease)}
+}

@@ -23,3 +23,7 @@ html.ui-min .hrow{min-height:36px}
 
 /* панель подробностей: без строки «откуда пояснение» */
 html.ui-min .srcnote{display:none}
+
+/* вкладка «ИИ»: остаются имена, числа, значки и схема; пояснения видов, рассказ, описания строк и подсказки схемы прячутся */
+html.ui-min .ai-intro,html.ui-min .ai-expl,html.ui-min .ai-purpose,html.ui-min .ai-sm,html.ui-min .ai-sttext,html.ui-min .ai-lsay,html.ui-min .ai-cap,html.ui-min .ai-gsay,html.ui-min .ai-when,html.ui-min .ai-missing .note,html.ui-min .ai-missing-what{display:none}
+html.ui-min .ai-row{min-height:36px}

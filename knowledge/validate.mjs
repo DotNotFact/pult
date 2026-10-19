@@ -167,6 +167,126 @@ for (const f of (await fs.readdir(path.join(K, 'topics')).catch(() => [])).filte
   }
 }
 
+// ---- ai.json: виды деталей ИИ-части, слои и рассказ (core/src/ai.rs читает этот файл)
+let aiStats = '';
+{
+  const rel = 'ai.json';
+  const d = await readJson(rel), st = await readJson('stages.json');
+  const STAGES = new Set((Array.isArray(st) ? st : st?.stages || []).map((x) => x.id));
+  const FORMATS = ['markdown', 'script', 'permissions', 'hooks', 'hookscript', 'mcp', 'config', 'checks', 'signals'];
+  const REFS = ['path', 'file', 'name', 'tag', 'slash', 'script'];
+  const NAME_FROM = ['file', 'filename', 'dir', 'path'];
+  const WORDS = ['what', 'when', 'why', 'analogy', 'look'];
+  // регулярные выражения написаны для Rust (regex); для проверки снимаем встроенные флаги (?i)
+  const re = (w, s) => { try { new RegExp(String(s).replace(/^\(\?i\)/, ''), 'i'); } catch (e) { err(rel, w, 'плохое регулярное выражение: ' + e.message); } };
+  const str = (w, v) => { if (typeof v !== 'string' || !v.trim()) err(rel, w, 'нужна непустая строка'); };
+  if (d) {
+    textRules(rel, d);
+    str('lesson', d.lesson);
+    if (d.lesson && !TOPICS.includes(d.lesson)) err(rel, 'lesson', `урока «${d.lesson}» нет в lessons.json`);
+    for (const k of ['fileBytes', 'walkFiles', 'itemsPerKind', 'summary', 'desc', 'bodyScan', 'hits', 'mentionMin']) if (!Number.isInteger(d.limits?.[k]) || d.limits[k] <= 0) err(rel, `limits.${k}`, 'нужно положительное целое');
+    for (const k of ['walkSkip', 'markers', 'ignoreFiles']) if (!Array.isArray(d[k]) || d[k].some((x) => typeof x !== 'string' || !x.trim())) err(rel, k, 'нужен список непустых строк');
+    if (!d.markers?.length) err(rel, 'markers', 'без признаков вкладка «ИИ» никогда не покажется');
+    for (const k of ['key', 'value', 'inline', 'userinfo']) { str(`secrets.${k}`, d.secrets?.[k]); if (d.secrets?.[k]) re(`secrets.${k}`, d.secrets[k]); }
+    if (!String(d.storyMore || '').includes('{n}')) err(rel, 'storyMore', 'нужна подстановка {n}');
+    for (const [k, v] of Object.entries(d.facts || {})) if (k !== '_') str(`facts.${k}`, v);
+    const layerIds = new Set((d.layers || []).map((l) => l.id));
+    const kindIds = new Set((d.kinds || []).map((k) => k.id));
+    if (!Array.isArray(d.kinds) || !d.kinds.length) err(rel, '-', 'нет массива kinds');
+    const seen = new Set();
+    // роли, которые деталь вида может получить: из roles вида и из groups (проверки)
+    const rolesOf = (k) => new Set([...Object.keys(k.roles || {}), ...Object.keys(k.groups || {}), ...(k.signals || []).map((s) => s.id)]);
+    (d.kinds || []).forEach((k, i) => {
+      const w = `kinds[${i}] ${k.id || '?'}`;
+      for (const f of ['id', 'title', 'icon', 'layer', 'format']) str(`${w}.${f}`, k[f]);
+      if (seen.has(k.id)) err(rel, w, 'повтор id');
+      seen.add(k.id);
+      if (k.icon && !ICONS.has(k.icon)) err(rel, w, `нет значка «${k.icon}» в icons.json`);
+      if (k.layer && !layerIds.has(k.layer)) err(rel, w, `слоя «${k.layer}» нет в layers`);
+      if (!FORMATS.includes(k.format)) err(rel, w, `format - одно из ${FORMATS.join(', ')}`);
+      if (k.lesson && !TOPICS.includes(k.lesson)) err(rel, w, `урока «${k.lesson}» нет в lessons.json`);
+      if (!k.lesson) err(rel, w, 'нет lesson: ссылки на урок');
+      for (const f of WORDS) str(`${w}.words.${f}`, k.words?.[f]);
+      const modes = k.modes || {};
+      if (!Object.keys(modes).length) err(rel, w, 'нет modes');
+      for (const [m, v] of Object.entries(modes)) { str(`${w}.modes.${m}.label`, v.label); str(`${w}.modes.${m}.say`, v.say); }
+      for (const r of k.refs || []) if (!REFS.includes(r)) err(rel, w, `refs: неизвестный способ «${r}»`);
+      if (!Array.isArray(k.refs)) err(rel, w, 'нужен массив refs (может быть пустым)');
+      if (k.parse) {
+        if (!NAME_FROM.includes(k.parse.nameFrom)) err(rel, w, `parse.nameFrom - одно из ${NAME_FROM.join(', ')}`);
+        for (const f of ['name', 'desc', 'paths', 'tools', 'model']) if (!Array.isArray(k.parse[f])) err(rel, w, `parse.${f}: нужен массив`);
+      } else if (!['checks', 'signals'].includes(k.format)) err(rel, w, 'нет parse');
+      for (const [r, v] of Object.entries(k.roles || {})) { str(`${w}.roles.${r}.label`, v.label); str(`${w}.roles.${r}.say`, v.say); }
+      const hasDetect = (k.detect || []).length > 0;
+      if (!hasDetect && !['checks', 'signals'].includes(k.format)) err(rel, w, 'нет detect');
+      (k.detect || []).forEach((x, j) => {
+        const wd = `${w}.detect[${j}]`;
+        str(`${wd}.glob`, x.glob);
+        if (typeof x.eco !== 'string') err(rel, wd, 'нужна строка eco (может быть пустой)');
+        if (!modes[x.mode]) err(rel, wd, `mode «${x.mode}» не описан в modes вида`);
+        for (const m of x.modes || []) { if (!modes[m.mode]) err(rel, wd, `modes: «${m.mode}» не описан в modes вида`); str(`${wd}.modes.key`, m.key); }
+        if (x.format && !FORMATS.includes(x.format)) err(rel, wd, `format - одно из ${FORMATS.join(', ')}`);
+        if (x.role && !rolesOf(k).has(x.role) && x.role !== 'tool') err(rel, wd, `роли «${x.role}» нет в roles вида`);
+        if (/^[a-z]:|^\\\\|\.\.\//i.test(x.glob || '')) err(rel, wd, 'glob - путь от корня проекта, без диска и «..»');
+      });
+      if (k.format === 'script' && !(k.events || []).length) err(rel, w, 'нет events: какие имена файлов - события git');
+      if (k.format === 'checks') {
+        for (const [g, v] of Object.entries(k.groups || {})) { str(`${w}.groups.${g}.title`, v.title); str(`${w}.groups.${g}.say`, v.say); }
+        for (const g of ['tests', 'ci', 'meta', 'measure']) if (!k.groups?.[g]) err(rel, w, `нет groups.${g}`);
+        for (const s of k.scripts?.stages || []) if (!STAGES.has(s)) err(rel, w, `scripts.stages: неизвестный этап «${s}»`);
+        for (const f of ['metaRe', 'measureRe']) { str(`${w}.${f}`, k[f]); if (k[f]) re(`${w}.${f}`, k[f]); }
+        if (k.scripts?.alsoRe) re(`${w}.scripts.alsoRe`, k.scripts.alsoRe);
+        if (k.purpose) {
+          str(`${w}.purpose.title`, k.purpose.title);
+          if (!Array.isArray(k.purpose.items) || !k.purpose.items.length) err(rel, w, 'purpose.items - непустой список');
+          for (const x of k.purpose.items || []) { str(`${w}.purpose.items.title`, x.title); str(`${w}.purpose.items.text`, x.text); }
+        }
+      }
+      if (k.format === 'signals') {
+        const ids = new Set();
+        (k.signals || []).forEach((s, j) => {
+          const ws = `${w}.signals[${j}]`;
+          for (const f of ['id', 'title', 'say']) str(`${ws}.${f}`, s[f]);
+          if (ids.has(s.id)) err(rel, ws, 'повтор id');
+          ids.add(s.id);
+          const kinds = ['dir', 'file', 'scan'].filter((f) => s[f]);
+          if (kinds.length !== 1) err(rel, ws, 'нужен ровно один из dir, file, scan');
+          if (s.scan) re(`${ws}.scan`, s.scan);
+        });
+        for (const x of k.scanKinds || []) if (!kindIds.has(x)) err(rel, w, `scanKinds: неизвестный вид «${x}»`);
+        if (!(k.scanKinds || []).length) err(rel, w, 'нет scanKinds');
+      }
+    });
+    const inLayer = new Map();
+    (d.layers || []).forEach((l, i) => {
+      const w = `layers[${i}] ${l.id || '?'}`;
+      for (const f of ['id', 'title', 'say']) str(`${w}.${f}`, l[f]);
+      if (!['accent', 'info', 'violet', 'ok', 'warn', 'bad'].includes(l.color)) err(rel, w, 'color - имя токена цвета: accent, info, violet, ok, warn или bad');
+      if (!(l.kinds || []).length) err(rel, w, 'нет kinds');
+      for (const x of l.kinds || []) { if (!kindIds.has(x)) err(rel, w, `неизвестный вид «${x}»`); if (inLayer.has(x)) err(rel, w, `вид «${x}» уже в слое ${inLayer.get(x)}`); inLayer.set(x, l.id); }
+    });
+    for (const k of kindIds) if (!inLayer.has(k)) err(rel, 'layers', `вид «${k}» не лежит ни в одном слое`);
+    const stepIds = new Set();
+    (d.story || []).forEach((s, i) => {
+      const w = `story[${i}] ${s.id || '?'}`;
+      for (const f of ['id', 'title', 'say']) str(`${w}.${f}`, s[f]);
+      if (stepIds.has(s.id)) err(rel, w, 'повтор id');
+      stepIds.add(s.id);
+      for (const ph of String(s.say || '').match(/\{[^}]*\}/g) || []) if (ph !== '{parts}' && ph !== '{n}') err(rel, w, `неизвестная подстановка ${ph}`);
+      if (!s.always && !(s.any || []).length) err(rel, w, 'нужен any или always');
+      (s.any || []).forEach((c, j) => {
+        const wc = `${w}.any[${j}]`;
+        const k = (d.kinds || []).find((x) => x.id === c.kind);
+        if (!k) return err(rel, wc, `неизвестный вид «${c.kind}»`);
+        if (c.mode && !k.modes?.[c.mode]) err(rel, wc, `у вида «${c.kind}» нет режима «${c.mode}»`);
+        if (c.role && !rolesOf(k).has(c.role)) err(rel, wc, `у вида «${c.kind}» нет роли «${c.role}»`);
+        if (c.match) re(`${wc}.match`, c.match);
+      });
+    });
+    aiStats = `, видов ИИ-части: ${(d.kinds || []).length}`;
+  }
+}
+
 // ---- ссылки tools -> topics на диске
 const existingTopics = new Set((await fs.readdir(path.join(K, 'topics')).catch(() => [])).map((n) => n.replace(/\.json$/, '')));
 if (!only.length) {
@@ -177,4 +297,4 @@ if (!only.length) {
 }
 
 if (errors.length) { console.log(errors.join('\n')); console.log(`\nошибок: ${errors.length}`); process.exit(1); }
-console.log(`ok · программ: ${toolIds.size}, команд-префиксов: ${binOwner.size}, уроков: ${existingTopics.size}, терминов: ${termForms.size}`);
+console.log(`ok · программ: ${toolIds.size}, команд-префиксов: ${binOwner.size}, уроков: ${existingTopics.size}, терминов: ${termForms.size}${aiStats}`);

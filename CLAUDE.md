@@ -28,21 +28,22 @@ core/        pult-core - вся логика
   src/store.rs       настройки, недавние, избранное, история, кэш
   src/helpcmd.rs     разбор вывода --help
   src/topics.rs      какие уроки нужны проекту (по detect из урока)
+  src/ai.rs          ИИ-часть проекта: детали (инструкции, правила, агенты, хуки, MCP, проверки), связи, рассказ
   src/env.rs         какие программы есть, жив ли Docker
   src/paths.rs       где знания и где данные
   src/model.rs util.rs  типы и мелочи (макрос re!, cached_re, is_unc)
   examples/          scan.rs, prof.rs, perf.rs - прогон и замер ядра на настоящей папке
-  tests/             тесты ядра (cargo test): ci_config, explain, git_stash, kb, runner_util,
+  tests/             тесты ядра (cargo test): ai, ci_config, explain, git_stash, kb, runner_util,
                      scan, security, store, sub_engine; common/ - общие помощники
 app/         pult-app - окно Tauri: src/main.rs (команды IPC, события), src/tray.rs (трей,
              сценарии, размер окна), tauri.conf.json, capabilities/, icons/,
              installer/ (хуки NSIS, pult.cmd, картинки установщика)
 cli/         pult-cli - терминал на ratatui: src/main.rs, build.rs
-ui/          интерфейс окна: index.html, app.js, blocks.js, learn.js, scenarios.js, widget.js,
+ui/          интерфейс окна: index.html, app.js, blocks.js, learn.js, scenarios.js, ai.js, widget.js,
              statusbar.js, titlebar.js, theme.js, *.css, img/
 knowledge/   база знаний JSON: tools/*.json, topics/*.json, effects, stages,
              heuristics, manifests, stacks, docs, ui, glossary, icons, lessons,
-             scenarios; SCHEMA.md - формат, validate.mjs - проверка
+             scenarios, ai (виды деталей ИИ-части); SCHEMA.md - формат, validate.mjs - проверка
 tools/       install.ps1 и скрипты сборки; status.mjs (числа дерева), contrast.mjs (палитра),
              test-window.ps1 и cdp.mjs (тестовое окно и его замер)
 .github/     CI и релиз (GitHub Actions), шаблоны issue и PR
