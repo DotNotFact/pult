@@ -247,6 +247,21 @@ pub fn save_scan(p: &Project) {
     write_json(&scan_file(&p.path), p);
 }
 
+// ---------- кэш карты ИИ-части ----------
+fn ai_file(root: &str) -> PathBuf {
+    paths::data_dir().join("cache").join(format!("ai-{}.json", key_of(root)))
+}
+
+pub fn cached_ai(root: &str) -> Option<crate::ai::AiMap> {
+    let t = std::fs::read_to_string(ai_file(root)).ok()?;
+    let m: crate::ai::AiMap = serde_json::from_str(&t).ok()?;
+    m.path.eq_ignore_ascii_case(root).then_some(m)
+}
+
+pub fn save_ai(m: &crate::ai::AiMap) {
+    write_json(&ai_file(&m.path), m);
+}
+
 // ---------- кэш CI ----------
 pub fn ci_cache_get(key: &str) -> Option<(u64, Value)> {
     let m: HashMap<String, (u64, Value)> = read_json(&file("cache/ci.json"));

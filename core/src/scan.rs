@@ -959,6 +959,11 @@ pub fn watch_kind(root: &Path, path: &Path, kb: &Kb) -> u8 {
     if parts.iter().any(|c| skip.contains(c)) {
         return 0;
     }
+    // ИИ-часть: .claude, инструкции, правила, хуки. 1 - признак в корне, 3 - правка детали
+    let ai = crate::ai::watch_hit(&parts, kb);
+    if ai > 0 {
+        return ai;
+    }
     let low = name.to_lowercase();
     if parts.len() >= 3 && first == ".github" && parts[1] == "workflows" {
         return 1;
@@ -1179,6 +1184,7 @@ pub fn scan_timed(root: &Path, opts: &ScanOpts) -> Result<(Project, Phases), Str
         health,
         warnings: sc.warnings.clone(),
         topics: vec![],
+        ai_markers: crate::ai::markers(root, &|m| root_list.has(m), &kb),
         deps: sc.deps.iter().cloned().collect(),
         scanned_at: now_ms(),
         scan_ms: 0,

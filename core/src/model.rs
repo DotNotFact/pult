@@ -285,6 +285,9 @@ pub struct Project {
     pub health: Health,
     pub warnings: Vec<String>,
     pub topics: Vec<TopicRef>,
+    /// признаки ИИ-части в корне (по knowledge/ai.json, markers): вкладка «ИИ» есть, если список не пуст
+    #[serde(default)]
+    pub ai_markers: Vec<String>,
     /// зависимости (для определения уроков и меток)
     pub deps: Vec<String>,
     pub scanned_at: u64,

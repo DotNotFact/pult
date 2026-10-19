@@ -2,7 +2,7 @@
 use paint::Paint;
 use pult_core::model::{Project, Script};
 use pult_core::util::display_argv;
-use pult_core::{ci, env, kb, runner, scan, store};
+use pult_core::{ai, ci, env, kb, runner, scan, store};
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
@@ -218,6 +218,7 @@ fn help() {
   pult run <скрипт> [-- арг] запустить; вывод - прямо здесь. --yes - без вопроса для опасных\n\
   pult ci [номер]            пайплайны; с номером - этапы и джобы; pult ci log <джоба>\n\
   pult learn [урок]          уроки по технологиям проекта, прямо в терминале\n\
+  pult ai [--json]           ИИ-часть проекта: правила, агенты, хуки, MCP, проверки и как они связаны\n\
   pult ui [путь]             открыть окно Пульта\n\n\
   Проект: текущая папка, если это проект, иначе последний открытый. Другой - ключом -C <путь>.\n\
   Скрипт из подпапки: «apps/web:build». Имя можно сокращать: «pult run typ» найдёт typecheck.",
@@ -807,6 +808,72 @@ fn cmd_learn(p: &Project, q: Option<&str>) {
             }
         }
     }
+}
+
+/// ИИ-часть проекта: те же данные, что на вкладке «ИИ» окна (pult_core::ai).
+fn cmd_ai(p: &Project, rest: &[String]) {
+    let k = kb::get();
+    let m = ai::build(Path::new(&p.path), p, &k);
+    if rest.iter().any(|a| a == "--json") {
+        println!("{}", serde_json::to_string_pretty(&m).unwrap_or_default());
+        return;
+    }
+    if m.items.is_empty() {
+        println!("\n{}", "ИИ-части в этой папке не найдено".bold());
+        return;
+    }
+    let cap = if m.capped { ", обход обрезан" } else { "" };
+    println!(
+        "\n{} {}  {}",
+        "ИИ-часть".bold(),
+        p.name.as_str().bold(),
+        format!("({} деталей, {} мс, обошли {} файлов{cap})", m.items.len(), m.ms, m.walked).dark_grey()
+    );
+    for st in m.kinds.iter().filter(|s| s.count > 0) {
+        let modes = st.modes.iter().map(|(mode, n)| format!("{n} {}", ai::mode_label(&k, &st.id, mode))).collect::<Vec<_>>().join(", ");
+        let roles = if st.roles.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", st.roles.iter().map(|(r, n)| format!("{r} {n}")).collect::<Vec<_>>().join(", "))
+        };
+        println!("\n{} ({})  {}", ai::kind_title(&k, &st.id).bold(), st.count, format!("{modes}{roles}").dark_grey());
+        for it in m.items.iter().filter(|it| it.kind == st.id).take(60) {
+            let mut tags: Vec<String> = vec![];
+            if !it.paths.is_empty() {
+                tags.push(format!("по путям: {} шабл., {} файлов", it.paths.len(), it.files_matched));
+            }
+            if let Some(e) = &it.event {
+                tags.push(format!("{e}{}", it.matcher.as_ref().map(|x| format!(" [{x}]")).unwrap_or_default()));
+            }
+            if let Some(x) = &it.model {
+                tags.push(x.clone());
+            }
+            if it.unwired {
+                tags.push("не подключён".into());
+            }
+            if it.active == Some(false) {
+                tags.push("git их не видит".into());
+            }
+            if let Some(b) = &it.broken {
+                tags.push(format!("не разобран: {b}"));
+            }
+            let refs = if it.refs_in.is_empty() { String::new() } else { format!(" ←{}", it.refs_in.len()) };
+            println!("  {}  {}{}", format!("{:<26}", clip(&it.name, 26)).cyan(), clip(&it.summary, 90), refs.as_str().dark_grey());
+            if !tags.is_empty() {
+                println!("  {}  {}", " ".repeat(26), tags.join(" · ").dark_grey());
+            }
+        }
+    }
+    if !m.story.is_empty() {
+        println!("\n{}", "Как это работает вместе".bold());
+        for (i, s) in m.story.iter().enumerate() {
+            println!("  {}. {}  {}", i + 1, s.title.as_str().cyan(), s.text.as_str().dark_grey());
+        }
+    }
+    for pr in &m.problems {
+        println!("\n{} {}: {}", "Не разобран".yellow(), pr.file, pr.error);
+    }
+    println!();
 }
 
 fn cmd_ui(root: Option<String>) {
@@ -1664,7 +1731,7 @@ fn main() {
         }
         i += 1;
     }
-    const CMDS: [&str; 10] = ["help", "-h", "--help", "info", "ls", "explain", "run", "ci", "learn", "ui"];
+    const CMDS: [&str; 11] = ["help", "-h", "--help", "info", "ls", "explain", "run", "ci", "learn", "ai", "ui"];
     if let Some(first) = pos.first().cloned() {
         if !CMDS.contains(&first.as_str()) && Path::new(&first).is_dir() {
             root = Some(first);
@@ -1696,6 +1763,7 @@ fn main() {
                 }
                 "ci" => cmd_ci(&p, &rest),
                 "learn" => cmd_learn(&p, rest.first().map(String::as_str)),
+                "ai" => cmd_ai(&p, &rest),
                 _ => {
                     help();
                     std::process::exit(2);

@@ -7,7 +7,7 @@ use pult_core::model::{Project, Script};
 use pult_core::runner::{self, Live};
 use pult_core::store::{self, HistEntry, Settings};
 use pult_core::util::{inside, is_unc, now_ms, resolve_inside};
-use pult_core::{ci, env, git, helpcmd, kb, scan};
+use pult_core::{ai, ci, env, git, helpcmd, kb, scan};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::hash_map::DefaultHasher;
@@ -198,6 +198,7 @@ fn refresh(handle: AppHandle, app: Arc<App>, root: String, reason: &'static str)
     spawn_named("pult-refresh", move || {
         match scan::scan(Path::new(&root), &opts()) {
             Ok(mut p) => {
+                let has_ai = !p.ai_markers.is_empty();
                 let fp = fingerprint(&mut p);
                 let changed = lock(&app.inner).projects.get(&key(&root)).is_none_or(|x| x.fp != fp);
                 if changed {
@@ -209,6 +210,9 @@ fn refresh(handle: AppHandle, app: Arc<App>, root: String, reason: &'static str)
                     let _ = handle.emit("project", ProjectEvent { reason, data: &data });
                 } else if let Some(x) = lock(&app.inner).projects.get_mut(&key(&root)) {
                     x.data.scanned_at = p.scanned_at;
+                }
+                if reason == "files" && has_ai {
+                    ai_refresh(handle.clone(), app.clone(), root.clone());
                 }
             }
             Err(e) => {
@@ -225,6 +229,18 @@ fn refresh(handle: AppHandle, app: Arc<App>, root: String, reason: &'static str)
         if again {
             std::thread::sleep(Duration::from_millis(300));
             refresh(handle, app, root, reason);
+        }
+    });
+}
+
+/// Пересобрать карту ИИ-части в фоне; окно получает событие `ai`, только если карта изменилась.
+fn ai_refresh(handle: AppHandle, app: Arc<App>, root: String) {
+    spawn_named("pult-ai", move || {
+        let Some(project) = lock(&app.inner).projects.get(&key(&root)).map(|p| p.data.clone()) else { return };
+        let fresh = ai::build(Path::new(&root), &project, &kb::get());
+        if store::cached_ai(&root).is_none_or(|old| old.fp != fresh.fp) {
+            store::save_ai(&fresh);
+            let _ = handle.emit("ai", json!({ "path": root, "data": fresh }));
         }
     });
 }
@@ -272,14 +288,20 @@ fn ensure_watch(handle: &AppHandle, app: &Arc<App>, root: &str) {
         while let Ok(first) = rx.recv() {
             let mut scan_needed = first == 1;
             let mut git_needed = first == 2;
+            let mut ai_needed = first == 3;
             // ждём тишины: пачка событий от одной правки - одно обновление
             loop {
                 match rx.recv_timeout(Duration::from_millis(if scan_needed { 1200 } else { 700 })) {
                     Ok(1) => scan_needed = true,
+                    Ok(3) => ai_needed = true,
                     Ok(_) => git_needed = true,
                     Err(mpsc::RecvTimeoutError::Timeout) => break,
                     Err(_) => return,
                 }
+            }
+            // правка детали ИИ-части не требует нового разбора проекта: пересобирается только её карта
+            if ai_needed && !scan_needed {
+                ai_refresh(h2.clone(), a2.clone(), root2.clone());
             }
             if scan_needed {
                 refresh(h2.clone(), a2.clone(), root2.clone(), "files");
@@ -362,6 +384,31 @@ async fn scan_project(handle: AppHandle, st: St<'_>, path: String, force: Option
     }
     ensure_watch(&handle, &app, &data.path);
     Ok(for_client(data, cached))
+}
+
+/// Карта ИИ-части проекта: из кэша сразу (и пересборка в фоне), иначе собирается здесь. Файлы проекта
+/// только читаются: ни хук, ни MCP-сервер, ни скрипт не запускаются.
+#[tauri::command]
+async fn ai_map(handle: AppHandle, st: St<'_>, path: String, force: Option<bool>) -> R<ai::AiMap> {
+    let app = st.inner().clone();
+    let root = canon(&path)?.to_string_lossy().to_string();
+    if !force.unwrap_or(false) {
+        if let Some(mut m) = store::cached_ai(&root) {
+            if now_ms().saturating_sub(m.built_at) > 30_000 {
+                ai_refresh(handle, app, root);
+            }
+            m.cached = true;
+            return Ok(m);
+        }
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let project = find_project(&handle, &app, &root)?;
+        let m = ai::build(Path::new(&root), &project, &kb::get());
+        store::save_ai(&m);
+        Ok(m)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -888,6 +935,7 @@ fn main() {
             kb_reload,
             topic,
             scan_project,
+            ai_map,
             pick,
             env_info,
             help,

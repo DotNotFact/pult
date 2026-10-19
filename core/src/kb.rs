@@ -174,6 +174,10 @@ pub struct Kb {
     pub ui: Value,
     /// шаблоны популярных сценариев (knowledge/scenarios.json)
     pub scenarios: Value,
+    /// ИИ-часть проекта: виды деталей, слои, рассказ (knowledge/ai.json)
+    pub ai: Value,
+    /// шаблоны путей из ai.json, по которым слежение узнаёт правку ИИ-части
+    pub ai_watch: Vec<crate::ai::Glob>,
     pub topics: Vec<Value>,
     pub wrappers: Vec<Regex>,
     pub skip_seg: Option<Regex>,
@@ -290,6 +294,8 @@ impl Kb {
         };
         topics.sort_by_key(rank);
 
+        let ai = json("ai.json", &mut errors);
+        let ai_watch = crate::ai::compile_watch(&ai);
         Kb {
             tools,
             bins,
@@ -303,6 +309,8 @@ impl Kb {
             icons: json("icons.json", &mut errors),
             ui: json("ui.json", &mut errors),
             scenarios: json("scenarios.json", &mut errors),
+            ai,
+            ai_watch,
             topics,
             wrappers,
             skip_seg,
@@ -379,7 +387,7 @@ impl Kb {
             }
         }
         serde_json::json!({
-            "effects": self.effects, "stages": self.stages, "glossary": self.glossary, "icons": self.icons, "ui": self.ui, "scenarios": self.scenarios,
+            "effects": self.effects, "stages": self.stages, "glossary": self.glossary, "icons": self.icons, "ui": self.ui, "scenarios": self.scenarios, "ai": self.ai,
             "topics": topics, "tools": tools, "topicTerms": terms, "console": self.heur["consoleErrors"], "errors": self.errors, "fromDisk": self.from_disk,
         })
     }
