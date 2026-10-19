@@ -6,7 +6,7 @@
   "level": "средний",
   "summary": "GitHub хранит репозитории в сети и собирает вокруг кода всю работу: pull request и ревью, проверки GitHub Actions, релизы, задачи и защиту главной ветки. Урок про сайт и программу gh.",
   "detect": { "files": [".github"], "deps": [], "bins": ["gh"], "stacks": [] },
-  "related": ["git", "ci-cd", "deploy", "env"],
+  "related": ["git", "ci-cd", "deploy", "env", "ai-dev"],
   "sections": [
     {
       "type": "idea",

@@ -10,11 +10,11 @@
 | Что | Сколько | Что именно |
 |---|---|---|
 | Крейты | 3 | app, cli, core |
-| Модули ядра | 15 | ci, ci_config, env, explain, git, helpcmd, kb, lib, model, paths, runner, scan, store, topics, util |
-| Команды IPC | 32 | `generate_handler!` в `app/src/main.rs` |
-| Проверки в Rust | 127 | `#[test]` в app, cli, core |
-| Файлы тестов ядра | 10 | ci_config, explain, git_stash, helpcmd, kb, runner_util, scan, security, store, sub_engine |
-| Уроки | 25 | `knowledge/topics/` |
+| Модули ядра | 16 | ai, ci, ci_config, env, explain, git, helpcmd, kb, lib, model, paths, runner, scan, store, topics, util |
+| Команды IPC | 33 | `generate_handler!` в `app/src/main.rs` |
+| Проверки в Rust | 154 | `#[test]` в app, cli, core |
+| Файлы тестов ядра | 11 | ai, ci_config, explain, git_stash, helpcmd, kb, runner_util, scan, security, store, sub_engine |
+| Уроки | 26 | `knowledge/topics/` |
 | Группы программ в базе | 16 | data, docker, dotnet, files, frontend, git, go, infra, jvm, node, php, python, quality, rust, shell, testing |
 | Скрипты | 9 | `build-installer.ps1`, `cdp.mjs`, `contrast.mjs`, `install.ps1`, `installer-art.ps1`, `package.ps1`, `release-notes.ps1`, `status.mjs`, `test-window.ps1` |
 | Файлы правил | 9 | README, git-flow, knowledge-base, release, rust-core, security, tokens, ui, verification |

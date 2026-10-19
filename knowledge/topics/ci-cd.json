@@ -6,7 +6,7 @@
   "level": "средний",
   "summary": "CI/CD - робот, который после каждой отправки кода сам собирает проект, гоняет проверки и, если всё зелёное, выкладывает новую версию. Урок про GitLab CI и GitHub Actions.",
   "detect": { "files": [".gitlab-ci.yml", ".github/workflows", "Jenkinsfile", "azure-pipelines.yml"], "deps": [], "bins": ["glab", "gitlab-runner"], "stacks": [] },
-  "related": ["git", "github", "testing", "code-quality", "docker", "deploy"],
+  "related": ["git", "github", "testing", "code-quality", "docker", "deploy", "ai-dev"],
   "sections": [
     {
       "type": "idea",

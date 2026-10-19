@@ -6,7 +6,7 @@
   "level": "основы",
   "summary": "Скрипт - файл с командами терминала по порядку. Один запуск вместо десятка команд руками.",
   "detect": { "files": [".sh", ".bash", ".ps1", ".bat", ".cmd"], "deps": [], "bins": ["bash", "sh", "zsh", "powershell", "pwsh", "cmd"] },
-  "related": ["terminal", "task-runners", "env", "wsl"],
+  "related": ["terminal", "task-runners", "env", "wsl", "ai-dev"],
   "sections": [
     {
       "type": "idea",

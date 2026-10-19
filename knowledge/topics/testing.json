@@ -10,7 +10,7 @@
     "deps": ["vitest", "jest", "@playwright/test", "cypress", "mocha", "ava", "@testing-library/react", "@testing-library/vue", "supertest"],
     "bins": ["vitest", "jest", "playwright", "cypress", "mocha"]
   },
-  "related": ["ci-cd", "code-quality", "typescript"],
+  "related": ["ci-cd", "code-quality", "typescript", "ai-dev"],
   "sections": [
     {
       "type": "idea",

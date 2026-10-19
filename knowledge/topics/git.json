@@ -6,7 +6,7 @@
   "level": "основы",
   "summary": "Git хранит историю проекта: каждый сохранённый шаг можно посмотреть, сравнить и вернуть.",
   "detect": { "files": [".git"], "deps": [], "bins": ["git"] },
-  "related": ["terminal", "github", "ci-cd", "env"],
+  "related": ["terminal", "github", "ci-cd", "env", "ai-dev"],
   "sections": [
     {
       "type": "idea",
