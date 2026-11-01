@@ -11,7 +11,7 @@ serde.workspace = true
 # preserve_order: скрипты package.json показываются в порядке файла, а не по алфавиту
 serde_json = { workspace = true, features = ["preserve_order"] }
 regex.workspace = true
-fancy-regex = "0.19"
+fancy-regex = "0.20"
 encoding_rs.workspace = true
 shell-words.workspace = true
 include_dir.workspace = true
